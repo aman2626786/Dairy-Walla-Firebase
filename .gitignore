@@ -1,0 +1,25 @@
+# Dependencies
+dairy-setu/node_modules/
+
+# Build output
+dairy-setu/dist/
+
+# TypeScript build cache
+dairy-setu/tsconfig.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,188 @@
+import { useState } from 'react';
+import { CheckCircle, XCircle, Package } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
+import { useAppStore } from '../../store/appStore';
+import { useToast } from '../../components/ui/Toast';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { MobileHeader } from '../../components/layout/MobileHeader';
+import { format } from 'date-fns';
+import type { Order, OrderStatus } from '../../types';
+
+const statusColors: Record<OrderStatus, string> = {
+  pending: 'badge-yellow',
+  accepted: 'badge-green',
+  rejected: 'badge-red',
+  fulfilled: 'badge-blue',
+};
+
+const statusLabels: Record<OrderStatus, string> = {
+  pending: 'Pending',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
+  fulfilled: 'Fulfilled',
+};
+
+export function OrdersPage() {
+  const { user } = useAuthStore();
+  const { orders, distributorProfiles, updateOrderStatus, addNotification } = useAppStore();
+  const { show } = useToast();
+  const [filter, setFilter] = useState<'all' | 'normal' | 'late'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const profile = distributorProfiles.find(dp => dp.userId === user?.id);
+  const myOrders = orders.filter(o => o.distributorId === profile?.id);
+
+  const filtered = myOrders.filter(o => {
+    if (filter !== 'all' && o.type !== filter) return false;
+    if (statusFilter !== 'all' && o.status !== statusFilter) return false;
+    return true;
+  });
+
+  const handleAccept = (order: Order) => {
+    updateOrderStatus(order.id, 'accepted');
+    addNotification({
+      userId: order.shopkeeperId,
+      type: 'order_accepted',
+      message: `Your late order has been accepted`,
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+    show(`Order from ${order.shopName} accepted`);
+  };
+
+  const handleReject = (order: Order) => {
+    updateOrderStatus(order.id, 'rejected');
+    addNotification({
+      userId: order.shopkeeperId,
+      type: 'order_rejected',
+      message: `Your late order was not accepted`,
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+    show(`Order rejected`, 'error');
+  };
+
+  return (
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <MobileHeader title="All Orders" subtitle={`${myOrders.length} total orders`} />
+      <div className="hidden md:block mb-6">
+        <h1 className="text-xl font-bold text-gray-900">All Orders</h1>
+        <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} total orders</p>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(['all', 'normal', 'late'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
+                filter === f ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f === 'all' ? 'All Types' : f === 'normal' ? 'Normal' : 'Late'}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(['all', 'pending', 'accepted', 'rejected', 'fulfilled'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
+                statusFilter === f ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f === 'all' ? 'All Status' : statusLabels[f as OrderStatus]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={<Package className="w-8 h-8" />}
+          title="No orders found"
+          description="Try changing the filters"
+        />
+      ) : (
+        <div className="space-y-3">
+          {filtered.map(order => (
+            <div key={order.id} className="card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-semibold text-gray-900 text-sm">{order.shopName}</span>
+                    <span className={statusColors[order.status]}>{statusLabels[order.status]}</span>
+                    <span className={order.type === 'late' ? 'badge-yellow' : 'badge-green'}>
+                      {order.type === 'late' ? '⏰ Late' : '✓ Normal'}
+                    </span>
+                    {order.source === 'whatsapp' && <span className="badge bg-green-100 text-green-700">WhatsApp</span>}
+                  </div>
+                  <div className="text-xs text-gray-500 mb-2">
+                    {order.shopkeeperName} · {format(new Date(order.placedAt), 'dd MMM, h:mm a')}
+                    {order.deliveryGroupName && ` · ${order.deliveryGroupName}`}
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
+                    <span className="text-xs text-gray-500">{order.items.length} items</span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  {order.type === 'late' && order.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button onClick={() => handleAccept(order)} className="btn-primary py-1.5 px-3 text-xs">
+                        <CheckCircle className="w-3.5 h-3.5" /> Accept
+                      </button>
+                      <button onClick={() => handleReject(order)} className="btn-danger py-1.5 px-3 text-xs">
+                        <XCircle className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setExpandedId(expandedId === order.id ? null : order.id)}
+                    className="text-xs text-brand-600 hover:underline"
+                  >
+                    {expandedId === order.id ? 'Hide' : 'View'} items
+                  </button>
+                </div>
+              </div>
+              {expandedId === order.id && (
+                <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-400">
+                        <th className="text-left pb-2 font-medium">Product</th>
+                        <th className="text-right pb-2 font-medium">Qty</th>
+                        <th className="text-right pb-2 font-medium">Price</th>
+                        <th className="text-right pb-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {order.items.map(item => (
+                        <tr key={item.id}>
+                          <td className="py-1.5 text-gray-700">{item.productName} <span className="text-gray-400">({item.brand})</span></td>
+                          <td className="py-1.5 text-right text-gray-700">{item.quantity} {item.unit}</td>
+                          <td className="py-1.5 text-right text-gray-700">₹{item.unitPrice}</td>
+                          <td className="py-1.5 text-right font-semibold text-gray-900">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t border-gray-200">
+                        <td colSpan={3} className="pt-2 text-right font-semibold text-gray-700">Total</td>
+                        <td className="pt-2 text-right font-bold text-gray-900">₹{order.total.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
