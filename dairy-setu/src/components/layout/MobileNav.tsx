@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
+import { hasUnreadForPage } from '../../utils/notificationRouting';
 
 export function MobileNav() {
   const { user, signOut } = useAuthStore();
@@ -16,6 +17,10 @@ export function MobileNav() {
 
   const unread = notifications.filter(n => n.userId === user?.id && !n.read).length;
   const isDistributor = user?.role === 'distributor';
+  const hasOrdersDot = hasUnreadForPage(notifications, user?.id, user?.role, 'orders');
+  const hasConnectionsDot = hasUnreadForPage(notifications, user?.id, user?.role, 'connections');
+  const hasHistoryDot = hasUnreadForPage(notifications, user?.id, user?.role, 'history');
+  const hasMyDistributorDot = hasUnreadForPage(notifications, user?.id, user?.role, 'myDistributor');
 
   const handleLogout = async () => {
     setMenuOpen(false);
@@ -27,27 +32,27 @@ export function MobileNav() {
   const primaryTabs = isDistributor
     ? [
         { to: '/distributor', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
-        { to: '/distributor/orders', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders' },
+        { to: '/distributor/orders', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders', dot: hasOrdersDot },
         { to: '/distributor/summary', icon: <BarChart3 className="w-5 h-5" />, label: 'Summary' },
         { to: '/distributor/catalog', icon: <Package className="w-5 h-5" />, label: 'Catalog' },
       ]
     : [
         { to: '/shop', icon: <Store className="w-5 h-5" />, label: 'Order' },
         { to: '/shop/discover', icon: <Search className="w-5 h-5" />, label: 'Discover', isNew: true },
-        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders' },
+        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders', dot: hasHistoryDot },
       ];
 
   // Extra items shown in the "more" drawer
   const moreItems = isDistributor
     ? [
-        { to: '/distributor/connections', icon: <Users className="w-5 h-5" />, label: 'Shopkeepers' },
+        { to: '/distributor/connections', icon: <Users className="w-5 h-5" />, label: 'Shopkeepers', dot: hasConnectionsDot },
         { to: '/distributor/invoices', icon: <FileText className="w-5 h-5" />, label: 'Invoices' },
         { to: '/distributor/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
         { to: '/distributor/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' },
         { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ]
     : [
-        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: 'My Distributor' },
+        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: 'My Distributor', dot: hasMyDistributorDot },
         { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
         { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ];
@@ -69,7 +74,10 @@ export function MobileNav() {
               }
             >
               {tab.icon}
-              <span className="text-[10px]">{tab.label}</span>
+              <span className="text-[10px] flex items-center gap-1">
+                {tab.label}
+                {tab.dot && <span className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+              </span>
               {tab.isNew && (
                 <span className="absolute top-1 right-2 bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[8px] rounded-full px-1.5 py-0.5 font-bold">
                   NEW
@@ -146,7 +154,10 @@ export function MobileNav() {
                   }
                 >
                   <span className="text-gray-500">{item.icon}</span>
-                  <span className="flex-1 text-sm font-medium">{item.label}</span>
+                  <span className="flex-1 text-sm font-medium flex items-center gap-1.5">
+                    {item.label}
+                    {item.dot && <span className="w-2 h-2 rounded-full bg-red-500" />}
+                  </span>
                   {item.badge && item.badge > 0 && (
                     <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
                       {item.badge > 9 ? '9+' : item.badge}

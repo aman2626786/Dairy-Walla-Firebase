@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
+import { hasUnreadForPage } from '../../utils/notificationRouting';
 
 export function Sidebar() {
   const { user, signOut } = useAuthStore();
@@ -19,20 +20,20 @@ export function Sidebar() {
   };
 
   const distributorLinks = [
-    { to: '/distributor', icon: <LayoutDashboard className="w-4 h-4" />, label: 'Dashboard', badge: undefined },
-    { to: '/distributor/orders', icon: <ClipboardList className="w-4 h-4" />, label: 'Orders', badge: undefined },
-    { to: '/distributor/summary', icon: <BarChart3 className="w-4 h-4" />, label: 'Order Summary', badge: undefined },
-    { to: '/distributor/catalog', icon: <Package className="w-4 h-4" />, label: 'Catalog', badge: undefined },
-    { to: '/distributor/connections', icon: <Users className="w-4 h-4" />, label: 'Shopkeepers', badge: undefined },
-    { to: '/distributor/invoices', icon: <FileText className="w-4 h-4" />, label: 'Invoices', badge: undefined },
-    { to: '/distributor/settings', icon: <Settings className="w-4 h-4" />, label: 'Settings', badge: undefined },
+    { to: '/distributor', icon: <LayoutDashboard className="w-4 h-4" />, label: 'Dashboard', badge: undefined, showDot: false },
+    { to: '/distributor/orders', icon: <ClipboardList className="w-4 h-4" />, label: 'Orders', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'orders') },
+    { to: '/distributor/summary', icon: <BarChart3 className="w-4 h-4" />, label: 'Order Summary', badge: undefined, showDot: false },
+    { to: '/distributor/catalog', icon: <Package className="w-4 h-4" />, label: 'Catalog', badge: undefined, showDot: false },
+    { to: '/distributor/connections', icon: <Users className="w-4 h-4" />, label: 'Shopkeepers', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'connections') },
+    { to: '/distributor/invoices', icon: <FileText className="w-4 h-4" />, label: 'Invoices', badge: undefined, showDot: false },
+    { to: '/distributor/settings', icon: <Settings className="w-4 h-4" />, label: 'Settings', badge: undefined, showDot: false },
   ];
 
   const shopkeeperLinks = [
-    { to: '/shop', icon: <Store className="w-4 h-4" />, label: 'Order Now', badge: undefined },
-    { to: '/shop/discover', icon: <Search className="w-4 h-4" />, label: 'Discover', badge: 'New' },
-    { to: '/shop/history', icon: <ClipboardList className="w-4 h-4" />, label: 'My Orders', badge: undefined },
-    { to: '/shop/connection', icon: <Users className="w-4 h-4" />, label: 'My Distributor', badge: undefined },
+    { to: '/shop', icon: <Store className="w-4 h-4" />, label: 'Order Now', badge: undefined, showDot: false },
+    { to: '/shop/discover', icon: <Search className="w-4 h-4" />, label: 'Discover', badge: 'New', showDot: false },
+    { to: '/shop/history', icon: <ClipboardList className="w-4 h-4" />, label: 'My Orders', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'history') },
+    { to: '/shop/connection', icon: <Users className="w-4 h-4" />, label: 'My Distributor', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'myDistributor') },
   ];
 
   const links = user?.role === 'distributor' ? distributorLinks : shopkeeperLinks;
@@ -62,7 +63,10 @@ export function Sidebar() {
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
           >
             {link.icon}
-            {link.label}
+            <span className="flex items-center gap-1.5">
+              {link.label}
+              {link.showDot && <span className="w-2 h-2 rounded-full bg-red-500" />}
+            </span>
             {link.badge && (
               <span className="ml-auto bg-gradient-to-r from-brand-500 to-brand-600 text-white text-xs rounded-full px-2 py-0.5 font-medium">
                 {link.badge}
