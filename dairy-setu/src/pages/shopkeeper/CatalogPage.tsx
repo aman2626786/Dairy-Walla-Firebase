@@ -17,23 +17,28 @@ function ProductCard({ product, quantity, onQtyChange }: {
   onQtyChange: (qty: number) => void;
 }) {
   return (
-    <div className={`card p-4 transition-all ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1' : ''}`}>
+    <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'}`}>
+      {/* Product Image */}
+      {product.imageUrl ? (
+        <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover rounded-xl mb-3" />
+      ) : (
+        <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
+          <span className="text-4xl">{categoryEmoji[product.category]}</span>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className="text-base">{categoryEmoji[product.category]}</span>
-            <span className="font-semibold text-gray-900 text-sm truncate">{product.name}</span>
-          </div>
+          <div className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.name}</div>
           <div className="text-xs text-gray-500">{product.brand} · {product.unit}</div>
         </div>
-        <div className="text-right">
+        <div className="text-right flex-shrink-0">
           <div className="font-bold text-gray-900">₹{product.price}</div>
-          <div className="text-xs text-gray-400">per unit</div>
         </div>
       </div>
 
       {/* Qty control */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 relative z-20">
         {quantity === 0 ? (
           <button
             onClick={() => onQtyChange(1)}
@@ -45,20 +50,20 @@ function ProductCard({ product, quantity, onQtyChange }: {
           <div className="flex items-center gap-2 w-full">
             <button
               onClick={() => onQtyChange(Math.max(0, quantity - 1))}
-              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors flex-shrink-0"
             >
               <Minus className="w-3.5 h-3.5 text-gray-700" />
             </button>
             <input
               type="number"
-              className="flex-1 text-center font-bold text-gray-900 bg-brand-50 border border-brand-200 rounded-lg py-1.5 text-sm"
+              className="flex-1 text-center font-bold text-gray-900 bg-brand-50 border border-brand-200 rounded-lg py-1.5 text-sm min-w-0"
               value={quantity}
               min={0}
               onChange={e => onQtyChange(Math.max(0, parseInt(e.target.value) || 0))}
             />
             <button
               onClick={() => onQtyChange(quantity + 1)}
-              className="w-8 h-8 rounded-lg bg-brand-600 hover:bg-brand-700 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg bg-brand-600 hover:bg-brand-700 flex items-center justify-center transition-colors flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5 text-white" />
             </button>

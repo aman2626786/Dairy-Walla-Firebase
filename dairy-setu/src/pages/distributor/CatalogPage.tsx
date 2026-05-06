@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, Package, Eye, EyeOff } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Image as ImageIcon, X } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -20,10 +20,11 @@ interface ProductFormData {
   unit: string;
   price: string;
   available: boolean;
+  imageUrl?: string;
 }
 
 const defaultForm: ProductFormData = {
-  name: '', brand: '', category: 'milk', unit: '', price: '', available: true
+  name: '', brand: '', category: 'milk', unit: '', price: '', available: true, imageUrl: ''
 };
 
 export function CatalogPage() {
@@ -47,8 +48,38 @@ export function CatalogPage() {
 
   const openEdit = (product: Product) => {
     setEditingProduct(product);
-    setForm({ name: product.name, brand: product.brand, category: product.category, unit: product.unit, price: String(product.price), available: product.available });
+    setForm({ name: product.name, brand: product.brand, category: product.category, unit: product.unit, price: String(product.price), available: product.available, imageUrl: product.imageUrl || '' });
     setModalOpen(true);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      show('Image size should be less than 2MB', 'error');
+      return;
+    }
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      show('Please upload an image file', 'error');
+      return;
+    }
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm(f => ({ ...f, imageUrl: reader.result as string }));
+      show('Image uploaded!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setForm(f => ({ ...f, imageUrl: '' }));
+    show('Image removed');
   };
 
   const handleSave = () => {
@@ -129,29 +160,38 @@ export function CatalogPage() {
           <div className="md:hidden space-y-3">
             {filtered.map(product => (
               <div key={product.id} className={`card p-4 ${!product.available ? 'opacity-60' : ''}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-xl">{categoryEmoji[product.category]}</span>
-                    <div className="min-w-0">
-                      <div className="font-semibold text-gray-900 text-sm truncate">{product.name}</div>
-                      <div className="text-xs text-gray-500">{product.brand} · {product.unit}</div>
+                <div className="flex items-start gap-3">
+                  {/* Product Image */}
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt={product.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-2xl">{categoryEmoji[product.category]}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-gray-900 text-sm truncate">{product.name}</div>
+                        <div className="text-xs text-gray-500">{product.brand} · {product.unit}</div>
+                        <div className="font-bold text-gray-900 mt-1">₹{product.price}</div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                          <Edit2 className="w-3.5 h-3.5 text-gray-500" />
+                        </button>
+                        <button onClick={() => handleDelete(product.id, product.name)} className="p-1.5 rounded-lg hover:bg-red-50">
+                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="badge bg-gray-100 text-gray-600 capitalize text-xs">{product.category}</span>
+                      <button onClick={() => toggleAvailability(product)} className={`badge cursor-pointer text-xs ${product.available ? 'badge-green' : 'badge-gray'}`}>
+                        {product.available ? '● Available' : '○ Hidden'}
+                      </button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="font-bold text-gray-900">₹{product.price}</span>
-                    <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                      <Edit2 className="w-3.5 h-3.5 text-gray-500" />
-                    </button>
-                    <button onClick={() => handleDelete(product.id, product.name)} className="p-1.5 rounded-lg hover:bg-red-50">
-                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="badge bg-gray-100 text-gray-600 capitalize text-xs">{product.category}</span>
-                  <button onClick={() => toggleAvailability(product)} className={`badge cursor-pointer text-xs ${product.available ? 'badge-green' : 'badge-gray'}`}>
-                    {product.available ? '● Available' : '○ Hidden'}
-                  </button>
                 </div>
               </div>
             ))}
@@ -175,8 +215,12 @@ export function CatalogPage() {
                 {filtered.map(product => (
                   <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${!product.available ? 'opacity-50' : ''}`}>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{categoryEmoji[product.category]}</span>
+                      <div className="flex items-center gap-3">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded-lg object-cover" />
+                        ) : (
+                          <span className="text-lg">{categoryEmoji[product.category]}</span>
+                        )}
                         <span className="text-sm font-medium text-gray-900">{product.name}</span>
                       </div>
                     </td>
@@ -213,6 +257,32 @@ export function CatalogPage() {
       {/* Product Form Modal */}
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingProduct ? 'Edit Product' : 'Add Product'}>
         <div className="space-y-4">
+          {/* Image Upload */}
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5" />
+              Product Image (Optional)
+            </label>
+            {form.imageUrl ? (
+              <div className="relative inline-block">
+                <img src={form.imageUrl} alt="Product" className="w-32 h-32 rounded-xl object-cover border-2 border-gray-200" />
+                <button
+                  onClick={removeImage}
+                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
+                <span className="text-sm text-gray-500">Click to upload image</span>
+                <span className="text-xs text-gray-400 mt-1">Max 2MB</span>
+                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+              </label>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="label">Product Name</label>

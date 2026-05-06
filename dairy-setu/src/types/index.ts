@@ -10,8 +10,9 @@ export type ProductCategory = 'milk' | 'paneer' | 'curd' | 'butter' | 'ghee' | '
 
 export interface User {
   id: string;
-  phone: string;
+  email: string;
   name: string;
+  phone?: string;
   role: Role;
 }
 
@@ -22,12 +23,34 @@ export interface DistributorProfile {
   connectionCode: string;
   orderWindowStart: string; // "HH:MM"
   orderWindowCutoff: string; // "HH:MM"
+  // Extended fields
+  ownerName?: string;
+  company?: string;       // e.g. Amul, Saras, Local
+  address?: string;
+  city?: string;
+  deliveryAreas?: string; // comma separated
+  gst?: string;
+  profileComplete?: boolean;
+  // Location fields
+  latitude?: number;
+  longitude?: number;
+  locationName?: string; // e.g. "Vaishali Nagar, Ajmer"
 }
 
 export interface ShopkeeperProfile {
   id: string;
   userId: string;
   shopName: string;
+  // Extended fields
+  ownerName?: string;
+  address?: string;
+  city?: string;
+  deliveryTiming?: string; // e.g. "Morning", "Evening"
+  profileComplete?: boolean;
+  // Location fields
+  latitude?: number;
+  longitude?: number;
+  locationName?: string;
 }
 
 export interface Connection {
@@ -59,6 +82,7 @@ export interface Product {
   unit: string;
   price: number;
   available: boolean;
+  imageUrl?: string; // Product image URL
 }
 
 export interface OrderItem {

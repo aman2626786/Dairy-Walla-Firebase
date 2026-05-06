@@ -31,7 +31,7 @@ export function MobileHeader({ title, subtitle, showBack, backTo }: MobileHeader
 
       {!showBack && (
         <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white font-bold text-xs">DS</span>
+          <span className="text-white font-bold text-xs">DW</span>
         </div>
       )}
 

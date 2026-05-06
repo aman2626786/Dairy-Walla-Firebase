@@ -3,20 +3,25 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, Users, BarChart3,
   FileText, Settings, Bell, Store, LogOut, X, MoreHorizontal,
-  ChevronRight
+  ChevronRight, Search, User
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 
 export function MobileNav() {
-  const { user, logout } = useAuthStore();
+  const { user, signOut } = useAuthStore();
   const { notifications } = useAppStore();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const unread = notifications.filter(n => n.userId === user?.id && !n.read).length;
-
   const isDistributor = user?.role === 'distributor';
+
+  const handleLogout = async () => {
+    setMenuOpen(false);
+    await signOut();
+    navigate('/login');
+  };
 
   // Primary tabs shown in bottom bar (max 4)
   const primaryTabs = isDistributor
@@ -28,8 +33,8 @@ export function MobileNav() {
       ]
     : [
         { to: '/shop', icon: <Store className="w-5 h-5" />, label: 'Order' },
-        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: 'My Orders' },
-        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: 'Distributor' },
+        { to: '/shop/discover', icon: <Search className="w-5 h-5" />, label: 'Discover', isNew: true },
+        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders' },
       ];
 
   // Extra items shown in the "more" drawer
@@ -39,16 +44,13 @@ export function MobileNav() {
         { to: '/distributor/invoices', icon: <FileText className="w-5 h-5" />, label: 'Invoices' },
         { to: '/distributor/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
         { to: '/distributor/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' },
+        { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ]
     : [
+        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: 'My Distributor' },
         { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
+        { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ];
-
-  const handleLogout = () => {
-    setMenuOpen(false);
-    logout();
-    navigate('/login');
-  };
 
   return (
     <>
@@ -61,13 +63,18 @@ export function MobileNav() {
               to={tab.to}
               end={tab.to === '/distributor' || tab.to === '/shop'}
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-xs font-medium transition-colors ${
+                `flex-1 flex flex-col items-center justify-center py-2.5 gap-0.5 text-xs font-medium transition-colors relative ${
                   isActive ? 'text-brand-600' : 'text-gray-400'
                 }`
               }
             >
               {tab.icon}
               <span className="text-[10px]">{tab.label}</span>
+              {tab.isNew && (
+                <span className="absolute top-1 right-2 bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[8px] rounded-full px-1.5 py-0.5 font-bold">
+                  NEW
+                </span>
+              )}
             </NavLink>
           ))}
 
@@ -107,13 +114,19 @@ export function MobileNav() {
 
             {/* User info */}
             <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
-              <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center">
+              <button
+                onClick={() => { setMenuOpen(false); navigate(isDistributor ? '/distributor/profile' : '/shop/profile'); }}
+                className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center hover:ring-2 hover:ring-brand-400 transition-all"
+              >
                 <span className="text-brand-700 font-bold">{user?.name?.[0]}</span>
-              </div>
-              <div className="flex-1 min-w-0">
+              </button>
+              <button
+                onClick={() => { setMenuOpen(false); navigate(isDistributor ? '/distributor/profile' : '/shop/profile'); }}
+                className="flex-1 min-w-0 text-left"
+              >
                 <div className="font-semibold text-gray-900 text-sm truncate">{user?.name}</div>
                 <div className="text-xs text-gray-400">{user?.phone} · <span className="capitalize">{user?.role}</span></div>
-              </div>
+              </button>
               <button onClick={() => setMenuOpen(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
                 <X className="w-4 h-4 text-gray-400" />
               </button>

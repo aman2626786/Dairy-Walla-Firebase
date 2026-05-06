@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Clock, CheckCircle, XCircle, Package } from 'lucide-react';
+import { ShoppingCart, Clock, CheckCircle, XCircle, Package, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import { format } from 'date-fns';
+import { useToast } from '../../components/ui/Toast';
+import { format, subDays } from 'date-fns';
 import type { OrderStatus } from '../../types';
 import type { ReactElement } from 'react';
 
@@ -17,10 +18,28 @@ const statusConfig: Record<OrderStatus, { label: string; className: string; icon
 
 export function OrderHistoryPage() {
   const { user } = useAuthStore();
-  const { orders } = useAppStore();
+  const { orders, setCartQuantity, clearCart, products } = useAppStore();
   const navigate = useNavigate();
+  const { show } = useToast();
 
   const myOrders = orders.filter(o => o.shopkeeperName === user?.name);
+
+  // Find yesterday's last order
+  const yesterday = subDays(new Date(), 1).toISOString().split('T')[0];
+  const yesterdayOrder = myOrders.find(o => o.deliveryDate === yesterday && o.status !== 'rejected');
+
+  const handleRepeatOrder = () => {
+    if (!yesterdayOrder) { show('Kal ka koi order nahi mila', 'error'); return; }
+    clearCart();
+    yesterdayOrder.items.forEach(item => {
+      const product = products.find(p => p.id === item.productId);
+      if (product && product.available) {
+        setCartQuantity(product, item.quantity);
+      }
+    });
+    show(`${yesterdayOrder.items.length} items cart mein add ho gaye!`);
+    navigate('/shop/review');
+  };
 
   return (
     <div className="p-4 max-w-3xl mx-auto">
@@ -29,6 +48,25 @@ export function OrderHistoryPage() {
         <h1 className="text-xl font-bold text-gray-900">My Orders</h1>
         <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} orders</p>
       </div>
+
+      {/* Repeat yesterday's order */}
+      {yesterdayOrder && (
+        <button
+          onClick={handleRepeatOrder}
+          className="w-full mb-4 p-4 bg-brand-50 border-2 border-brand-200 rounded-2xl flex items-center gap-3 hover:bg-brand-100 transition-colors text-left"
+        >
+          <div className="w-10 h-10 rounded-xl bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <RefreshCw className="w-5 h-5 text-white" />
+          </div>
+          <div className="flex-1">
+            <div className="font-semibold text-brand-800 text-sm">Kal ka Order Repeat Karo</div>
+            <div className="text-xs text-brand-600 mt-0.5">
+              {yesterdayOrder.items.length} items · ₹{yesterdayOrder.total.toLocaleString()}
+            </div>
+          </div>
+          <ShoppingCart className="w-4 h-4 text-brand-600" />
+        </button>
+      )}
 
       {myOrders.length === 0 ? (
         <EmptyState
