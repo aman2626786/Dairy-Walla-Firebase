@@ -44,3 +44,10 @@ Manual test:
 - Ensure exact email/password used at signup.
 - Email should be lowercase/no extra spaces.
 - Check user exists in `auth.users` (not only in `public.profiles`).
+
+## 6) Enable manual product categories
+If distributors need custom categories (for example `lassi`, `ice cream`, `khoa`), run:
+
+- `supabase-flexible-product-categories.sql`
+
+This removes old fixed-category check constraint from `products.category` and allows manual text categories.

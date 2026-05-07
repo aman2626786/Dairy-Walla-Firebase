@@ -40,64 +40,107 @@ export function ConfirmProfilePage() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let alive = true;
+    let resolving = false;
+
     const isEmailConfirmed = (sessionUser: { email_confirmed_at?: string | null } | null | undefined) =>
       Boolean(sessionUser?.email_confirmed_at);
 
-    // Supabase email confirm link mein URL hash hota hai jisme tokens hote hain
-    // onAuthStateChange automatically URL hash process karta hai
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user && isEmailConfirmed(session.user)) {
-        setUserId(session.user.id);
-        // Update auth store
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
+    const roleFromQuery = searchParams.get("role");
+    const requestedRole: Role | null = roleFromQuery === "distributor" || roleFromQuery === "shopkeeper"
+      ? roleFromQuery
+      : null;
+    if (requestedRole) setRole(requestedRole);
 
-        if (profile) {
-          const resolvedRole: Role = profile.role === "distributor" ? "distributor" : "shopkeeper";
-          setRole(resolvedRole);
-          useAuthStore.setState({
-            user: {
-              id: profile.id,
-              email: profile.email,
-              name: profile.name || "",
-              phone: profile.phone,
-              role: resolvedRole,
-            },
-            isAuthenticated: true,
-          });
+    const resolveSessionUser = async (sessionUser: {
+      id: string;
+      email?: string | null;
+      user_metadata?: Record<string, unknown>;
+    }) => {
+      if (!alive || resolving) return;
+      resolving = true;
+      try {
+        setUserId(sessionUser.id);
+        const metaRole = sessionUser.user_metadata?.role;
+        const metaRoleResolved: Role | null = metaRole === "distributor" || metaRole === "shopkeeper" ? metaRole : null;
+
+        const [{ data: profile }, { data: dp }, { data: sp }] = await Promise.all([
+          supabase.from("profiles").select("*").eq("id", sessionUser.id).maybeSingle(),
+          supabase.from("distributor_profiles").select("id").eq("user_id", sessionUser.id).maybeSingle(),
+          supabase.from("shopkeeper_profiles").select("id").eq("user_id", sessionUser.id).maybeSingle(),
+        ]);
+
+        let resolvedRole: Role = requestedRole
+          || metaRoleResolved
+          || (profile?.role === "distributor" ? "distributor" : profile?.role === "shopkeeper" ? "shopkeeper" : "shopkeeper");
+
+        if (resolvedRole === "distributor" && !dp && sp) resolvedRole = "shopkeeper";
+        if (resolvedRole === "shopkeeper" && !sp && dp) resolvedRole = "distributor";
+
+        setRole(resolvedRole);
+        useAuthStore.setState({
+          user: {
+            id: sessionUser.id,
+            email: profile?.email || sessionUser.email || "",
+            name: profile?.name || "",
+            phone: profile?.phone || "",
+            role: resolvedRole,
+          },
+          isAuthenticated: true,
+        });
+
+        // Existing profile mila to confirm/setup page dubara mat dikhao.
+        if (dp || sp) {
+          const targetPath = resolvedRole === "distributor"
+            ? (dp ? "/distributor" : "/shop")
+            : (sp ? "/shop" : "/distributor");
+          navigate(targetPath, { replace: true });
+          return;
         }
+
         setStep("profile");
-        subscription.unsubscribe();
-      } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user && !isEmailConfirmed(session.user)) {
+      } catch {
+        if (alive) setStep("error");
+      } finally {
+        resolving = false;
+      }
+    };
+
+    // Supabase email confirm link me hash token hota hai; callback ko async-free rakho.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!alive) return;
+
+      if (event === "SIGNED_OUT") {
         setStep("error");
-      } else if (event === "SIGNED_OUT") {
+        return;
+      }
+
+      if (!session?.user) return;
+
+      if (!isEmailConfirmed(session.user)) {
         setStep("error");
+        return;
+      }
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION" || event === "USER_UPDATED") {
+        setTimeout(() => {
+          void resolveSessionUser(session.user);
+        }, 0);
       }
     });
 
-    // Already logged in check
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!alive) return;
       if (session?.user && isEmailConfirmed(session.user)) {
-        setUserId(session.user.id);
-        const metaRole = session.user.user_metadata?.role;
-        if (metaRole === "distributor" || metaRole === "shopkeeper") setRole(metaRole);
-        useAuthStore.setState({
-          isAuthenticated: true,
-        });
-        setStep("profile");
-        subscription.unsubscribe();
+        setTimeout(() => {
+          void resolveSessionUser(session.user);
+        }, 0);
       } else if (session?.user && !isEmailConfirmed(session.user)) {
         setStep("error");
       }
+    }).catch(() => {
+      if (alive) setStep("error");
     });
-
-    const roleFromQuery = searchParams.get("role");
-    if (roleFromQuery === "distributor" || roleFromQuery === "shopkeeper") {
-      setRole(roleFromQuery);
-    }
 
     // 10 second timeout
     const timeout = setTimeout(() => {
@@ -105,10 +148,11 @@ export function ConfirmProfilePage() {
     }, 10000);
 
     return () => {
+      alive = false;
       clearTimeout(timeout);
       subscription.unsubscribe();
     };
-  }, [searchParams]);
+  }, [searchParams, navigate]);
 
   const handleGetLocation = async () => {
     setLoadingLocation(true);

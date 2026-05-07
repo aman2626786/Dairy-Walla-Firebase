@@ -111,7 +111,8 @@ export function DiscoverPage() {
       shopProfile.id,
       user.name,
       shopProfile.shopName,
-      connectionCode
+      connectionCode,
+      user.phone
     );
 
     if (success) {

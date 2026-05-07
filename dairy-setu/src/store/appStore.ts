@@ -19,6 +19,7 @@ interface AppState {
   // Fetch actions
   fetchDistributorProfile: (userId: string) => Promise<DistributorProfile | null>;
   fetchShopkeeperProfile: (userId: string) => Promise<ShopkeeperProfile | null>;
+  fetchShopkeeperProfileById: (shopkeeperId: string) => Promise<ShopkeeperProfile | null>;
   ensureShopkeeperProfile: (userId: string) => ShopkeeperProfile | null;
   fetchAllDistributors: () => Promise<void>;
   fetchConnections: (userId: string, role: 'distributor' | 'shopkeeper') => Promise<void>;
@@ -34,14 +35,14 @@ interface AppState {
   updateShopkeeperProfile: (shopkeeperId: string, updates: Partial<ShopkeeperProfile>) => Promise<void>;
 
   // Connection actions
-  requestConnection: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorCode: string) => Promise<boolean>;
+  requestConnection: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorCode: string, shopkeeperPhone?: string) => Promise<boolean>;
   updateConnectionStatus: (connectionId: string, status: ConnectionStatus, deliveryGroupId?: string) => Promise<void>;
   assignDeliveryGroup: (connectionId: string, groupId: string, groupName: string) => Promise<void>;
 
   // Product actions
-  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
-  deleteProduct: (id: string) => Promise<void>;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<boolean>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<boolean>;
 
   // Order actions
   placeOrder: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorId: string, items: CartItem[], isLate: boolean) => Promise<Order>;
@@ -67,6 +68,8 @@ function mapDistributor(row: Record<string, unknown>): DistributorProfile {
     id: row.id as string,
     userId: row.user_id as string,
     businessName: row.business_name as string,
+    phone: row.phone as string | undefined,
+    email: row.email as string | undefined,
     connectionCode: row.connection_code as string,
     orderWindowStart: (row.order_window_start as string) || '18:00',
     orderWindowCutoff: (row.order_window_cutoff as string) || '20:00',
@@ -83,11 +86,37 @@ function mapDistributor(row: Record<string, unknown>): DistributorProfile {
   };
 }
 
+async function enrichDistributorContacts(profiles: DistributorProfile[]): Promise<DistributorProfile[]> {
+  const userIds = [...new Set(profiles.map(p => p.userId).filter(Boolean))];
+  if (userIds.length === 0) return profiles;
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, phone, email')
+    .in('id', userIds);
+
+  const contactByUserId = new Map<string, { phone?: string; email?: string }>();
+  (data as Record<string, unknown>[] | null)?.forEach(row => {
+    contactByUserId.set(row.id as string, {
+      phone: row.phone as string | undefined,
+      email: row.email as string | undefined,
+    });
+  });
+
+  return profiles.map(p => {
+    const contact = contactByUserId.get(p.userId);
+    if (!contact) return p;
+    return { ...p, phone: contact.phone, email: contact.email };
+  });
+}
+
 function mapShopkeeper(row: Record<string, unknown>): ShopkeeperProfile {
   return {
     id: row.id as string,
     userId: row.user_id as string,
     shopName: row.shop_name as string,
+    phone: row.phone as string | undefined,
+    email: row.email as string | undefined,
     ownerName: row.owner_name as string | undefined,
     address: row.address as string | undefined,
     city: row.city as string | undefined,
@@ -105,6 +134,7 @@ function mapConnection(row: Record<string, unknown>): Connection {
     shopkeeperId: row.shopkeeper_id as string,
     shopkeeperName: row.shopkeeper_name as string,
     shopName: row.shop_name as string,
+    shopkeeperPhone: row.shopkeeper_phone as string | undefined,
     distributorId: row.distributor_id as string,
     distributorName: row.distributor_name as string,
     businessName: row.business_name as string,
@@ -161,7 +191,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchDistributorProfile: async (userId) => {
     const { data } = await supabase.from('distributor_profiles').select('*').eq('user_id', userId).single();
     if (data) {
-      const profile = mapDistributor(data as Record<string, unknown>);
+      const [profile] = await enrichDistributorContacts([mapDistributor(data as Record<string, unknown>)]);
       set(state => ({
         distributorProfiles: state.distributorProfiles.some(d => d.userId === userId)
           ? state.distributorProfiles.map(d => d.userId === userId ? profile : d)
@@ -192,9 +222,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     return null;
   },
 
+  fetchShopkeeperProfileById: async (shopkeeperId) => {
+    const { data } = await supabase.from('shopkeeper_profiles').select('*').eq('id', shopkeeperId).single();
+    if (data) {
+      const profile = mapShopkeeper(data as Record<string, unknown>);
+      set(state => ({
+        shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.id === shopkeeperId)
+          ? state.shopkeeperProfiles.map(s => s.id === shopkeeperId ? profile : s)
+          : [...state.shopkeeperProfiles, profile]
+      }));
+      return profile;
+    }
+    return null;
+  },
+
   fetchAllDistributors: async () => {
     const { data } = await supabase.from('distributor_profiles').select('*');
-    if (data) set({ distributorProfiles: (data as Record<string, unknown>[]).map(mapDistributor) });
+    if (data) {
+      const mapped = (data as Record<string, unknown>[]).map(mapDistributor);
+      const enriched = await enrichDistributorContacts(mapped);
+      set({ distributorProfiles: enriched });
+    }
   },
 
   fetchConnections: async (userId, role) => {
@@ -357,7 +405,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
 
-  requestConnection: async (shopkeeperId, shopkeeperName, shopName, distributorCode) => {
+  requestConnection: async (shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone) => {
     const { distributorProfiles } = get();
     const dp = distributorProfiles.find(d => d.connectionCode === distributorCode);
     if (!dp) return false;
@@ -365,6 +413,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       shopkeeper_id: shopkeeperId,
       shopkeeper_name: shopkeeperName,
       shop_name: shopName,
+      shopkeeper_phone: shopkeeperPhone || null,
       distributor_id: dp.id,
       distributor_name: dp.ownerName || '',
       business_name: dp.businessName,
@@ -397,20 +446,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       available: product.available,
       image_url: product.imageUrl,
     }).select().single();
-    if (!error && data) set(state => ({ products: [...state.products, mapProduct(data as Record<string, unknown>)] }));
+    if (error || !data) return false;
+    set(state => ({ products: [...state.products, mapProduct(data as Record<string, unknown>)] }));
+    return true;
   },
 
   updateProduct: async (id, updates) => {
-    await supabase.from('products').update({
+    const { error } = await supabase.from('products').update({
       name: updates.name, brand: updates.brand, category: updates.category,
       unit: updates.unit, price: updates.price, available: updates.available,
     }).eq('id', id);
+    if (error) return false;
     set(state => ({ products: state.products.map(p => p.id === id ? { ...p, ...updates } : p) }));
+    return true;
   },
 
   deleteProduct: async (id) => {
-    await supabase.from('products').delete().eq('id', id);
+    const { error } = await supabase.from('products').delete().eq('id', id);
+    if (error) return false;
     set(state => ({ products: state.products.filter(p => p.id !== id) }));
+    return true;
   },
 
   placeOrder: async (shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate) => {

@@ -1,15 +1,26 @@
 import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, Tag, Package, Send, CheckCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, Tag, Package, Send, CheckCircle, Phone } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { formatDistance } from '../../utils/location';
-import type { ProductCategory } from '../../types';
+import type { KnownProductCategory, ProductCategory } from '../../types';
 
-const categoryEmoji: Record<ProductCategory, string> = {
-  milk: '🥛', paneer: '🧀', curd: '🍶', butter: '🧈', ghee: '🫙', other: '📦'
+const knownCategoryEmoji: Record<KnownProductCategory, string> = {
+  milk: '🥛',
+  paneer: '🧀',
+  curd: '🍶',
+  butter: '🧈',
+  ghee: '🫙',
+  other: '📦',
 };
+
+const normalizeCategory = (value: string): ProductCategory =>
+  (value.trim().toLowerCase().replace(/\s+/g, ' ') || 'other') as ProductCategory;
+
+const getCategoryEmoji = (category: string): string =>
+  knownCategoryEmoji[normalizeCategory(category) as KnownProductCategory] || '📦';
 
 export function DistributorProfilePage() {
   const { distributorId } = useParams();
@@ -19,6 +30,12 @@ export function DistributorProfilePage() {
   const { show } = useToast();
 
   const distributor = distributorProfiles.find(dp => dp.id === distributorId);
+  const distributorPhone = (
+    distributor as unknown as { phone?: string; contactPhone?: string } | undefined
+  )?.phone || (
+    distributor as unknown as { phone?: string; contactPhone?: string } | undefined
+  )?.contactPhone || '';
+  const telPhone = distributorPhone.replace(/[^\d+]/g, '');
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
   const distributorProducts = products.filter(p => p.distributorId === distributorId && p.available);
 
@@ -28,7 +45,6 @@ export function DistributorProfilePage() {
     }
   }, [distributorId, fetchProducts]);
 
-  // Calculate distance
   let distance: number | undefined;
   if (shopProfile?.latitude && shopProfile?.longitude && distributor?.latitude && distributor?.longitude) {
     const R = 6371;
@@ -44,7 +60,6 @@ export function DistributorProfilePage() {
     distance = R * c;
   }
 
-  // Check connection status
   const myConnection = connections.find(
     c => c.shopkeeperId === shopProfile?.id && c.distributorId === distributorId
   );
@@ -61,7 +76,8 @@ export function DistributorProfilePage() {
       shopProfile.id,
       user.name,
       shopProfile.shopName,
-      distributor.connectionCode
+      distributor.connectionCode,
+      user.phone
     );
 
     if (success) {
@@ -71,14 +87,12 @@ export function DistributorProfilePage() {
     }
   };
 
-  // Group products by category
   const productsByCategory = distributorProducts.reduce((acc, product) => {
-    if (!acc[product.category]) {
-      acc[product.category] = [];
-    }
-    acc[product.category].push(product);
+    const category = normalizeCategory(String(product.category));
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(product);
     return acc;
-  }, {} as Record<ProductCategory, typeof distributorProducts>);
+  }, {} as Record<string, typeof distributorProducts>);
 
   if (!distributor) {
     return (
@@ -93,13 +107,9 @@ export function DistributorProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div className="flex-1">
@@ -109,18 +119,13 @@ export function DistributorProfilePage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-4 space-y-4">
-        {/* Profile Card */}
         <div className="card p-6">
           <div className="flex items-start gap-4 mb-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center flex-shrink-0 shadow-lg">
-              <span className="text-white font-bold text-2xl">
-                {distributor.businessName[0]}
-              </span>
+              <span className="text-white font-bold text-2xl">{distributor.businessName[0]}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">
-                {distributor.businessName}
-              </h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-1">{distributor.businessName}</h2>
               <p className="text-sm text-gray-600 mb-2">{distributor.ownerName}</p>
               <div className="flex flex-wrap gap-2">
                 {distributor.company && (
@@ -129,11 +134,7 @@ export function DistributorProfilePage() {
                     {distributor.company}
                   </span>
                 )}
-                {distributor.city && (
-                  <span className="badge bg-gray-100 text-gray-600">
-                    {distributor.city}
-                  </span>
-                )}
+                {distributor.city && <span className="badge bg-gray-100 text-gray-600">{distributor.city}</span>}
                 {distance !== undefined && (
                   <span className="badge badge-blue flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
@@ -144,7 +145,6 @@ export function DistributorProfilePage() {
             </div>
           </div>
 
-          {/* Details Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             {distributor.address && (
               <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
@@ -175,9 +175,23 @@ export function DistributorProfilePage() {
                 </div>
               </div>
             )}
+
+            {distributorPhone && (
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl md:col-span-2">
+                <Phone className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <div className="text-xs text-gray-500 mb-0.5">Phone</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm text-gray-900 font-medium">{distributorPhone}</div>
+                    <a href={`tel:${telPhone}`} className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5" /> Call
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Connection Button */}
           {myConnection?.status === 'active' ? (
             <div className="flex items-center justify-center gap-2 p-3 bg-green-50 rounded-xl text-green-700">
               <CheckCircle className="w-5 h-5" />
@@ -188,24 +202,18 @@ export function DistributorProfilePage() {
               Request Pending
             </button>
           ) : (
-            <button
-              onClick={() => void handleConnect()}
-              className="btn-primary w-full flex items-center justify-center gap-2"
-            >
+            <button onClick={() => void handleConnect()} className="btn-primary w-full flex items-center justify-center gap-2">
               <Send className="w-4 h-4" />
               Send Connection Request
             </button>
           )}
         </div>
 
-        {/* Products Section */}
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-4">
             <Package className="w-5 h-5 text-brand-600" />
             <h3 className="font-bold text-gray-900">Available Products</h3>
-            <span className="badge bg-brand-100 text-brand-700">
-              {distributorProducts.length} items
-            </span>
+            <span className="badge bg-brand-100 text-brand-700">{distributorProducts.length} items</span>
           </div>
 
           {distributorProducts.length === 0 ? (
@@ -218,38 +226,25 @@ export function DistributorProfilePage() {
               {Object.entries(productsByCategory).map(([category, items]) => (
                 <div key={category}>
                   <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2 capitalize">
-                    <span className="text-lg">{categoryEmoji[category as ProductCategory]}</span>
+                    <span className="text-lg">{getCategoryEmoji(category)}</span>
                     {category}
                     <span className="text-xs text-gray-400">({items.length})</span>
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {items.map(product => (
-                      <div
-                        key={product.id}
-                        className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                      >
+                      <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                         {product.imageUrl ? (
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                          />
+                          <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
                         ) : (
                           <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                            <span className="text-2xl">{categoryEmoji[product.category]}</span>
+                            <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 text-sm truncate">
-                            {product.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {product.brand} · {product.unit}
-                          </div>
+                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="text-xs text-gray-500">{product.brand} · {product.unit}</div>
                         </div>
-                        <div className="font-bold text-gray-900 flex-shrink-0">
-                          ₹{product.price}
-                        </div>
+                        <div className="font-bold text-gray-900 flex-shrink-0">₹{product.price}</div>
                       </div>
                     ))}
                   </div>
@@ -259,7 +254,6 @@ export function DistributorProfilePage() {
           )}
         </div>
 
-        {/* Info Card */}
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
           <p className="text-xs text-blue-700 font-medium mb-1">💡 Next Steps</p>
           <ul className="text-xs text-blue-600 space-y-1">

@@ -24,24 +24,21 @@ export function LoginPage() {
     if (!password) { show("Password daalo", "error"); return; }
     setLoading(true);
     try {
-      type LoginResult = { error?: string; user?: { id: string; role: Role }; needsProfile?: boolean };
-      const loginResult = await Promise.race([
-        signIn(normalizedEmail, password, role),
-        new Promise<LoginResult>((resolve) =>
-          setTimeout(() => resolve({ error: "Login request timeout. Internet check karo aur dobara try karo." }), 15000)
-        ),
-      ]) as LoginResult;
+      const loginResult = await signIn(normalizedEmail, password, role);
 
       if (loginResult.error) {
-        if (loginResult.error.toLowerCase().includes("invalid login credentials")) {
+        const err = loginResult.error.toLowerCase();
+        if (err.includes("invalid login credentials")) {
           show("Email ya password galat hai. Email lowercase/without spaces try karo.", "error");
-        } else if (loginResult.error.toLowerCase().includes("email not confirmed")) {
+        } else if (err.includes("email not confirmed")) {
           const resend = await resendConfirmation(normalizedEmail);
           if (resend.error) {
             show("Email verify nahi hui. Inbox/spam check karo.", "error");
           } else {
             show("Email verify nahi hui. Naya confirmation link bhej diya hai.", "error");
           }
+        } else if (err.includes("too many") || err.includes("rate limit")) {
+          show("Bahut zyada login attempts ho gaye. 1 minute baad dobara try karo.", "error");
         } else {
           show(loginResult.error, "error");
         }

@@ -6,7 +6,8 @@ export type OrderType = 'normal' | 'late';
 
 export type OrderStatus = 'pending' | 'accepted' | 'rejected' | 'fulfilled';
 
-export type ProductCategory = 'milk' | 'paneer' | 'curd' | 'butter' | 'ghee' | 'other';
+export type KnownProductCategory = 'milk' | 'paneer' | 'curd' | 'butter' | 'ghee' | 'other';
+export type ProductCategory = KnownProductCategory | (string & {});
 
 export interface User {
   id: string;
@@ -20,6 +21,8 @@ export interface DistributorProfile {
   id: string;
   userId: string;
   businessName: string;
+  phone?: string;
+  email?: string;
   connectionCode: string;
   orderWindowStart: string; // "HH:MM"
   orderWindowCutoff: string; // "HH:MM"
@@ -41,6 +44,8 @@ export interface ShopkeeperProfile {
   id: string;
   userId: string;
   shopName: string;
+  phone?: string;
+  email?: string;
   // Extended fields
   ownerName?: string;
   address?: string;
@@ -58,6 +63,7 @@ export interface Connection {
   shopkeeperId: string;
   shopkeeperName: string;
   shopName: string;
+  shopkeeperPhone?: string;
   distributorId: string;
   distributorName: string;
   businessName: string;

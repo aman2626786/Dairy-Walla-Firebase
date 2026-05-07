@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Link2, CheckCircle, Clock, XCircle, Building2, Search, MapPin, Tag } from 'lucide-react';
+import { Link2, CheckCircle, Clock, XCircle, Building2, Search, MapPin, Tag, Phone } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -22,6 +22,12 @@ export function ConnectionPage() {
   const distributorProfile = myConnection
     ? distributorProfiles.find(dp => dp.id === myConnection.distributorId)
     : null;
+  const distributorPhone = (
+    distributorProfile as unknown as { phone?: string; contactPhone?: string } | null
+  )?.phone || (
+    distributorProfile as unknown as { phone?: string; contactPhone?: string } | null
+  )?.contactPhone || '';
+  const telPhone = distributorPhone.replace(/[^\d+]/g, '');
 
   // Search distributors
   const searchResults = showSearch
@@ -44,7 +50,8 @@ export function ConnectionPage() {
       shopProfile.id,
       user.name,
       shopProfile.shopName || `${user.name}'s Shop`,
-      code.trim()
+      code.trim(),
+      user.phone
     );
 
     if (success) {
@@ -91,8 +98,14 @@ export function ConnectionPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500">Order Window</span>
                 <span className="font-medium text-gray-900">{distributorProfile.orderWindowStart} – {distributorProfile.orderWindowCutoff}</span>
-              </div>
-              {myConnection.deliveryGroupName && (
+              </div>              {distributorPhone && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Phone</span>
+                  <a href={`tel:${telPhone}`} className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5" /> Call
+                  </a>
+                </div>
+              )}              {myConnection.deliveryGroupName && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Delivery Area</span>
                   <span className="font-medium text-gray-900">{myConnection.deliveryGroupName}</span>
@@ -261,9 +274,19 @@ export function ConnectionPage() {
               <span className="text-gray-500">Contact</span>
               <span className="font-medium text-gray-900">{myConnection.distributorName}</span>
             </div>
+            {distributorPhone && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Phone</span>
+                <a href={`tel:${telPhone}`} className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5" /> {distributorPhone}
+                </a>
+              </div>
+            )}
           </div>
         </div>
       )}
     </div>
   );
 }
+
+

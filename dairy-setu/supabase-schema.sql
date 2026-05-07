@@ -131,7 +131,7 @@ create table if not exists public.products (
   distributor_id uuid references public.distributor_profiles(id) on delete cascade,
   name text not null,
   brand text,
-  category text check (category in ('milk','paneer','curd','butter','ghee','other')),
+  category text not null default 'other',
   unit text,
   price numeric(10,2) not null,
   available boolean default true,
@@ -275,5 +275,15 @@ do $$ begin
   end if;
   if not exists (select 1 from pg_policies where tablename='user_roles' and policyname='Users can insert own roles') then
     create policy "Users can insert own roles" on public.user_roles for insert with check (auth.uid() = user_id);
+  end if;
+end $$;
+
+-- Ensure shopkeeper phone is available on connections for quick calling
+do $$ begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'connections' and column_name = 'shopkeeper_phone'
+  ) then
+    alter table public.connections add column shopkeeper_phone text;
   end if;
 end $$;

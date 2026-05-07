@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
+import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 
 export function SettingsPage() {
   const { user } = useAuthStore();
@@ -14,6 +15,7 @@ export function SettingsPage() {
   const [start, setStart] = useState(profile?.orderWindowStart || '18:00');
   const [cutoff, setCutoff] = useState(profile?.orderWindowCutoff || '20:00');
   const [copied, setCopied] = useState(false);
+  const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(() => getInvoiceLanguage());
 
   const handleSave = () => {
     if (!profile) return;
@@ -89,6 +91,25 @@ export function SettingsPage() {
         </div>
 
         <button className="btn-primary" onClick={handleSave}>Save Settings</button>
+      </div>
+
+      <div className="card p-5 mb-4">
+        <h2 className="font-semibold text-gray-900 text-sm mb-3">Invoice Language</h2>
+        <p className="text-xs text-gray-500 mb-3">Default bill language yahin se set karo.</p>
+        <select
+          value={invoiceLanguage}
+          onChange={e => {
+            const next = e.target.value as InvoiceLanguage;
+            setInvoiceLanguageState(next);
+            setInvoiceLanguage(next);
+            show('Invoice language updated');
+          }}
+          className="input"
+        >
+          <option value="hinglish">Hinglish (Default)</option>
+          <option value="english">English</option>
+          <option value="hindi">Hindi</option>
+        </select>
       </div>
 
       {/* WhatsApp Bridge info */}
