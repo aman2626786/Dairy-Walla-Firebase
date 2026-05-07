@@ -409,17 +409,42 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { distributorProfiles } = get();
     const dp = distributorProfiles.find(d => d.connectionCode === distributorCode);
     if (!dp) return false;
-    const { data, error } = await supabase.from('connections').insert({
+    const basePayload = {
       shopkeeper_id: shopkeeperId,
       shopkeeper_name: shopkeeperName,
       shop_name: shopName,
-      shopkeeper_phone: shopkeeperPhone || null,
       distributor_id: dp.id,
       distributor_name: dp.ownerName || '',
       business_name: dp.businessName,
       status: 'pending',
-    }).select().single();
-    if (error || !data) return false;
+    };
+
+    const insertWithPhonePayload = {
+      ...basePayload,
+      shopkeeper_phone: shopkeeperPhone || null,
+    };
+
+    let { data, error } = await supabase
+      .from('connections')
+      .insert(insertWithPhonePayload)
+      .select()
+      .single();
+
+    // Backward compatibility: older DBs may not yet have `shopkeeper_phone`.
+    if (error && `${error.message}`.toLowerCase().includes('shopkeeper_phone')) {
+      const retry = await supabase
+        .from('connections')
+        .insert(basePayload)
+        .select()
+        .single();
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error || !data) {
+      console.error('requestConnection failed', error);
+      return false;
+    }
     set(state => ({ connections: [...state.connections, mapConnection(data as Record<string, unknown>)] }));
     await get().addNotification({ userId: dp.userId, type: 'new_connection', message: `${shopName} wants to connect with you`, read: false, createdAt: new Date().toISOString() });
     return true;
