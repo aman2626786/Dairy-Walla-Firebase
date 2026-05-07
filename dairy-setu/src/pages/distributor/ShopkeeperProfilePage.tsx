@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Clock, MapPin, User2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { useAppStore } from '../../store/appStore';
@@ -36,6 +36,8 @@ export function ShopkeeperProfilePage() {
 
   const shopkeeper = shopkeeperProfiles.find(sp => sp.id === shopkeeperId);
   const connection = connections.find(c => c.shopkeeperId === shopkeeperId);
+  const shopkeeperPhone = (shopkeeper?.phone || connection?.shopkeeperPhone || '').trim();
+  const shopkeeperTel = shopkeeperPhone.replace(/[^\d+]/g, '');
 
   const myOrdersForShopkeeper = useMemo(() => {
     const base = orders
@@ -134,6 +136,17 @@ export function ShopkeeperProfilePage() {
           <div className="flex items-center gap-2 text-gray-700"><MapPin className="w-4 h-4 text-gray-400" /> {shopkeeper?.address || shopkeeper?.city || 'Address not added'}</div>
           <div className="flex items-center gap-2 text-gray-700"><Clock className="w-4 h-4 text-gray-400" /> {shopkeeper?.deliveryTiming || 'Delivery timing not added'}</div>
           <div className="flex items-center gap-2 text-gray-700"><MapPin className="w-4 h-4 text-gray-400" /> {shopkeeper?.locationName || 'Location not added'}</div>
+          {shopkeeperPhone && (
+            <div className="md:col-span-2 flex items-center justify-between gap-3 text-gray-700">
+              <div className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-gray-400" />
+                <span>{shopkeeperPhone}</span>
+              </div>
+              <a href={`tel:${shopkeeperTel}`} className="btn-secondary py-1 px-2 text-xs inline-flex items-center gap-1">
+                <Phone className="w-3.5 h-3.5" /> Call
+              </a>
+            </div>
+          )}
         </div>
       </div>
 

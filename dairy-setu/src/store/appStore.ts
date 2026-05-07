@@ -110,6 +110,30 @@ async function enrichDistributorContacts(profiles: DistributorProfile[]): Promis
   });
 }
 
+async function enrichShopkeeperContacts(profiles: ShopkeeperProfile[]): Promise<ShopkeeperProfile[]> {
+  const userIds = [...new Set(profiles.map(p => p.userId).filter(Boolean))];
+  if (userIds.length === 0) return profiles;
+
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, phone, email')
+    .in('id', userIds);
+
+  const contactByUserId = new Map<string, { phone?: string; email?: string }>();
+  (data as Record<string, unknown>[] | null)?.forEach(row => {
+    contactByUserId.set(row.id as string, {
+      phone: row.phone as string | undefined,
+      email: row.email as string | undefined,
+    });
+  });
+
+  return profiles.map(p => {
+    const contact = contactByUserId.get(p.userId);
+    if (!contact) return p;
+    return { ...p, phone: contact.phone, email: contact.email };
+  });
+}
+
 function mapShopkeeper(row: Record<string, unknown>): ShopkeeperProfile {
   return {
     id: row.id as string,
@@ -205,7 +229,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchShopkeeperProfile: async (userId) => {
     const { data } = await supabase.from('shopkeeper_profiles').select('*').eq('user_id', userId).single();
     if (data) {
-      const profile = mapShopkeeper(data as Record<string, unknown>);
+      const [profile] = await enrichShopkeeperContacts([mapShopkeeper(data as Record<string, unknown>)]);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.userId === userId)
           ? state.shopkeeperProfiles.map(s => s.userId === userId ? profile : s)
@@ -225,7 +249,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchShopkeeperProfileById: async (shopkeeperId) => {
     const { data } = await supabase.from('shopkeeper_profiles').select('*').eq('id', shopkeeperId).single();
     if (data) {
-      const profile = mapShopkeeper(data as Record<string, unknown>);
+      const [profile] = await enrichShopkeeperContacts([mapShopkeeper(data as Record<string, unknown>)]);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.id === shopkeeperId)
           ? state.shopkeeperProfiles.map(s => s.id === shopkeeperId ? profile : s)
@@ -260,7 +284,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchProducts: async (distributorId) => {
     const { data } = await supabase.from('products').select('*').eq('distributor_id', distributorId);
-    if (data) set({ products: (data as Record<string, unknown>[]).map(mapProduct) });
+    if (data) {
+      const incoming = (data as Record<string, unknown>[]).map(mapProduct);
+      set(state => ({
+        // Keep other distributors' products intact; refresh only this distributor slice.
+        products: [...state.products.filter(p => p.distributorId !== distributorId), ...incoming],
+      }));
+    }
   },
 
   fetchOrders: async (userId, role) => {
@@ -576,6 +606,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (quantity === 0) return { cart: state.cart.filter(c => c.product.id !== product.id) };
       const existing = state.cart.find(c => c.product.id === product.id);
       if (existing) return { cart: state.cart.map(c => c.product.id === product.id ? { ...c, quantity } : c) };
+      const hasOtherDistributorItem = state.cart.some(
+        c => c.product.distributorId !== product.distributorId
+      );
+      if (hasOtherDistributorItem) return { cart: state.cart };
       return { cart: [...state.cart, { product, quantity }] };
     });
   },

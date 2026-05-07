@@ -7,11 +7,16 @@ import { MobileHeader } from '../../components/layout/MobileHeader';
 
 export function OrderReviewPage() {
   const { user } = useAuthStore();
-  const { cart, connections, distributorProfiles, placeOrder, clearCart } = useAppStore();
+  const { cart, connections, distributorProfiles, shopkeeperProfiles, placeOrder, clearCart } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
 
-  const activeConn = connections.find(c => c.status === 'active' && c.shopkeeperName === user?.name);
+  const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
+  const cartDistributorId = cart[0]?.product.distributorId;
+  const hasMultipleDistributorsInCart = new Set(cart.map(c => c.product.distributorId)).size > 1;
+  const activeConn = connections.find(
+    c => c.status === 'active' && c.shopkeeperId === shopProfile?.id && c.distributorId === cartDistributorId
+  );
   const distributorProfile = activeConn ? distributorProfiles.find(dp => dp.id === activeConn.distributorId) : null;
 
   const now = new Date();
@@ -23,6 +28,10 @@ export function OrderReviewPage() {
   const handleSubmit = () => {
     if (!activeConn || !user) return;
     if (cart.length === 0) { show('Add items to your order', 'error'); return; }
+    if (hasMultipleDistributorsInCart) {
+      show('Please place order for one distributor at a time', 'error');
+      return;
+    }
 
     placeOrder(
       activeConn.shopkeeperId,
