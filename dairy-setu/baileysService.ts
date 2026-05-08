@@ -1,7 +1,8 @@
 import { makeWASocket, useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { processIncomingMessage } from './whatsappService';
-import * as qrcode from 'qrcode-terminal';
+import qrcode from 'qrcode-terminal';
+import pino from 'pino';
 
 let waSocket: ReturnType<typeof makeWASocket> | null = null;
 
@@ -13,7 +14,7 @@ export async function connectToWhatsApp() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: false, // हम कस्टम QR कोड दिखाएंगे
-    logger: require('pino')({ level: 'silent' }) as any
+    logger: pino({ level: 'silent' }) as any
   });
 
   sock.ev.on('creds.update', saveCreds);
