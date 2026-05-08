@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Milk, Navigation, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
-import { useAppStore } from "../../store/appStore";
 import { useToast } from "../../components/ui/Toast";
 import { getCurrentLocation, getCoordinatesFromLocation } from "../../utils/location";
-import { supabase } from "../../lib/supabase";
+import { auth as firebaseAuth } from "../../lib/firebase";
+import axios from "axios";
 import type { Role } from "../../types";
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 type Step = "verifying" | "profile" | "done" | "error";
 const COMPANIES = ["Amul", "Saras", "Mother Dairy", "Parag", "Local Brand", "Multiple Brands"];
 const DELIVERY_TIMINGS = ["Morning (6-9 AM)", "Afternoon (12-3 PM)", "Evening (5-8 PM)", "Any Time"];
@@ -17,7 +18,6 @@ export function ConfirmProfilePage() {
   const [role, setRole] = useState<Role>("shopkeeper");
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [userId, setUserId] = useState<string>("");
 
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -34,123 +34,50 @@ export function ConfirmProfilePage() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [searchParams] = useSearchParams();
 
-  const { updateUser } = useAuthStore();
-  const { createDistributorProfile, createShopkeeperProfile } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     let alive = true;
-    let resolving = false;
-
-    const isEmailConfirmed = (sessionUser: { email_confirmed_at?: string | null } | null | undefined) =>
-      Boolean(sessionUser?.email_confirmed_at);
 
     const roleFromQuery = searchParams.get("role");
-    const requestedRole: Role | null = roleFromQuery === "distributor" || roleFromQuery === "shopkeeper"
-      ? roleFromQuery
-      : null;
-    if (requestedRole) setRole(requestedRole);
+    if (roleFromQuery === "distributor" || roleFromQuery === "shopkeeper") {
+      setRole(roleFromQuery);
+    }
 
-    const resolveSessionUser = async (sessionUser: {
-      id: string;
-      email?: string | null;
-      user_metadata?: Record<string, unknown>;
-    }) => {
-      if (!alive || resolving) return;
-      resolving = true;
+    const unsubscribe = firebaseAuth.onAuthStateChanged(async (fUser) => {
+      if (!fUser) {
+        if (alive) setStep("error");
+        return;
+      }
+      const phone = fUser.phoneNumber?.replace('+91', '') || '';
       try {
-        setUserId(sessionUser.id);
-        const metaRole = sessionUser.user_metadata?.role;
-        const metaRoleResolved: Role | null = metaRole === "distributor" || metaRole === "shopkeeper" ? metaRole : null;
-
-        const [{ data: profile }, { data: dp }, { data: sp }] = await Promise.all([
-          supabase.from("profiles").select("*").eq("id", sessionUser.id).maybeSingle(),
-          supabase.from("distributor_profiles").select("id").eq("user_id", sessionUser.id).maybeSingle(),
-          supabase.from("shopkeeper_profiles").select("id").eq("user_id", sessionUser.id).maybeSingle(),
-        ]);
-
-        let resolvedRole: Role = requestedRole
-          || metaRoleResolved
-          || (profile?.role === "distributor" ? "distributor" : profile?.role === "shopkeeper" ? "shopkeeper" : "shopkeeper");
-
-        if (resolvedRole === "distributor" && !dp && sp) resolvedRole = "shopkeeper";
-        if (resolvedRole === "shopkeeper" && !sp && dp) resolvedRole = "distributor";
-
-        setRole(resolvedRole);
-        useAuthStore.setState({
-          user: {
-            id: sessionUser.id,
-            email: profile?.email || sessionUser.email || "",
-            name: profile?.name || "",
-            phone: profile?.phone || "",
-            role: resolvedRole,
-          },
-          isAuthenticated: true,
-        });
-
-        // Existing profile mila to confirm/setup page dubara mat dikhao.
-        if (dp || sp) {
-          const targetPath = resolvedRole === "distributor"
-            ? (dp ? "/distributor" : "/shop")
-            : (sp ? "/shop" : "/distributor");
-          navigate(targetPath, { replace: true });
+        const res = await axios.post(`${API_URL}/auth/me`, { phone });
+        if (res.data.needsSetup) {
+          if (alive) setStep("profile");
           return;
         }
+        const { profile, dp, sp } = res.data;
+        let resolvedRole: Role = (roleFromQuery || profile.role || "shopkeeper") as Role;
+        if (resolvedRole === "distributor" && !dp && sp) resolvedRole = "shopkeeper";
+        if (resolvedRole === "shopkeeper" && !sp && dp) resolvedRole = "distributor";
+        
+        useAuthStore.setState({
+          user: { name: profile.name || "", role: resolvedRole, phone: profile.phone, id: profile.id, email: profile.email },
+          isAuthenticated: true
+        });
+        localStorage.setItem('dairy-walla-active-role', resolvedRole);
 
-        setStep("profile");
-      } catch {
+        const targetPath = resolvedRole === "distributor" ? (dp ? "/distributor" : "/shop") : (sp ? "/shop" : "/distributor");
+        navigate(targetPath, { replace: true });
+      } catch (_e) {
         if (alive) setStep("error");
-      } finally {
-        resolving = false;
-      }
-    };
-
-    // Supabase email confirm link me hash token hota hai; callback ko async-free rakho.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!alive) return;
-
-      if (event === "SIGNED_OUT") {
-        setStep("error");
-        return;
-      }
-
-      if (!session?.user) return;
-
-      if (!isEmailConfirmed(session.user)) {
-        setStep("error");
-        return;
-      }
-
-      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "INITIAL_SESSION" || event === "USER_UPDATED") {
-        setTimeout(() => {
-          void resolveSessionUser(session.user);
-        }, 0);
       }
     });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!alive) return;
-      if (session?.user && isEmailConfirmed(session.user)) {
-        setTimeout(() => {
-          void resolveSessionUser(session.user);
-        }, 0);
-      } else if (session?.user && !isEmailConfirmed(session.user)) {
-        setStep("error");
-      }
-    }).catch(() => {
-      if (alive) setStep("error");
-    });
-
-    // 10 second timeout
-    const timeout = setTimeout(() => {
-      setStep(prev => prev === "verifying" ? "error" : prev);
-    }, 10000);
 
     return () => {
       alive = false;
-      clearTimeout(timeout);
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, [searchParams, navigate]);
 
@@ -174,41 +101,20 @@ export function ConfirmProfilePage() {
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const uid = session?.user?.id || userId;
-      if (!uid) {
+      const fUser = firebaseAuth.currentUser;
+      if (!fUser) {
         show("Session expired. Login karo.", "error");
         navigate("/login");
         return;
       }
 
-      // Update role and name in profiles table
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({ role, name })
-        .eq("id", uid);
+      const phoneToSave = fUser.phoneNumber?.replace('+91', '') || "";
 
-      if (updateError) {
-        // Profile row nahi hai — insert karo
-        const { error: insertError } = await supabase.from("profiles").insert({
-          id: uid,
-          email: session?.user?.email || "",
-          name,
-          phone: session?.user?.user_metadata?.phone || "",
-          role,
-        });
-        if (insertError) throw new Error(insertError.message);
-      }
-
-      await supabase.from("user_roles").upsert(
-        { user_id: uid, role },
-        { onConflict: "user_id,role" }
-      );
-
-      await updateUser({ name, role });
-
-      if (role === "distributor") {
-        const created = await createDistributorProfile(uid, {
+      const res = await axios.post(`${API_URL}/auth/setup`, {
+        phone: phoneToSave,
+        role,
+        name,
+        businessData: role === "distributor" ? {
           businessName: businessName.trim(),
           ownerName: ownerName.trim(),
           company,
@@ -219,10 +125,9 @@ export function ConfirmProfilePage() {
           locationName: locationName.trim(),
           latitude: coords?.lat,
           longitude: coords?.lon,
-        });
-        if (!created) throw new Error("Distributor profile save nahi hua");
-      } else {
-        const created = await createShopkeeperProfile(uid, {
+          profileComplete: true
+        } : null,
+        shopData: role === "shopkeeper" ? {
           shopName: shopName.trim(),
           ownerName: shopOwnerName.trim(),
           city: shopCity.trim(),
@@ -230,9 +135,16 @@ export function ConfirmProfilePage() {
           locationName: locationName.trim(),
           latitude: coords?.lat,
           longitude: coords?.lon,
-        });
-        if (!created) throw new Error("Shopkeeper profile save nahi hua");
-      }
+          profileComplete: true
+        } : null
+      });
+
+      const p = res.data.profile;
+      useAuthStore.setState({
+        user: { name: p.name || "", role: p.role as Role, phone: p.phone, id: p.id, email: p.email },
+        isAuthenticated: true
+      });
+      localStorage.setItem('dairy-walla-active-role', p.role);
 
       setStep("done");
       setTimeout(() => {
@@ -260,7 +172,7 @@ export function ConfirmProfilePage() {
         {step === "verifying" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
             <div className="w-12 h-12 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm text-gray-600">Email verify ho rahi hai...</p>
+            <p className="text-sm text-gray-600">Account check ho raha hai...</p>
           </div>
         )}
 
@@ -270,11 +182,11 @@ export function ConfirmProfilePage() {
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-8 h-8 text-red-500" />
             </div>
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Link Expire Ho Gaya</h2>
-            <p className="text-sm text-gray-500 mb-5">Confirmation link expire ho gaya ya invalid hai.</p>
-            <button onClick={() => navigate("/signup")}
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Session Expired</h2>
+            <p className="text-sm text-gray-500 mb-5">Profile setup session expire ho gayi hai.</p>
+            <button onClick={() => navigate("/login")}
               className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-              Dobara Signup Karo
+              Login Karke Setup Pura Karein
             </button>
           </div>
         )}

@@ -99,15 +99,7 @@ export function SummaryPage() {
           existing.totalQty += item.quantity;
           existing.totalValue += item.quantity * item.unitPrice;
         } else {
-          // Derive category from product name heuristic (since OrderItem doesn't store category)
-          let category: ProductCategory = 'other';
-          const name = item.productName.toLowerCase();
-          if (name.includes('milk') || name.includes('doodh')) category = 'milk';
-          else if (name.includes('paneer')) category = 'paneer';
-          else if (name.includes('curd') || name.includes('dahi') || name.includes('doi')) category = 'curd';
-          else if (name.includes('butter') || name.includes('makhan')) category = 'butter';
-          else if (name.includes('ghee')) category = 'ghee';
-
+          const category = ((item as any).category as ProductCategory | undefined) || 'other';
           map.set(item.productId, {
             productId: item.productId,
             productName: item.productName,

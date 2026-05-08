@@ -1,44 +1,85 @@
-﻿import { useState } from "react";
+﻿﻿﻿﻿﻿import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Milk, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { Milk, Phone, KeyRound, ArrowLeft } from "lucide-react";
+import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import { auth as firebaseAuth } from "../../lib/firebase";
 import { useAuthStore } from "../../store/authStore";
 import { useAppStore } from "../../store/appStore";
 import { useToast } from "../../components/ui/Toast";
 import type { Role } from "../../types";
 
+declare global {
+  interface Window {
+    recaptchaVerifier: RecaptchaVerifier | null;
+  }
+}
+
 export function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
   const [role, setRole] = useState<Role>("shopkeeper");
-  const [showPass, setShowPass] = useState(false);
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [confirmationResult, setConfirmationResult] = useState<Awaited<ReturnType<typeof signInWithPhoneNumber>> | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { signIn, resendConfirmation } = useAuthStore();
-  const { fetchDistributorProfile, fetchShopkeeperProfile, fetchAllDistributors, fetchConnections, fetchProducts, fetchOrders, fetchNotifications, fetchDeliveryGroups } = useAppStore();
+  const { signIn, isAuthenticated, user } = useAuthStore();
+  const { fetchDistributorProfile, fetchShopkeeperProfile, fetchAllDistributors, fetchConnections, fetchProducts, fetchOrders, fetchNotifications, fetchDeliveryGroups, runAutoOrdersForDistributor } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
 
-  const handleLogin = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail.includes("@")) { show("Valid email daalo", "error"); return; }
-    if (!password) { show("Password daalo", "error"); return; }
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      navigate(user.role === 'distributor' ? '/distributor' : '/shop', { replace: true });
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  useEffect(() => {
+    return () => {
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.clear();
+        window.recaptchaVerifier = null;
+      }
+    };
+  }, []);
+
+  const handleSendOtp = async () => {
+    if (phone.length !== 10) { show("10 digit ka valid phone number daalo", "error"); return; }
     setLoading(true);
     try {
-      const loginResult = await signIn(normalizedEmail, password, role);
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(firebaseAuth, 'recaptcha-container', { size: 'invisible' });
+      }
+      const appVerifier = window.recaptchaVerifier;
+      const result = await signInWithPhoneNumber(firebaseAuth, `+91${phone}`, appVerifier);
+      setConfirmationResult(result);
+      setStep("otp");
+      show("OTP bhej diya gaya hai!");
+    } catch (err) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : "OTP bhejne mein error aayi";
+      show(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length !== 6) { show("6 digit ka OTP daalo", "error"); return; }
+    if (!confirmationResult) { show("Pehle OTP generate karo.", "error"); return; }
+    setLoading(true);
+    try {
+      const result = await confirmationResult.confirm(otp);
+      const firebaseUid = result.user.uid;
+
+      const loginResult = await signIn(phone, firebaseUid, role);
 
       if (loginResult.error) {
-        const err = loginResult.error.toLowerCase();
-        if (err.includes("invalid login credentials")) {
-          show("Email ya password galat hai. Email lowercase/without spaces try karo.", "error");
-        } else if (err.includes("email not confirmed")) {
-          const resend = await resendConfirmation(normalizedEmail);
-          if (resend.error) {
-            show("Email verify nahi hui. Inbox/spam check karo.", "error");
-          } else {
-            show("Email verify nahi hui. Naya confirmation link bhej diya hai.", "error");
-          }
-        } else if (err.includes("too many") || err.includes("rate limit")) {
-          show("Bahut zyada login attempts ho gaye. 1 minute baad dobara try karo.", "error");
+        if (loginResult.error.toLowerCase().includes("invalid login credentials")) {
+          show("Account nahi mila. Pehle Sign Up karo.", "error");
+          navigate("/signup");
+        } else if (loginResult.error.toLowerCase().includes("already registered as")) {
+          // Specific error from the backend for role conflict
+          show(loginResult.error, "error");
         } else {
           show(loginResult.error, "error");
         }
@@ -58,9 +99,10 @@ export function LoginPage() {
               await Promise.all([
                 fetchProducts(dp.id),
                 fetchConnections(u.id, "distributor"),
-                fetchOrders(u.id, "distributor"),
                 fetchDeliveryGroups(dp.id),
               ]);
+              await runAutoOrdersForDistributor(u.id);
+              await fetchOrders(u.id, "distributor");
             }
           } else {
             await fetchShopkeeperProfile(u.id);
@@ -74,7 +116,7 @@ export function LoginPage() {
         } catch { /* non-critical */ }
       }
     } catch {
-      show("Login failed. Dobara try karo.", "error");
+      show("OTP galat hai ya expire ho gaya.", "error");
     } finally {
       setLoading(false);
     }
@@ -110,47 +152,44 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type="email"
-                  className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                  placeholder="aap@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleLogin()}
-                  autoFocus
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input
-                  type={showPass ? "text" : "password"}
-                  className="w-full pl-9 pr-10 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                  placeholder="Apna password daalo"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && handleLogin()}
-                />
-                <button type="button" onClick={() => setShowPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {step === "phone" ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm font-medium">+91</span>
+                    <div className="relative flex-1">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <input type="tel" className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-r-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} maxLength={10} autoFocus />
+                    </div>
+                  </div>
+                </div>
+                <button onClick={handleSendOtp} disabled={loading || phone.length !== 10} className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors mt-2">
+                  {loading ? "Sending OTP..." : "Get OTP"}
                 </button>
-              </div>
-            </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">Enter 6-digit OTP</label>
+                    <button onClick={() => setStep("phone")} className="text-xs text-brand-600 flex items-center gap-1 hover:underline"><ArrowLeft className="w-3 h-3" /> Change</button>
+                  </div>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type="text" className="w-full pl-9 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 text-center tracking-[0.5em] font-bold"
+                      placeholder="------" value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} autoFocus />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 text-center">OTP sent to +91 {phone}</p>
+                </div>
+                <button onClick={handleVerifyOtp} disabled={loading || otp.length !== 6} className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors mt-2">
+                  {loading ? "Verifying..." : "Verify & Login"}
+                </button>
+              </>
+            )}
 
-            <button
-              onClick={handleLogin}
-              disabled={loading || !email || !password}
-              className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-xl text-sm transition-colors mt-2"
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
+            <div id="recaptcha-container"></div>
           </div>
         </div>
 

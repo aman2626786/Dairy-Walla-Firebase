@@ -45,7 +45,7 @@ export function DiscoverPage() {
       const location = await getCurrentLocation();
       setUserLocation({ lat: location.latitude, lon: location.longitude });
       show('Location detected!');
-    } catch (error) {
+    } catch (_error) {
       show('Location access denied. Using default location.', 'error');
       // Use shop's saved location or default
       if (shopProfile?.latitude && shopProfile?.longitude) {

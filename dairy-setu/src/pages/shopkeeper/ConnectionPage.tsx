@@ -1,14 +1,17 @@
-﻿import { useMemo, useState } from 'react';
+﻿﻿import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Link2, CheckCircle, Clock, XCircle, Search, MapPin, Tag, Phone } from 'lucide-react';
+import { Link2, CheckCircle, Clock, XCircle, Search, MapPin, Tag, Phone, Repeat, Bell } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 
+// Reminder sound file path. Make sure to place this file in your `public/sounds/` directory.
+const reminderSound = '/sounds/reminder-tone.mp3';
+
 export function ConnectionPage() {
   const { user } = useAuthStore();
-  const { connections, distributorProfiles, shopkeeperProfiles, requestConnection } = useAppStore();
+  const { connections, distributorProfiles, shopkeeperProfiles, requestConnection, toggleConnectionAutoOrder, notifications } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
   const [code, setCode] = useState('');
@@ -16,6 +19,26 @@ export function ConnectionPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [searchCity, setSearchCity] = useState('');
   const [searchCompany, setSearchCompany] = useState('');
+  const [togglingConnectionId, setTogglingConnectionId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const lastNotifCount = useRef(0);
+
+  const myUnreadNotifications = useMemo(() => {
+    return notifications.filter(n => n.userId === user?.id && !n.read);
+  }, [notifications, user?.id]);
+
+  useEffect(() => {
+    const sortedNotifs = [...myUnreadNotifications].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const latestUnread = sortedNotifs[0];
+
+    // If there's a new unread notification since last check, see if it's a reminder
+    if (myUnreadNotifications.length > lastNotifCount.current) {
+      if (latestUnread && latestUnread.type === 'order_reminder') {
+        audioRef.current?.play().catch(e => console.error("Audio play failed. User interaction might be needed.", e));
+      }
+    }
+    lastNotifCount.current = myUnreadNotifications.length;
+  }, [myUnreadNotifications.length, audioRef]);
 
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
 
@@ -108,6 +131,18 @@ export function ConnectionPage() {
     show('Code filled! Ab send karo', 'info');
   };
 
+  const handleToggleAutoOrder = async (connectionId: string, enabled: boolean) => {
+    setTogglingConnectionId(connectionId);
+    try {
+      await toggleConnectionAutoOrder(connectionId, enabled);
+      show(enabled ? 'Auto order ON ho gaya' : 'Auto order OFF ho gaya');
+    } catch {
+      show('Auto order setting update nahi ho paayi', 'error');
+    } finally {
+      setTogglingConnectionId(null);
+    }
+  };
+
   const statusConfig = {
     active: { icon: <CheckCircle className="w-5 h-5 text-green-500" />, label: 'Connected', className: 'bg-green-50 border-green-200' },
     pending: { icon: <Clock className="w-5 h-5 text-yellow-500" />, label: 'Pending Approval', className: 'bg-yellow-50 border-yellow-200' },
@@ -116,7 +151,18 @@ export function ConnectionPage() {
 
   return (
     <div className="p-4 max-w-2xl mx-auto">
-      <MobileHeader title="My Distributors" subtitle={`${activeCount} connected · ${pendingCount} pending`} />
+      <audio ref={audioRef} src={reminderSound} preload="auto" />
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <MobileHeader title="My Distributors" subtitle={`${activeCount} connected · ${pendingCount} pending`} />
+        </div>
+        <button onClick={() => navigate('/shop/notifications')} className="relative p-2 -mr-2 mt-1 flex-shrink-0">
+          <Bell className="w-6 h-6 text-gray-500" />
+          {myUnreadNotifications.length > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-white" />
+          )}
+        </button>
+      </div>
       <div className="hidden md:block mb-6">
         <h1 className="text-xl font-bold text-gray-900">My Distributors</h1>
         <p className="text-sm text-gray-500 mt-0.5">{activeCount} connected · {pendingCount} pending</p>
@@ -156,6 +202,22 @@ export function ConnectionPage() {
                         <span className="font-medium text-gray-900">{conn.deliveryGroupName}</span>
                       </div>
                     )}
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500 inline-flex items-center gap-1">
+                        <Repeat className="w-3.5 h-3.5" /> Auto Order
+                      </span>
+                      <button
+                        onClick={() => void handleToggleAutoOrder(conn.id, !conn.autoOrderEnabled)}
+                        disabled={togglingConnectionId === conn.id}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                          conn.autoOrderEnabled
+                            ? 'bg-green-100 text-green-800 border-green-200'
+                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                        } ${togglingConnectionId === conn.id ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      >
+                        {togglingConnectionId === conn.id ? 'Saving...' : conn.autoOrderEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
                   </div>
                 )}
 

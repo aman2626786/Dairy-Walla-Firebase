@@ -1,9 +1,11 @@
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
+import axios from 'axios';
 import type {
   Connection, Product, Order, DeliveryGroup, Notification, CartItem,
   ConnectionStatus, OrderStatus, DistributorProfile, ShopkeeperProfile
 } from '../types';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface AppState {
   connections: Connection[];
@@ -38,6 +40,8 @@ interface AppState {
   requestConnection: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorCode: string, shopkeeperPhone?: string) => Promise<boolean>;
   updateConnectionStatus: (connectionId: string, status: ConnectionStatus, deliveryGroupId?: string) => Promise<void>;
   assignDeliveryGroup: (connectionId: string, groupId: string, groupName: string) => Promise<void>;
+  toggleConnectionAutoOrder: (connectionId: string, enabled: boolean) => Promise<void>;
+  runAutoOrdersForDistributor: (distributorUserId: string) => Promise<void>;
 
   // Product actions
   addProduct: (product: Omit<Product, 'id'>) => Promise<boolean>;
@@ -62,145 +66,6 @@ interface AppState {
   clearCart: () => void;
 }
 
-// Helper: map DB row to DistributorProfile
-function mapDistributor(row: Record<string, unknown>): DistributorProfile {
-  return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    businessName: row.business_name as string,
-    phone: row.phone as string | undefined,
-    email: row.email as string | undefined,
-    connectionCode: row.connection_code as string,
-    orderWindowStart: (row.order_window_start as string) || '18:00',
-    orderWindowCutoff: (row.order_window_cutoff as string) || '20:00',
-    ownerName: row.owner_name as string | undefined,
-    company: row.company as string | undefined,
-    address: row.address as string | undefined,
-    city: row.city as string | undefined,
-    deliveryAreas: row.delivery_areas as string | undefined,
-    gst: row.gst as string | undefined,
-    locationName: row.location_name as string | undefined,
-    latitude: row.latitude as number | undefined,
-    longitude: row.longitude as number | undefined,
-    profileComplete: row.profile_complete as boolean | undefined,
-  };
-}
-
-async function enrichDistributorContacts(profiles: DistributorProfile[]): Promise<DistributorProfile[]> {
-  const userIds = [...new Set(profiles.map(p => p.userId).filter(Boolean))];
-  if (userIds.length === 0) return profiles;
-
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, phone, email')
-    .in('id', userIds);
-
-  const contactByUserId = new Map<string, { phone?: string; email?: string }>();
-  (data as Record<string, unknown>[] | null)?.forEach(row => {
-    contactByUserId.set(row.id as string, {
-      phone: row.phone as string | undefined,
-      email: row.email as string | undefined,
-    });
-  });
-
-  return profiles.map(p => {
-    const contact = contactByUserId.get(p.userId);
-    if (!contact) return p;
-    return { ...p, phone: contact.phone, email: contact.email };
-  });
-}
-
-async function enrichShopkeeperContacts(profiles: ShopkeeperProfile[]): Promise<ShopkeeperProfile[]> {
-  const userIds = [...new Set(profiles.map(p => p.userId).filter(Boolean))];
-  if (userIds.length === 0) return profiles;
-
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, phone, email')
-    .in('id', userIds);
-
-  const contactByUserId = new Map<string, { phone?: string; email?: string }>();
-  (data as Record<string, unknown>[] | null)?.forEach(row => {
-    contactByUserId.set(row.id as string, {
-      phone: row.phone as string | undefined,
-      email: row.email as string | undefined,
-    });
-  });
-
-  return profiles.map(p => {
-    const contact = contactByUserId.get(p.userId);
-    if (!contact) return p;
-    return { ...p, phone: contact.phone, email: contact.email };
-  });
-}
-
-function mapShopkeeper(row: Record<string, unknown>): ShopkeeperProfile {
-  return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    shopName: row.shop_name as string,
-    phone: row.phone as string | undefined,
-    email: row.email as string | undefined,
-    ownerName: row.owner_name as string | undefined,
-    address: row.address as string | undefined,
-    city: row.city as string | undefined,
-    deliveryTiming: row.delivery_timing as string | undefined,
-    locationName: row.location_name as string | undefined,
-    latitude: row.latitude as number | undefined,
-    longitude: row.longitude as number | undefined,
-    profileComplete: row.profile_complete as boolean | undefined,
-  };
-}
-
-function mapConnection(row: Record<string, unknown>): Connection {
-  return {
-    id: row.id as string,
-    shopkeeperId: row.shopkeeper_id as string,
-    shopkeeperName: row.shopkeeper_name as string,
-    shopName: row.shop_name as string,
-    shopkeeperPhone: row.shopkeeper_phone as string | undefined,
-    distributorId: row.distributor_id as string,
-    distributorName: row.distributor_name as string,
-    businessName: row.business_name as string,
-    status: row.status as ConnectionStatus,
-    deliveryGroupId: row.delivery_group_id as string | undefined,
-    deliveryGroupName: row.delivery_group_name as string | undefined,
-    createdAt: row.created_at as string,
-  };
-}
-
-function mapProduct(row: Record<string, unknown>): Product {
-  return {
-    id: row.id as string,
-    distributorId: row.distributor_id as string,
-    name: row.name as string,
-    brand: row.brand as string,
-    category: row.category as Product['category'],
-    unit: row.unit as string,
-    price: row.price as number,
-    available: row.available as boolean,
-    imageUrl: row.image_url as string | undefined,
-  };
-}
-
-function mapOrder(row: Record<string, unknown>, items: Order['items'] = []): Order {
-  return {
-    id: row.id as string,
-    shopkeeperId: row.shopkeeper_id as string,
-    shopkeeperName: row.shopkeeper_name as string,
-    shopName: row.shop_name as string,
-    distributorId: row.distributor_id as string,
-    type: row.type as Order['type'],
-    status: row.status as OrderStatus,
-    source: (row.source as Order['source']) || 'web',
-    placedAt: row.placed_at as string,
-    deliveryDate: row.delivery_date as string,
-    deliveryGroupName: row.delivery_group_name as string | undefined,
-    total: row.total as number,
-    items,
-  };
-}
-
 export const useAppStore = create<AppState>((set, get) => ({
   connections: [],
   products: [],
@@ -213,31 +78,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   loading: false,
 
   fetchDistributorProfile: async (userId) => {
-    const { data } = await supabase.from('distributor_profiles').select('*').eq('user_id', userId).single();
-    if (data) {
-      const [profile] = await enrichDistributorContacts([mapDistributor(data as Record<string, unknown>)]);
+    try {
+      const { data } = await axios.get(`${API_URL}/profiles/distributor/${userId}`);
       set(state => ({
         distributorProfiles: state.distributorProfiles.some(d => d.userId === userId)
-          ? state.distributorProfiles.map(d => d.userId === userId ? profile : d)
-          : [...state.distributorProfiles, profile]
+          ? state.distributorProfiles.map(d => d.userId === userId ? data : d)
+          : [...state.distributorProfiles, data]
       }));
-      return profile;
-    }
-    return null;
+      return data;
+    } catch { return null; }
   },
 
   fetchShopkeeperProfile: async (userId) => {
-    const { data } = await supabase.from('shopkeeper_profiles').select('*').eq('user_id', userId).single();
-    if (data) {
-      const [profile] = await enrichShopkeeperContacts([mapShopkeeper(data as Record<string, unknown>)]);
+    try {
+      const { data } = await axios.get(`${API_URL}/profiles/shopkeeper/${userId}`);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.userId === userId)
-          ? state.shopkeeperProfiles.map(s => s.userId === userId ? profile : s)
-          : [...state.shopkeeperProfiles, profile]
+          ? state.shopkeeperProfiles.map(s => s.userId === userId ? data : s)
+          : [...state.shopkeeperProfiles, data]
       }));
-      return profile;
-    }
-    return null;
+      return data;
+    } catch { return null; }
   },
 
   ensureShopkeeperProfile: (userId) => {
@@ -247,358 +108,211 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   fetchShopkeeperProfileById: async (shopkeeperId) => {
-    const { data } = await supabase.from('shopkeeper_profiles').select('*').eq('id', shopkeeperId).single();
-    if (data) {
-      const [profile] = await enrichShopkeeperContacts([mapShopkeeper(data as Record<string, unknown>)]);
+    try {
+      const { data } = await axios.get(`${API_URL}/profiles/shopkeeper-by-id/${shopkeeperId}`);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.id === shopkeeperId)
-          ? state.shopkeeperProfiles.map(s => s.id === shopkeeperId ? profile : s)
-          : [...state.shopkeeperProfiles, profile]
+          ? state.shopkeeperProfiles.map(s => s.id === shopkeeperId ? data : s)
+          : [...state.shopkeeperProfiles, data]
       }));
-      return profile;
-    }
-    return null;
+      return data;
+    } catch { return null; }
   },
 
   fetchAllDistributors: async () => {
-    const { data } = await supabase.from('distributor_profiles').select('*');
-    if (data) {
-      const mapped = (data as Record<string, unknown>[]).map(mapDistributor);
-      const enriched = await enrichDistributorContacts(mapped);
-      set({ distributorProfiles: enriched });
-    }
+    try {
+      const { data } = await axios.get(`${API_URL}/distributors`);
+      if (data) set({ distributorProfiles: data });
+    } catch (e) { console.error(e); }
   },
 
   fetchConnections: async (userId, role) => {
-    let query = supabase.from('connections').select('*');
-    if (role === 'distributor') {
-      const dp = get().distributorProfiles.find(d => d.userId === userId);
-      if (dp) query = query.eq('distributor_id', dp.id);
-    } else {
-      const sp = get().shopkeeperProfiles.find(s => s.userId === userId);
-      if (sp) query = query.eq('shopkeeper_id', sp.id);
-    }
-    const { data } = await query;
-    if (data) set({ connections: (data as Record<string, unknown>[]).map(mapConnection) });
+    try {
+      const { data } = await axios.get(`${API_URL}/connections/${role}/${userId}`);
+      if (data) set({ connections: data });
+    } catch (e) { console.error(e); }
   },
 
   fetchProducts: async (distributorId) => {
-    const { data } = await supabase.from('products').select('*').eq('distributor_id', distributorId);
-    if (data) {
-      const incoming = (data as Record<string, unknown>[]).map(mapProduct);
-      set(state => ({
-        // Keep other distributors' products intact; refresh only this distributor slice.
-        products: [...state.products.filter(p => p.distributorId !== distributorId), ...incoming],
-      }));
-    }
+    try {
+      const { data } = await axios.get(`${API_URL}/products/${distributorId}`);
+      if (data) {
+        const parsedData = data.map((p: any) => ({ ...p, price: Number(p.price) }));
+        set(state => ({
+          products: [...state.products.filter(p => p.distributorId !== distributorId), ...parsedData],
+        }));
+      }
+    } catch (e) { console.error(e); }
   },
 
   fetchOrders: async (userId, role) => {
-    let profileId = '';
-    if (role === 'distributor') {
-      const dp = get().distributorProfiles.find(d => d.userId === userId);
-      profileId = dp?.id || '';
-    } else {
-      const sp = get().shopkeeperProfiles.find(s => s.userId === userId);
-      profileId = sp?.id || '';
-    }
-    if (!profileId) return;
-
-    const field = role === 'distributor' ? 'distributor_id' : 'shopkeeper_id';
-    const { data: ordersData } = await supabase.from('orders').select('*, order_items(*)').eq(field, profileId).order('placed_at', { ascending: false });
-    if (ordersData) {
-      const orders = (ordersData as Record<string, unknown>[]).map(row => {
-        const items = ((row.order_items as Record<string, unknown>[]) || []).map(item => ({
-          id: item.id as string,
-          orderId: item.order_id as string,
-          productId: item.product_id as string,
-          productName: item.product_name as string,
-          brand: item.brand as string,
-          unit: item.unit as string,
-          unitPrice: item.unit_price as number,
-          quantity: item.quantity as number,
+    try {
+      const { data } = await axios.get(`${API_URL}/orders/${role}/${userId}`);
+      if (data) {
+        const parsedOrders = data.map((o: any) => ({
+          ...o, total: Number(o.total),
+          items: o.items.map((i: any) => ({ ...i, unitPrice: Number(i.unitPrice) }))
         }));
-        return mapOrder(row, items);
-      });
-      set({ orders });
-    }
+        set({ orders: parsedOrders });
+      }
+    } catch (e) { console.error(e); }
   },
 
   fetchNotifications: async (userId) => {
-    const { data } = await supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false });
-    if (data) {
-      set({
-        notifications: (data as Record<string, unknown>[]).map(row => ({
-          id: row.id as string,
-          userId: row.user_id as string,
-          type: row.type as string,
-          message: row.message as string,
-          read: row.read as boolean,
-          createdAt: row.created_at as string,
-        }))
-      });
-    }
+    try {
+      const { data } = await axios.get(`${API_URL}/notifications/${userId}`);
+      if (data) set({ notifications: data });
+    } catch (e) { console.error(e); }
   },
 
   fetchDeliveryGroups: async (distributorId) => {
-    const { data } = await supabase.from('delivery_groups').select('*').eq('distributor_id', distributorId);
-    if (data) {
-      set({
-        deliveryGroups: (data as Record<string, unknown>[]).map(row => ({
-          id: row.id as string,
-          distributorId: row.distributor_id as string,
-          name: row.name as string,
-        }))
-      });
-    }
+    try {
+      const { data } = await axios.get(`${API_URL}/delivery-groups/${distributorId}`);
+      if (data) set({ deliveryGroups: data });
+    } catch (e) { console.error(e); }
   },
 
-  createDistributorProfile: async (userId, data) => {
-    const code = `${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-    const { data: row, error } = await supabase.from('distributor_profiles').insert({
-      user_id: userId,
-      business_name: data.businessName || 'My Dairy',
-      connection_code: code,
-      order_window_start: data.orderWindowStart || '18:00',
-      order_window_cutoff: data.orderWindowCutoff || '20:00',
-      owner_name: data.ownerName,
-      company: data.company,
-      city: data.city,
-      delivery_areas: data.deliveryAreas,
-      location_name: data.locationName,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      profile_complete: true,
-    }).select().single();
-    if (error || !row) return null;
-    const profile = mapDistributor(row as Record<string, unknown>);
-    set(state => ({ distributorProfiles: [...state.distributorProfiles, profile] }));
-    return profile;
+  createDistributorProfile: async (_userId, _data) => {
+    return null; // Implemented via auth/setup
   },
 
-  createShopkeeperProfile: async (userId, data) => {
-    const { data: row, error } = await supabase.from('shopkeeper_profiles').insert({
-      user_id: userId,
-      shop_name: data.shopName || 'My Shop',
-      owner_name: data.ownerName,
-      city: data.city,
-      delivery_timing: data.deliveryTiming,
-      location_name: data.locationName,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      profile_complete: true,
-    }).select().single();
-    if (error || !row) return null;
-    const profile = mapShopkeeper(row as Record<string, unknown>);
-    set(state => ({ shopkeeperProfiles: [...state.shopkeeperProfiles, profile] }));
-    return profile;
+  createShopkeeperProfile: async (_userId, _data) => {
+    return null; // Implemented via auth/setup
   },
 
   updateDistributorSettings: async (distributorId, updates) => {
-    await supabase.from('distributor_profiles').update({
-      business_name: updates.businessName,
-      owner_name: updates.ownerName,
-      company: updates.company,
-      city: updates.city,
-      delivery_areas: updates.deliveryAreas,
-      order_window_start: updates.orderWindowStart,
-      order_window_cutoff: updates.orderWindowCutoff,
-      location_name: updates.locationName,
-      latitude: updates.latitude,
-      longitude: updates.longitude,
-      gst: updates.gst,
-      profile_complete: updates.profileComplete,
-    }).eq('id', distributorId);
-    set(state => ({
-      distributorProfiles: state.distributorProfiles.map(dp =>
-        dp.id === distributorId ? { ...dp, ...updates } : dp
-      )
-    }));
+    try {
+      await axios.patch(`${API_URL}/profiles/distributor/${distributorId}`, updates);
+      set(state => ({ distributorProfiles: state.distributorProfiles.map(dp => dp.id === distributorId ? { ...dp, ...updates } : dp) }));
+    } catch (e) { console.error(e); }
   },
 
   updateShopkeeperProfile: async (shopkeeperId, updates) => {
-    await supabase.from('shopkeeper_profiles').update({
-      shop_name: updates.shopName,
-      owner_name: updates.ownerName,
-      city: updates.city,
-      address: updates.address,
-      delivery_timing: updates.deliveryTiming,
-      location_name: updates.locationName,
-      latitude: updates.latitude,
-      longitude: updates.longitude,
-      profile_complete: updates.profileComplete,
-    }).eq('id', shopkeeperId);
-    set(state => ({
-      shopkeeperProfiles: state.shopkeeperProfiles.map(sp =>
-        sp.id === shopkeeperId ? { ...sp, ...updates } : sp
-      )
-    }));
+    try {
+      await axios.patch(`${API_URL}/profiles/shopkeeper/${shopkeeperId}`, updates);
+      set(state => ({ shopkeeperProfiles: state.shopkeeperProfiles.map(sp => sp.id === shopkeeperId ? { ...sp, ...updates } : sp) }));
+    } catch (e) { console.error(e); }
   },
 
   requestConnection: async (shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone) => {
-    const { distributorProfiles } = get();
-    const dp = distributorProfiles.find(d => d.connectionCode === distributorCode);
-    if (!dp) return false;
-    const basePayload = {
-      shopkeeper_id: shopkeeperId,
-      shopkeeper_name: shopkeeperName,
-      shop_name: shopName,
-      distributor_id: dp.id,
-      distributor_name: dp.ownerName || '',
-      business_name: dp.businessName,
-      status: 'pending',
-    };
-
-    const insertWithPhonePayload = {
-      ...basePayload,
-      shopkeeper_phone: shopkeeperPhone || null,
-    };
-
-    let { data, error } = await supabase
-      .from('connections')
-      .insert(insertWithPhonePayload)
-      .select()
-      .single();
-
-    // Backward compatibility: older DBs may not yet have `shopkeeper_phone`.
-    if (error && `${error.message}`.toLowerCase().includes('shopkeeper_phone')) {
-      const retry = await supabase
-        .from('connections')
-        .insert(basePayload)
-        .select()
-        .single();
-      data = retry.data;
-      error = retry.error;
-    }
-
-    if (error || !data) {
-      console.error('requestConnection failed', error);
-      return false;
-    }
-    set(state => ({ connections: [...state.connections, mapConnection(data as Record<string, unknown>)] }));
-    await get().addNotification({ userId: dp.userId, type: 'new_connection', message: `${shopName} wants to connect with you`, read: false, createdAt: new Date().toISOString() });
-    return true;
+    try {
+      const { data } = await axios.post(`${API_URL}/connections`, { shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone });
+      if (data && data.connection) {
+        set(state => ({ connections: [...state.connections, data.connection] }));
+        await get().addNotification({ userId: data.distributorUserId, type: 'new_connection', message: `${shopName} wants to connect with you`, read: false, createdAt: new Date().toISOString() });
+        return true;
+      }
+    } catch (e) { console.error(e); return false; }
+    return false;
   },
 
   updateConnectionStatus: async (connectionId, status) => {
-    await supabase.from('connections').update({ status }).eq('id', connectionId);
-    set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, status } : c) }));
+    try {
+      await axios.patch(`${API_URL}/connections/${connectionId}`, { status });
+      set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, status } : c) }));
+    } catch (e) { console.error(e); }
   },
 
   assignDeliveryGroup: async (connectionId, groupId, groupName) => {
-    await supabase.from('connections').update({ delivery_group_id: groupId, delivery_group_name: groupName }).eq('id', connectionId);
-    set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, deliveryGroupId: groupId, deliveryGroupName: groupName } : c) }));
+    try {
+      await axios.patch(`${API_URL}/connections/${connectionId}`, { deliveryGroupId: groupId, deliveryGroupName: groupName });
+      set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, deliveryGroupId: groupId, deliveryGroupName: groupName } : c) }));
+    } catch (e) { console.error(e); }
+  },
+
+  toggleConnectionAutoOrder: async (connectionId, enabled) => {
+    try {
+      await axios.patch(`${API_URL}/connections/${connectionId}`, { autoOrderEnabled: enabled });
+      set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, autoOrderEnabled: enabled } : c) }));
+    } catch (e) { console.error(e); }
+  },
+
+  runAutoOrdersForDistributor: async (distributorUserId) => {
+    try {
+      await axios.post(`${API_URL}/auto-orders/${distributorUserId}`);
+      await get().fetchOrders(distributorUserId, 'distributor');
+    } catch (e) { console.error(e); }
   },
 
   addProduct: async (product) => {
-    const { data, error } = await supabase.from('products').insert({
-      distributor_id: product.distributorId,
-      name: product.name,
-      brand: product.brand,
-      category: product.category,
-      unit: product.unit,
-      price: product.price,
-      available: product.available,
-      image_url: product.imageUrl,
-    }).select().single();
-    if (error || !data) return false;
-    set(state => ({ products: [...state.products, mapProduct(data as Record<string, unknown>)] }));
-    return true;
+    try {
+      const { data } = await axios.post(`${API_URL}/products`, product);
+      if (data) {
+        set(state => ({ products: [...state.products, { ...data, price: Number(data.price) }] }));
+        return true;
+      }
+    } catch (e) { console.error(e); return false; }
+    return false;
   },
 
   updateProduct: async (id, updates) => {
-    const { error } = await supabase.from('products').update({
-      name: updates.name, brand: updates.brand, category: updates.category,
-      unit: updates.unit, price: updates.price, available: updates.available,
-    }).eq('id', id);
-    if (error) return false;
-    set(state => ({ products: state.products.map(p => p.id === id ? { ...p, ...updates } : p) }));
-    return true;
+    try {
+      await axios.patch(`${API_URL}/products/${id}`, updates);
+      set(state => ({ products: state.products.map(p => p.id === id ? { ...p, ...updates } : p) }));
+      return true;
+    } catch (e) { console.error(e); return false; }
   },
 
   deleteProduct: async (id) => {
-    const { error } = await supabase.from('products').delete().eq('id', id);
-    if (error) return false;
-    set(state => ({ products: state.products.filter(p => p.id !== id) }));
-    return true;
+    try {
+      await axios.delete(`${API_URL}/products/${id}`);
+      set(state => ({ products: state.products.filter(p => p.id !== id) }));
+      return true;
+    } catch (e) { console.error(e); return false; }
   },
 
   placeOrder: async (shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate) => {
-    const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
-    const today = new Date().toISOString().split('T')[0];
-    const { data: orderRow, error } = await supabase.from('orders').insert({
-      shopkeeper_id: shopkeeperId,
-      shopkeeper_name: shopkeeperName,
-      shop_name: shopName,
-      distributor_id: distributorId,
-      type: isLate ? 'late' : 'normal',
-      status: isLate ? 'pending' : 'accepted',
-      source: 'web',
-      delivery_date: today,
-      total,
-    }).select().single();
-    if (error || !orderRow) throw new Error('Order place karne mein error');
-
-    const orderItems = items.map(ci => ({
-      order_id: (orderRow as Record<string, unknown>).id,
-      product_id: ci.product.id,
-      product_name: ci.product.name,
-      brand: ci.product.brand,
-      unit: ci.product.unit,
-      unit_price: ci.product.price,
-      quantity: ci.quantity,
-    }));
-    const { data: itemRows } = await supabase.from('order_items').insert(orderItems).select();
-
-    const mappedItems = (itemRows as Record<string, unknown>[] || []).map(row => ({
-      id: row.id as string, orderId: row.order_id as string, productId: row.product_id as string,
-      productName: row.product_name as string, brand: row.brand as string, unit: row.unit as string,
-      unitPrice: row.unit_price as number, quantity: row.quantity as number,
-    }));
-
-    const order = mapOrder(orderRow as Record<string, unknown>, mappedItems);
-    set(state => ({ orders: [order, ...state.orders] }));
-
-    const dp = get().distributorProfiles.find(d => d.id === distributorId);
-    if (dp) await get().addNotification({ userId: dp.userId, type: isLate ? 'late_order' : 'order_placed', message: isLate ? `Late order from ${shopName}` : `New order from ${shopName}`, read: false, createdAt: new Date().toISOString() });
-
-    return order;
+    try {
+      const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
+      const { data } = await axios.post(`${API_URL}/orders`, { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, total });
+      set(state => ({ orders: [{...data.order, total: Number(data.order.total), items: data.order.items.map((i: any) => ({...i, unitPrice: Number(i.unitPrice)}))}, ...state.orders] }));
+      if (data.distributorUserId) {
+        await get().addNotification({ userId: data.distributorUserId, type: isLate ? 'late_order' : 'order_placed', message: isLate ? `Late order from ${shopName}` : `New order from ${shopName}`, read: false, createdAt: new Date().toISOString() });
+      }
+      return data.order;
+    } catch (e) { console.error(e); throw new Error('Order place karne mein error'); }
   },
 
   updateOrderStatus: async (orderId, status) => {
-    await supabase.from('orders').update({ status }).eq('id', orderId);
-    set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o) }));
+    try {
+      await axios.patch(`${API_URL}/orders/${orderId}`, { status });
+      set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o) }));
+    } catch (e) { console.error(e); }
   },
 
   addDeliveryGroup: async (distributorId, name) => {
-    const { data } = await supabase.from('delivery_groups').insert({ distributor_id: distributorId, name }).select().single();
-    if (data) set(state => ({ deliveryGroups: [...state.deliveryGroups, { id: (data as Record<string, unknown>).id as string, distributorId, name }] }));
+    try {
+      const { data } = await axios.post(`${API_URL}/delivery-groups`, { distributorId, name });
+      if (data) set(state => ({ deliveryGroups: [...state.deliveryGroups, data] }));
+    } catch (e) { console.error(e); }
   },
 
   deleteDeliveryGroup: async (id) => {
-    await supabase.from('delivery_groups').delete().eq('id', id);
-    set(state => ({ deliveryGroups: state.deliveryGroups.filter(g => g.id !== id) }));
+    try {
+      await axios.delete(`${API_URL}/delivery-groups/${id}`);
+      set(state => ({ deliveryGroups: state.deliveryGroups.filter(g => g.id !== id) }));
+    } catch (e) { console.error(e); }
   },
 
   markNotificationRead: async (id) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
-    set(state => ({ notifications: state.notifications.map(n => n.id === id ? { ...n, read: true } : n) }));
+    try {
+      await axios.patch(`${API_URL}/notifications/${id}/read`);
+      set(state => ({ notifications: state.notifications.map(n => n.id === id ? { ...n, read: true } : n) }));
+    } catch (e) { console.error(e); }
   },
 
   markAllRead: async (userId) => {
-    await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-    set(state => ({ notifications: state.notifications.map(n => n.userId === userId ? { ...n, read: true } : n) }));
+    try {
+      await axios.patch(`${API_URL}/notifications/user/${userId}/read-all`);
+      set(state => ({ notifications: state.notifications.map(n => n.userId === userId ? { ...n, read: true } : n) }));
+    } catch (e) { console.error(e); }
   },
 
   addNotification: async (notification) => {
-    const { data } = await supabase.from('notifications').insert({
-      user_id: notification.userId, type: notification.type,
-      message: notification.message, read: notification.read,
-    }).select().single();
-    if (data) {
-      const row = data as Record<string, unknown>;
-      set(state => ({ notifications: [{ id: row.id as string, userId: row.user_id as string, type: row.type as string, message: row.message as string, read: row.read as boolean, createdAt: row.created_at as string }, ...state.notifications] }));
-    }
+    try {
+      const { data } = await axios.post(`${API_URL}/notifications`, notification);
+      if (data) set(state => ({ notifications: [data, ...state.notifications] }));
+    } catch (e) { console.error(e); }
   },
 
   setCartQuantity: (product, quantity) => {

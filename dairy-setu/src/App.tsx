@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { supabase } from './lib/supabase';
 import { AppLayout } from './components/layout/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
@@ -27,20 +26,8 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { ToastContainer } from './components/ui/Toast';
 import { useAuthStore } from './store/authStore';
 import { useAppStore } from './store/appStore';
-import type { Notification as AppNotification } from './types';
 
 const queryClient = new QueryClient();
-
-function mapNotificationRow(row: Record<string, unknown>): AppNotification {
-  return {
-    id: row.id as string,
-    userId: row.user_id as string,
-    type: row.type as string,
-    message: row.message as string,
-    read: row.read as boolean,
-    createdAt: row.created_at as string,
-  };
-}
 
 function playNotificationTune() {
   if (typeof window === 'undefined' || !window.AudioContext) return;
@@ -70,88 +57,19 @@ function AppWithAuth() {
     fetchOrders,
     fetchNotifications,
     fetchDeliveryGroups,
+    runAutoOrdersForDistributor,
   } = useAppStore();
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    let loadUserQueued = false;
 
-    const applySessionUser = (sessionUser: { id: string; email?: string | null }) => {
-      const current = useAuthStore.getState().user;
-      const fallbackRole = (localStorage.getItem('dairy-walla-active-role') as 'distributor' | 'shopkeeper' | null) || 'shopkeeper';
-      useAuthStore.setState({
-        user: {
-          id: sessionUser.id,
-          email: sessionUser.email || current?.email || '',
-          name: current?.id === sessionUser.id ? current.name : '',
-          phone: current?.id === sessionUser.id ? current.phone : '',
-          role: current?.id === sessionUser.id ? current.role : fallbackRole,
-        },
-        isAuthenticated: true,
-      });
-    };
-
-    const queueLoadUser = () => {
-      if (loadUserQueued) return;
-      loadUserQueued = true;
-      setTimeout(() => {
-        void loadUser()
-          .catch(() => undefined)
-          .finally(() => {
-            loadUserQueued = false;
-            if (alive) setReady(true);
-          });
-      }, 0);
-    };
-
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        if (!alive) return;
-        if (session?.user) {
-          applySessionUser(session.user);
-          queueLoadUser();
-        } else {
-          useAuthStore.setState({ user: null, isAuthenticated: false });
-          setReady(true);
-        }
-      })
-      .catch(() => {
-        if (!alive) return;
-        const current = useAuthStore.getState().user;
-        if (current) {
-          useAuthStore.setState({ isAuthenticated: true });
-        } else {
-          useAuthStore.setState({ user: null, isAuthenticated: false });
-        }
-        setReady(true);
-      });
-
-    // Keep callback fast and non-async. Supabase recommends deferring extra auth queries.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!alive) return;
-
-      if (event === 'SIGNED_OUT' || !session?.user) {
-        useAuthStore.setState({ user: null, isAuthenticated: false });
-        localStorage.removeItem('dairy-walla-active-role');
-        return;
-      }
-
-      const previousUserId = useAuthStore.getState().user?.id;
-      applySessionUser(session.user);
-
-      if (event === 'SIGNED_IN' && previousUserId !== session.user.id) {
-        queueLoadUser();
-        return;
-      }
-      if (event === 'INITIAL_SESSION' || event === 'USER_UPDATED') {
-        queueLoadUser();
-      }
+    loadUser().finally(() => {
+      if (alive) setReady(true);
     });
 
     return () => {
       alive = false;
-      subscription.unsubscribe();
     };
   }, [loadUser]);
 
@@ -169,9 +87,12 @@ function AppWithAuth() {
             await Promise.all([
               fetchProducts(dp.id),
               fetchConnections(user.id, 'distributor'),
-              fetchOrders(user.id, 'distributor'),
               fetchDeliveryGroups(dp.id),
             ]);
+            if (cancelled) return;
+            await runAutoOrdersForDistributor(user.id);
+            if (cancelled) return;
+            await fetchOrders(user.id, 'distributor');
           }
         } else {
           await fetchShopkeeperProfile(user.id);
@@ -208,6 +129,7 @@ function AppWithAuth() {
     fetchOrders,
     fetchNotifications,
     fetchDeliveryGroups,
+    runAutoOrdersForDistributor,
   ]);
 
   useEffect(() => {
@@ -219,68 +141,31 @@ function AppWithAuth() {
 
     const knownIds = new Set(useAppStore.getState().notifications.map(n => n.id));
 
-    const channel = supabase
-      .channel(`notifications:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        payload => {
-          if (payload.eventType === 'INSERT') {
-            const row = payload.new as Record<string, unknown>;
-            const incoming = mapNotificationRow(row);
-            const isNew = !knownIds.has(incoming.id);
-            knownIds.add(incoming.id);
-
-            useAppStore.setState(state => ({
-              notifications: state.notifications.some(n => n.id === incoming.id)
-                ? state.notifications
-                : [incoming, ...state.notifications],
-            }));
-
-            if (isNew) {
-              playNotificationTune();
-              if ('Notification' in window && Notification.permission === 'granted') {
-                const notification = new Notification('Dairy Walla Alert', {
-                  body: incoming.message,
-                  tag: incoming.id,
-                });
-                notification.onclick = () => {
-                  window.focus();
-                  notification.close();
-                };
-              }
-            }
-            return;
-          }
-
-          if (payload.eventType === 'UPDATE') {
-            const row = payload.new as Record<string, unknown>;
-            const updated = mapNotificationRow(row);
-            useAppStore.setState(state => ({
-              notifications: state.notifications.map(n => n.id === updated.id ? updated : n),
-            }));
-            return;
-          }
-
-          if (payload.eventType === 'DELETE') {
-            const oldRow = payload.old as Record<string, unknown>;
-            const deletedId = oldRow.id as string;
-            knownIds.delete(deletedId);
-            useAppStore.setState(state => ({
-              notifications: state.notifications.filter(n => n.id !== deletedId),
-            }));
+    // Poll notifications every 10 seconds since Supabase real-time is removed
+    const intervalId = setInterval(async () => {
+      await fetchNotifications(user.id);
+      const currentNotifs = useAppStore.getState().notifications;
+      
+      currentNotifs.forEach(incoming => {
+        if (!knownIds.has(incoming.id)) {
+          knownIds.add(incoming.id);
+          playNotificationTune();
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const notification = new Notification('Dairy Walla Alert', {
+              body: incoming.message,
+              tag: incoming.id,
+            });
+            notification.onclick = () => {
+              window.focus();
+              notification.close();
+            };
           }
         }
-      )
-      .subscribe();
+      });
+    }, 10000);
 
     return () => {
-      void supabase.removeChannel(channel);
+      clearInterval(intervalId);
     };
   }, [isAuthenticated, user?.id]);
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Phone, Building2, Store, Edit2, Check, X,
@@ -23,7 +23,8 @@ interface EditField {
 }
 
 export function ProfilePage() {
-  const { user, updateUser, signOut } = useAuthStore();
+
+  const { user, updateUser, signOut, deleteAccount } = useAuthStore();
   const { distributorProfiles, shopkeeperProfiles, updateDistributorSettings, updateShopkeeperProfile, products, connections } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
@@ -36,11 +37,23 @@ export function ProfilePage() {
   const [editValue, setEditValue] = useState('');
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [editingLocation, setEditingLocation] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [locationData, setLocationData] = useState({
     locationName: (isDistributor ? distProfile?.locationName : shopProfile?.locationName) || '',
     latitude: (isDistributor ? distProfile?.latitude : shopProfile?.latitude),
     longitude: (isDistributor ? distProfile?.longitude : shopProfile?.longitude),
   });
+
+  // Sync location data when profile loads asynchronously
+  useEffect(() => {
+    if (!editingLocation) {
+      setLocationData({
+        locationName: (isDistributor ? distProfile?.locationName : shopProfile?.locationName) || '',
+        latitude: (isDistributor ? distProfile?.latitude : shopProfile?.latitude),
+        longitude: (isDistributor ? distProfile?.longitude : shopProfile?.longitude),
+      });
+    }
+  }, [isDistributor, distProfile, shopProfile, editingLocation]);
 
   const startEdit = (field: EditField) => {
     setEditingField(field.key);
@@ -80,7 +93,7 @@ export function ProfilePage() {
         longitude: location.longitude,
       }));
       show('Location captured!');
-    } catch (error) {
+    } catch (_error) {
       show('Location access denied', 'error');
       // Try to get from city
       const profile = isDistributor ? distProfile : shopProfile;
@@ -120,6 +133,17 @@ export function ProfilePage() {
   const handleLogout = async () => {
     await signOut();
     navigate('/login');
+  };
+
+  const handleDeleteAccount = async () => {
+    const res = await deleteAccount();
+    if (res?.error) {
+      show(res.error, 'error');
+      setShowDeleteConfirm(false);
+    } else {
+      show('Account deleted successfully');
+      navigate('/login');
+    }
   };
 
   // Build field rows
@@ -394,6 +418,29 @@ export function ProfilePage() {
         className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border-2 border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium">
         <LogOut className="w-4 h-4" /> Logout
       </button>
+
+      {/* Delete Account */}
+      <div className="mt-8 pt-6 border-t border-gray-200">
+        {!showDeleteConfirm ? (
+          <button onClick={() => setShowDeleteConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 p-4 text-gray-500 hover:text-red-600 transition-colors font-medium text-sm">
+            Delete Account
+          </button>
+        ) : (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center animate-fade-in">
+            <h3 className="text-red-800 font-semibold mb-2">Are you absolutely sure?</h3>
+            <p className="text-xs text-red-600 mb-4">Ye action wapas nahi ho sakta. Aapka sara data hamesha ke liye delete ho jayega.</p>
+            <div className="flex gap-2">
+              <button onClick={handleDeleteAccount} className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm font-medium hover:bg-red-700 transition-colors">
+                Yes, Delete
+              </button>
+              <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white text-gray-700 border border-gray-300 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle, XCircle, Package, Users, TrendingUp, AlertTriangle, ChevronRight } from 'lucide-react';
+import { AlertTriangle, BarChartHorizontal, CheckCircle, ChevronRight, Clock, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -68,14 +68,16 @@ function OrderCard({ order, onAccept, onReject, showActions }: {
 
 export function DashboardPage() {
   const { user } = useAuthStore();
-  const { orders, connections, distributorProfiles, updateOrderStatus, addNotification } = useAppStore();
+  const { orders, connections, distributorProfiles, shopkeeperProfiles, updateOrderStatus, addNotification, fetchShopkeeperProfileById } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
+  const [remindAllLoading, setRemindAllLoading] = useState(false);
+  // const [remindWhatsappLoading, setRemindWhatsappLoading] = useState(false);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const today = new Date().toISOString().split('T')[0];
 
-  const todayOrders = orders.filter(o => o.distributorId === profile?.id && o.deliveryDate === today);
+  const todayOrders = orders.filter(o => o.distributorId === profile?.id && o.deliveryDate?.startsWith(today));
   const normalOrders = todayOrders.filter(o => o.type === 'normal');
   const lateOrders = todayOrders.filter(o => o.type === 'late' && o.status === 'pending');
   const activeConnections = connections.filter(c => c.distributorId === profile?.id && c.status === 'active');
@@ -85,29 +87,150 @@ export function DashboardPage() {
     .filter(o => o.status === 'accepted' || o.status === 'fulfilled')
     .reduce((sum, o) => sum + o.total, 0);
 
+  const shopkeepersWhoOrderedToday = useMemo(() => {
+    const orderedShopkeeperIds = new Set<string>();
+    todayOrders.forEach(order => orderedShopkeeperIds.add(order.shopkeeperId));
+    return orderedShopkeeperIds;
+  }, [todayOrders]);
+
+  const shopkeepersNotOrdered = useMemo(() => {
+    return activeConnections.filter(conn => !shopkeepersWhoOrderedToday.has(conn.shopkeeperId)).sort((a, b) => a.shopName.localeCompare(b.shopName));
+  }, [activeConnections, shopkeepersWhoOrderedToday]);
+
+
+  const topSellingProducts = useMemo(() => {
+    const productSales = new Map<string, { id: string; name: string; brand: string; unit: string; quantity: number }>();
+
+    todayOrders
+      .filter(o => o.status === 'accepted' || o.status === 'fulfilled')
+      .forEach(order => {
+        order.items.forEach(item => {
+          const existing = productSales.get(item.productId);
+          if (existing) {
+            existing.quantity += item.quantity;
+          } else {
+            productSales.set(item.productId, {
+              id: item.productId,
+              name: item.productName,
+              brand: item.brand,
+              unit: item.unit,
+              quantity: item.quantity,
+            });
+          }
+        });
+      });
+
+    return Array.from(productSales.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+  }, [todayOrders]);
+
   const handleAcceptLate = (order: Order) => {
     updateOrderStatus(order.id, 'accepted');
-    addNotification({
-      userId: order.shopkeeperId,
-      type: 'order_accepted',
-      message: `Your late order has been accepted by ${profile?.businessName}`,
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
+    const shopProfile = shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId);
+    if (shopProfile?.userId) {
+      addNotification({
+        userId: shopProfile.userId,
+        type: 'order_accepted',
+        message: `Your late order has been accepted by ${profile?.businessName}`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
     show(`Late order from ${order.shopName} accepted`);
   };
 
   const handleRejectLate = (order: Order) => {
     updateOrderStatus(order.id, 'rejected');
-    addNotification({
-      userId: order.shopkeeperId,
-      type: 'order_rejected',
-      message: `Your late order was not accepted by ${profile?.businessName}`,
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
+    const shopProfile = shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId);
+    if (shopProfile?.userId) {
+      addNotification({
+        userId: shopProfile.userId,
+        type: 'order_rejected',
+        message: `Your late order was not accepted by ${profile?.businessName}`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
     show(`Late order from ${order.shopName} rejected`, 'error');
   };
+
+  const handleRemindAll = async () => {
+    if (!profile || shopkeepersNotOrdered.length === 0) return;
+
+    setRemindAllLoading(true);
+
+    const getProfiles = () => useAppStore.getState().shopkeeperProfiles;
+
+    const missingProfileIds = shopkeepersNotOrdered
+      .map(conn => conn.shopkeeperId)
+      .filter(id => !getProfiles().some(p => p.id === id));
+
+    if (missingProfileIds.length > 0) {
+      try {
+        await Promise.all(missingProfileIds.map(id => fetchShopkeeperProfileById(id)));
+      } catch (_error) {
+        show('Failed to fetch shopkeeper details. Please try again.', 'error');
+        setRemindAllLoading(false);
+        return;
+      }
+    }
+
+    const latestShopkeeperProfiles = getProfiles();
+    let remindedCount = 0;
+    const failedNames: string[] = [];
+
+    shopkeepersNotOrdered.forEach(conn => {
+      const shopProfile = latestShopkeeperProfiles.find(sp => sp.id === conn.shopkeeperId);
+      if (shopProfile?.userId) {
+        addNotification({
+          userId: shopProfile.userId,
+          type: 'order_reminder',
+          message: `Reminder from ${profile.businessName}: You have not placed your order for today.`,
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+        remindedCount++;
+      } else {
+        failedNames.push(conn.shopName);
+      }
+    });
+
+    setRemindAllLoading(false);
+
+    if (remindedCount > 0) {
+      show(`Sent reminders to ${remindedCount} shopkeeper${remindedCount > 1 ? 's' : ''}.`);
+    }
+    if (failedNames.length > 0) {
+      show(`Could not remind: ${failedNames.join(', ')}. Their profile is incomplete.`, 'error');
+    } else if (remindedCount === 0 && shopkeepersNotOrdered.length > 0) {
+      show('Could not send reminders. No users to remind or data is incomplete.', 'error');
+    }
+  };
+
+  // const handleRemindAllViaWhatsapp = async () => {
+  //   const remindShopkeepersViaWhatsapp = (useAppStore.getState() as any).remindShopkeepersViaWhatsapp;
+  //   if (!profile || shopkeepersNotOrdered.length === 0) return;
+  //   if (!remindShopkeepersViaWhatsapp) {
+  //     show('WhatsApp reminder feature is not available yet.', 'error');
+  //     return;
+  //   }
+
+  //   setRemindWhatsappLoading(true);
+  //   const shopkeeperIds = shopkeepersNotOrdered.map(conn => conn.shopkeeperId);
+
+  //   try {
+  //     const { remindedCount, failedNames } = await remindShopkeepersViaWhatsapp(shopkeeperIds, `Reminder from ${profile.businessName}: You have not placed your order for today.`);
+  //     if (remindedCount > 0) {
+  //       show(`Sent WhatsApp reminders to ${remindedCount} shopkeeper${remindedCount > 1 ? 's' : ''}.`);
+  //     }
+  //     if (failedNames.length > 0) {
+  //       show(`Could not send WhatsApp to: ${failedNames.join(', ')}. Check their phone numbers.`, 'error');
+  //     }
+  //   } finally {
+  //     setRemindWhatsappLoading(false);
+  //   }
+  // };
 
   const stats = [
     { label: 'Normal Orders', value: normalOrders.length, icon: <CheckCircle className="w-5 h-5" />, color: 'text-green-600 bg-green-50', sub: 'Today' },
@@ -144,6 +267,63 @@ export function DashboardPage() {
         ))}
       </div>
 
+      {/* Shopkeepers Not Ordered Today */}
+      <div className="card p-4 mb-6">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-red-600" />
+            <h2 className="font-semibold text-gray-900 text-sm">Shopkeepers Not Ordered (Today)</h2>
+            {shopkeepersNotOrdered.length > 0 && <span className="badge-red">{shopkeepersNotOrdered.length}</span>}
+          </div>
+          {shopkeepersNotOrdered.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button onClick={handleRemindAll} disabled={remindAllLoading} className="btn-secondary py-1 px-2.5 text-xs disabled:opacity-70">
+                {remindAllLoading ? (
+                  'Sending...'
+                ) : (
+                  <><MessageSquareWarning className="w-3.5 h-3.5" /> Remind (App)</>
+                )}
+              </button>
+              {/* <button onClick={handleRemindAllViaWhatsapp} disabled={remindWhatsappLoading} className="btn-secondary py-1 px-2.5 text-xs disabled:opacity-70">
+                {remindWhatsappLoading ? (
+                  'Sending...'
+                ) : (
+                  <><MessageSquare className="w-3.5 h-3.5 text-green-600" /> Remind (WA)</>
+                )}
+              </button> */}
+            </div>
+          )}
+        </div>
+        {shopkeepersNotOrdered.length > 0 ? (
+          <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            {shopkeepersNotOrdered.map(conn => {
+              const shopkeeperPhone = conn.shopkeeperPhone?.trim();
+              const shopkeeperTel = shopkeeperPhone?.replace(/[^\d]/g, '').slice(-10);
+              return (
+                <div key={conn.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-gray-50">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-800 truncate">{conn.shopName}</div>
+                    <div className="text-xs text-gray-500 truncate">{conn.shopkeeperName}</div>
+                  </div>
+                  {shopkeeperTel && shopkeeperTel.length === 10 && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <a href={`https://wa.me/91${shopkeeperTel}`} target="_blank" rel="noopener noreferrer" className="btn-secondary p-2">
+                        <MessageSquare className="w-4 h-4 text-green-600" />
+                      </a>
+                      <a href={`tel:${shopkeeperTel}`} className="btn-secondary p-2">
+                        <Phone className="w-4 h-4" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-sm text-gray-500">All active shopkeepers have placed an order today!</div>
+        )}
+      </div>
+
       {/* Pending connections alert */}
       {pendingConnections.length > 0 && (
         <div
@@ -160,6 +340,37 @@ export function DashboardPage() {
           <ChevronRight className="w-4 h-4 text-amber-600" />
         </div>
       )}
+
+      {/* Top Selling Products */}
+      <div className="card p-4 mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChartHorizontal className="w-5 h-5 text-purple-600" />
+          <h2 className="font-semibold text-gray-900 text-sm">Top 5 Selling Products (Today)</h2>
+        </div>
+        {topSellingProducts.length > 0 ? (
+          <div className="space-y-3">
+            {topSellingProducts.map((product, index) => (
+              <div key={product.id} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono text-xs text-gray-400 w-4 text-center">{index + 1}.</span>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-800 truncate">{product.name}</div>
+                    <div className="text-xs text-gray-500">{product.brand}</div>
+                  </div>
+                </div>
+                <div className="font-bold text-gray-900 flex-shrink-0 ml-2">
+                  {product.quantity} <span className="text-xs font-normal text-gray-400">{product.unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-4 text-sm text-gray-500">
+            <p>No sales data for today yet.</p>
+            <p className="text-xs text-gray-400 mt-1">Accept orders to see top selling products here.</p>
+          </div>
+        )}
+      </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Normal Orders */}

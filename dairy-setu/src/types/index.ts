@@ -68,6 +68,7 @@ export interface Connection {
   distributorName: string;
   businessName: string;
   status: ConnectionStatus;
+  autoOrderEnabled?: boolean;
   deliveryGroupId?: string;
   deliveryGroupName?: string;
   createdAt: string;
