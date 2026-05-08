@@ -12,6 +12,7 @@ model Profile {
   email     String   @unique
   name      String?
   phone     String   @default("")
+  pin       String?
   role      String
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 

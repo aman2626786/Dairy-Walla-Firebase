@@ -31,6 +31,7 @@ export function ConfirmProfilePage() {
   const [shopCity, setShopCity] = useState("");
   const [deliveryTiming, setDeliveryTiming] = useState("");
   const [locationName, setLocationName] = useState("");
+  const [pin, setPin] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [searchParams] = useSearchParams();
 
@@ -98,6 +99,7 @@ export function ConfirmProfilePage() {
     const sName = role === "distributor" ? businessName : shopName;
     if (!name.trim()) { show("Owner name daalo", "error"); return; }
     if (!sName.trim()) { show(role === "distributor" ? "Business name daalo" : "Shop name daalo", "error"); return; }
+    if (pin.length !== 6) { show("6 digit ka PIN set karein", "error"); return; }
 
     setLoading(true);
     try {
@@ -114,6 +116,7 @@ export function ConfirmProfilePage() {
         phone: phoneToSave,
         role,
         name,
+        pin,
         businessData: role === "distributor" ? {
           businessName: businessName.trim(),
           ownerName: ownerName.trim(),
@@ -255,6 +258,10 @@ export function ConfirmProfilePage() {
                   </div>
                 </>
               )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Set 6-Digit PIN (For future login) *</label>
+            <input type="password" pattern="[0-9]*" inputMode="numeric" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 tracking-[0.5em] font-bold" placeholder="------" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} />
+          </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location (optional)</label>
                 <input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-2" placeholder="e.g. Vaishali Nagar, Ajmer" value={locationName} onChange={e => setLocationName(e.target.value)} />

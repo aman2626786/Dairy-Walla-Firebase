@@ -34,14 +34,36 @@ app.post('/api/auth/me', async (req, res) => {
   }
 });
 
+// 1.5 Login with PIN
+app.post('/api/auth/login-pin', async (req, res) => {
+  const { phone, pin, role } = req.body;
+  try {
+    const profile = await prisma.profile.findFirst({ where: { phone } });
+    if (!profile) return res.status(404).json({ error: 'Account nahi mila. Pehle Sign Up karein.' });
+    if (!profile.pin) return res.status(400).json({ error: 'Aapne PIN set nahi kiya hai. OTP se login karke Profile me PIN set karein.' });
+    if (profile.pin !== pin) return res.status(401).json({ error: 'Galat PIN.' });
+    if (role && profile.role !== role) {
+      return res.status(409).json({ error: `This number is already registered as a ${profile.role}. Please log in with the correct role.` });
+    }
+
+    const dp = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
+    const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
+    
+    res.json({ profile, dp, sp });
+  } catch (error) {
+    console.error("PIN Login Backend Error:", error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // 2. Setup Profile
 app.post('/api/auth/setup', async (req, res) => {
-  const { phone, role, name, businessData, shopData } = req.body;
+  const { phone, role, name, businessData, shopData, pin } = req.body;
   try {
     let profile = await prisma.profile.findFirst({ where: { phone } });
     if (!profile) {
       profile = await prisma.profile.create({
-        data: { phone, role, name, email: `${phone}@dairy.local` }
+        data: { phone, role, name, pin, email: `${phone}@dairy.local` }
       });
     } else {
       if (profile.role !== role) {
@@ -49,7 +71,7 @@ app.post('/api/auth/setup', async (req, res) => {
       }
       profile = await prisma.profile.update({
         where: { id: profile.id },
-        data: { name }
+        data: { name, pin }
       });
     }
 

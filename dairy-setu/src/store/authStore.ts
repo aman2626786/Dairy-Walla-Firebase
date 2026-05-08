@@ -11,6 +11,7 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   signIn: (phone: string, _uid: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
+  loginWithPin: (phone: string, pin: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error?: string }>;
   updateUser: (updates: Partial<User>) => Promise<void>;
@@ -29,20 +30,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       authListenerUnsubscribe();
     }
     return new Promise<void>((resolve) => {
-      authListenerUnsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-        if (!firebaseUser || !firebaseUser.phoneNumber) {
-          set({ user: null, isAuthenticated: false, loading: false });
-          resolve();
-          return;
-        }
-
-        const phone = firebaseUser.phoneNumber.replace('+91', '');
-        try { // Pass role to check for conflicts on load
+      const fetchAndSetUser = async (phone: string, resFn: () => void) => {
+        try {
           const preferredRole = (localStorage.getItem('dairy-walla-active-role') as Role | null);
           const res = await axios.post(`${API_URL}/auth/me`, { phone, role: preferredRole });
           if (res.data.needsSetup) {
             set({ isAuthenticated: true });
-            resolve();
+            resFn();
             return;
           }
 
@@ -63,7 +57,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           console.error("Error loading user from API", error);
           set({ user: null, isAuthenticated: false });
         }
-        resolve();
+        resFn();
+      };
+
+      const localPhone = localStorage.getItem('dairy-walla-phone');
+      if (localPhone) {
+        fetchAndSetUser(localPhone, resolve).catch(() => {
+          localStorage.removeItem('dairy-walla-phone');
+          resolve();
+        });
+        return;
+      }
+
+      authListenerUnsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+        if (!firebaseUser || !firebaseUser.phoneNumber) {
+          set({ user: null, isAuthenticated: false, loading: false });
+          resolve();
+          return;
+        }
+        const phone = firebaseUser.phoneNumber.replace('+91', '');
+        localStorage.setItem('dairy-walla-phone', phone);
+        await fetchAndSetUser(phone, resolve);
       });
     });
   },
@@ -89,6 +103,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       localStorage.setItem('dairy-walla-active-role', role);
+      localStorage.setItem('dairy-walla-phone', phone);
       const user: User = { id: profile.id, email: profile.email, name: profile.name || '', phone: profile.phone, role };
       
       set({ user, isAuthenticated: true, loading: false });
@@ -106,9 +121,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  loginWithPin: async (phone, pin, role) => {
+    set({ loading: true });
+    try {
+      const res = await axios.post(`${API_URL}/auth/login-pin`, { phone, pin, role });
+      const { profile, dp, sp } = res.data;
+      
+      if (role === 'distributor' && !dp) {
+        set({ loading: false });
+        return { error: 'Is account me distributor profile nahi mili. Shopkeeper try karo.' };
+      }
+      if (role === 'shopkeeper' && !sp) {
+        set({ loading: false });
+        return { error: 'Is account me shopkeeper profile nahi mili. Distributor try karo.' };
+      }
+
+      localStorage.setItem('dairy-walla-active-role', role);
+      localStorage.setItem('dairy-walla-phone', phone);
+      const user: User = { id: profile.id, email: profile.email, name: profile.name || '', phone: profile.phone, role };
+      
+      set({ user, isAuthenticated: true, loading: false });
+      return { user };
+    } catch (e: any) {
+      console.error("PIN Login Error:", e);
+      set({ loading: false });
+      let errMsg = 'Login failed due to server error';
+      if (e.response?.status === 404 && !e.response?.data?.error) {
+        errMsg = "Backend API update nahi hui hai. Kripya naya code GitHub par push karein.";
+      } else if (e.response?.data?.error) {
+        errMsg = e.response.data.error;
+      } else if (e.message === 'Network Error') {
+        errMsg = "Server se connect nahi ho paya. Backend start karein.";
+      }
+      return { error: errMsg };
+    }
+  },
+
   signOut: async () => {
     await firebaseSignOut(firebaseAuth);
     localStorage.removeItem('dairy-walla-active-role');
+    localStorage.removeItem('dairy-walla-phone');
     set({ user: null, isAuthenticated: false });
   },
 
@@ -122,6 +174,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await fUser.delete();
       }
       localStorage.removeItem('dairy-walla-active-role');
+      localStorage.removeItem('dairy-walla-phone');
       set({ user: null, isAuthenticated: false, loading: false });
       return {};
     } catch (e: any) {

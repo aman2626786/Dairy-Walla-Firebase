@@ -28,7 +28,9 @@ export function SignupPage() {
   useEffect(() => {
     return () => {
       if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (e) {}
         window.recaptchaVerifier = null;
       }
     };
@@ -46,10 +48,24 @@ export function SignupPage() {
       setConfirmationResult(result);
       setStep("otp");
       show("OTP bhej diya gaya hai!");
-    } catch (err) {
-      console.error(err);
-      const message = err instanceof Error ? err.message : "OTP bhejne mein error aayi";
-      show(message, "error");
+    } catch (err: any) {
+      console.error("Firebase OTP Error:", err);
+      let errMsg = "OTP bhejne mein error aayi";
+      if (err.code === 'auth/domain-not-authorized') errMsg = "Domain authorized nahi hai. Firebase console check karein.";
+      else if (err.code === 'auth/invalid-phone-number') errMsg = "Phone number galat hai.";
+      else if (err.code === 'auth/too-many-requests') errMsg = "Bahut zyada requests. Thodi der baad try karein.";
+      else if (err.code === 'auth/billing-not-enabled' || err.message.includes('billing')) errMsg = "Firebase me Blaze plan enable karein (SMS ke liye zaroori hai).";
+      else if (err.code === 'auth/captcha-check-failed') errMsg = "reCAPTCHA verification fail ho gaya. Page refresh karein.";
+      else if (err.message) errMsg = err.message;
+      
+      show(errMsg, "error");
+
+      if (window.recaptchaVerifier) {
+        try {
+          window.recaptchaVerifier.clear();
+        } catch (e) {}
+        window.recaptchaVerifier = null;
+      }
     } finally {
       setLoading(false);
     }

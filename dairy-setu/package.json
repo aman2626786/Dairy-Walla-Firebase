@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "start:api": "tsx server.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -27,6 +28,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "class-variance-authority": "^0.7.1",
+    "tsx": "^4.19.2",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "jspdf": "^4.2.1",

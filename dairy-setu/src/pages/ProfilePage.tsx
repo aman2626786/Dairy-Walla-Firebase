@@ -66,9 +66,15 @@ export function ProfilePage() {
       show('Ye field empty nahi ho sakta', 'error');
       return;
     }
+    if (key === 'pin' && val.length !== 6) {
+      show('PIN 6 digit ka hona chahiye', 'error');
+      return;
+    }
 
     if (key === 'name') {
       updateUser({ name: val });
+    } else if (key === 'pin') {
+      updateUser({ pin: val } as any);
     } else if (isDistributor && distProfile) {
       updateDistributorSettings(distProfile.id, { [key]: val });
       if (key === 'ownerName') updateUser({ name: val });
@@ -150,6 +156,7 @@ export function ProfilePage() {
   const distributorFields: EditField[] = [
     { key: 'ownerName', label: 'Owner Name', value: distProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
     { key: 'businessName', label: 'Business Name', value: distProfile?.businessName || '', placeholder: 'Dairy ka naam' },
+    { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'company', label: 'Company / Brand', value: distProfile?.company || '', type: 'select', options: COMPANIES },
     { key: 'city', label: 'City', value: distProfile?.city || '', placeholder: 'e.g. Ajmer' },
     { key: 'address', label: 'Address', value: distProfile?.address || '', placeholder: 'Shop address' },
@@ -160,6 +167,7 @@ export function ProfilePage() {
   const shopkeeperFields: EditField[] = [
     { key: 'ownerName', label: 'Owner Name', value: shopProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
     { key: 'shopName', label: 'Shop Name', value: shopProfile?.shopName || '', placeholder: 'Shop ka naam' },
+    { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'city', label: 'City', value: shopProfile?.city || '', placeholder: 'e.g. Ajmer' },
     { key: 'address', label: 'Address', value: shopProfile?.address || '', placeholder: 'Shop address' },
     { key: 'deliveryTiming', label: 'Delivery Timing', value: shopProfile?.deliveryTiming || '', type: 'select', options: DELIVERY_TIMINGS },
@@ -171,6 +179,7 @@ export function ProfilePage() {
   const fieldIcons: Record<string, React.ReactElement> = {
     ownerName: <User className="w-3.5 h-3.5" />,
     businessName: <Building2 className="w-3.5 h-3.5" />,
+    pin: <Shield className="w-3.5 h-3.5" />,
     shopName: <Store className="w-3.5 h-3.5" />,
     company: <Tag className="w-3.5 h-3.5" />,
     city: <MapPin className="w-3.5 h-3.5" />,
@@ -242,10 +251,13 @@ export function ProfilePage() {
                   </select>
                 ) : (
                   <input
+                type={field.key === 'pin' ? 'password' : 'text'}
+                maxLength={field.key === 'pin' ? 6 : undefined}
+                inputMode={field.key === 'pin' ? 'numeric' : undefined}
                     className="input flex-1"
-                    value={editValue}
+                value={field.key === 'pin' && editValue === '******' ? '' : editValue}
                     placeholder={field.placeholder}
-                    onChange={e => setEditValue(e.target.value)}
+                onChange={e => setEditValue(field.key === 'pin' ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && saveEdit(field.key)}
                     autoFocus
                   />
