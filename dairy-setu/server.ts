@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health Check / Keep-Alive Endpoint
+app.get('/api/ping', (req, res) => {
+  res.status(200).send('pong');
+});
+
 // 1. Get or Verify User Profile
 app.post('/api/auth/me', async (req, res) => {
   const { phone, role } = req.body; // Role added to check for conflicts
@@ -50,9 +55,10 @@ app.post('/api/auth/login-pin', async (req, res) => {
     const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
     
     res.json({ profile, dp, sp });
-  } catch (error) {
+  } catch (error: any) {
     console.error("PIN Login Backend Error:", error);
-    res.status(500).json({ error: 'Server error' });
+    const errorMsg = error.message || 'Database Connection Error';
+    res.status(500).json({ error: errorMsg });
   }
 });
 
