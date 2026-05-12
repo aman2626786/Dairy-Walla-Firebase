@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { AppLayout } from './components/layout/AppLayout';
+import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
 import { ConfirmProfilePage } from './pages/auth/ConfirmProfilePage';
@@ -23,6 +24,7 @@ import { NotificationsPage } from './pages/NotificationsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { ShareLinkHandler } from './pages/ShareLinkHandler';
 import { ToastContainer } from './components/ui/Toast';
 import { useAuthStore } from './store/authStore';
 import { useAppStore } from './store/appStore';
@@ -220,6 +222,7 @@ function AppWithAuth() {
   if (!ready) {
     return (
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmProfilePage />} />
         <Route path="*" element={<LoginPage />} />
@@ -232,11 +235,12 @@ function AppWithAuth() {
       <Route path="/" element={
         isAuthenticated && user
           ? <Navigate to={user?.role === 'distributor' ? '/distributor' : '/shop'} replace />
-          : <Navigate to="/login" replace />
+          : <LandingPage />
       } />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/confirm" element={<ConfirmProfilePage />} />
+      <Route path="/d/:code" element={<ShareLinkHandler />} />
 
       <Route path="/distributor" element={
         !isAuthenticated || !user

@@ -1,5 +1,5 @@
-﻿﻿import { useMemo, useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+﻿import { useMemo, useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Link2, CheckCircle, Clock, XCircle, Search, MapPin, Tag, Phone, Repeat, Bell } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -14,7 +14,8 @@ export function ConnectionPage() {
   const { connections, distributorProfiles, shopkeeperProfiles, requestConnection, toggleConnectionAutoOrder, notifications } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
-  const [code, setCode] = useState('');
+  const [searchParams] = useSearchParams();
+  const [code, setCode] = useState(searchParams.get('code')?.toUpperCase() || '');
   const [loading, setLoading] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchCity, setSearchCity] = useState('');
@@ -39,6 +40,12 @@ export function ConnectionPage() {
     }
     lastNotifCount.current = myUnreadNotifications.length;
   }, [myUnreadNotifications.length, audioRef]);
+
+  useEffect(() => {
+    if (searchParams.get('code')) {
+      show('Code applied! Click "Send Connection Request" to connect.', 'info');
+    }
+  }, [searchParams, show]);
 
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
 

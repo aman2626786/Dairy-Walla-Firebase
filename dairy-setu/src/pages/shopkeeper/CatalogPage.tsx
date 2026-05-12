@@ -1,10 +1,12 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Clock, AlertTriangle, Plus, Minus, Search } from 'lucide-react';
+import { ShoppingCart, Clock, AlertTriangle, Plus, Minus, Search, Repeat } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
+import { useToast } from '../../components/ui/Toast';
+import { useTranslation } from '../../utils/i18n';
 import {
   businessLineLabel,
   getAllowedBusinessLines,
@@ -86,8 +88,11 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
 
 export function ShopCatalogPage() {
   const { user } = useAuthStore();
-  const { products, connections, distributorProfiles, shopkeeperProfiles, cart, setCartQuantity, fetchProducts } = useAppStore();
+  const { products, connections, distributorProfiles, shopkeeperProfiles, cart, setCartQuantity, clearCart, fetchProducts, orders, fetchOrders, placeOrder } = useAppStore();
   const navigate = useNavigate();
+  const { show } = useToast();
+  const { t } = useTranslation();
+  const [loadingDistributor, setLoadingDistributor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState<ProductCategory | 'all'>('all');
 
@@ -100,11 +105,39 @@ export function ShopCatalogPage() {
 
   useEffect(() => {
     if (activeConnections.length === 0) return;
+    if (shopProfile) {
+      void fetchOrders(shopProfile.id, 'shopkeeper');
+    }
     const distributorIds = [...new Set(activeConnections.map(c => c.distributorId))];
     distributorIds.forEach(id => {
       void fetchProducts(id);
     });
-  }, [activeConnections, fetchProducts]);
+  }, [activeConnections, fetchProducts, fetchOrders, shopProfile]);
+
+  const handleRepeatOrder = async (distributorId: string, lastOrder: any, isLate: boolean) => {
+    if (!shopProfile) return;
+    setLoadingDistributor(distributorId);
+    try {
+      const availableGroupProducts = products.filter(p => p.distributorId === distributorId && p.available);
+      const cartItems: any[] = [];
+      lastOrder.items.forEach((item: any) => {
+        const product = availableGroupProducts.find(p => p.id === item.productId);
+        if (product) cartItems.push({ product, quantity: item.quantity });
+      });
+      if (cartItems.length === 0) {
+        show('Products from previous order are not available', 'error');
+        return;
+      }
+      const businessLine = cartItems[0] ? inferBusinessLineFromCategory(String(cartItems[0].product.category || 'other'), cartItems[0].product.businessLine) : 'dairy';
+      await placeOrder(shopProfile.id, shopProfile.ownerName, shopProfile.shopName, distributorId, cartItems, isLate, businessLine);
+      show('Order placed automatically!', 'success');
+      navigate('/shop/history');
+    } catch (e) {
+      show('Failed to auto-place order', 'error');
+    } finally {
+      setLoadingDistributor(null);
+    }
+  };
 
   const now = new Date();
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -188,9 +221,9 @@ export function ShopCatalogPage() {
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      <MobileHeader title="Order Now" subtitle={shopProfile?.shopName || 'Connected distributors'} />
+      <MobileHeader title={t('Order Now')} subtitle={shopProfile?.shopName || 'Connected distributors'} />
       <div className="hidden md:block mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Order Now</h1>
+        <h1 className="text-xl font-bold text-gray-900">{t('Order Now')}</h1>
         <p className="text-sm text-gray-500">{shopProfile?.shopName || 'Connected distributors'}</p>
       </div>
 
@@ -198,7 +231,7 @@ export function ShopCatalogPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
           className="input pl-9"
-          placeholder="Search products..."
+          placeholder={t('Search products...')}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -273,6 +306,59 @@ export function ShopCatalogPage() {
                   </div>
                 </div>
               )}
+
+              {(() => {
+                const lastOrder = orders.find(o => o.distributorId === group.conn.distributorId && o.status !== 'rejected');
+                if (lastOrder && lastOrder.items.length > 0) {
+                  return (
+                    <div className="mb-4 bg-gradient-to-r from-brand-50 to-brand-100 rounded-xl p-4 border border-brand-200 shadow-sm">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Repeat className="w-5 h-5 text-brand-600" />
+                          <h3 className="font-bold text-brand-900 text-sm">{t('Smart Suggestion')}</h3>
+                        </div>
+                      </div>
+                      <p className="text-xs text-brand-800 mb-3 font-medium">
+                        {t('Aaj bhi kal wala order laga du?')} ({lastOrder.items.length} {t('Items')}, {t('Total')}: Rs {lastOrder.total})
+                      </p>
+                      <div className="flex gap-2">
+                        <button 
+                          className="btn-primary text-xs py-2 px-3 flex-1 shadow-sm"
+                          onClick={() => handleRepeatOrder(group.conn.distributorId, lastOrder, group.isLate)}
+                          disabled={loadingDistributor === group.conn.distributorId}
+                        >
+                          {loadingDistributor === group.conn.distributorId ? 'Placing...' : t('One-Click Confirm')}
+                        </button>
+                        <button 
+                          className="btn-secondary text-xs py-2 px-3 flex-1 shadow-sm bg-white"
+                          onClick={() => {
+                            clearCart();
+                            const availableGroupProducts = products.filter(p => p.distributorId === group.conn.distributorId && p.available);
+                            let itemsAdded = 0;
+                            lastOrder.items.forEach((item: any) => {
+                              const product = availableGroupProducts.find(p => p.id === item.productId);
+                              if (product) {
+                                setCartQuantity(product, item.quantity);
+                                itemsAdded++;
+                              }
+                            });
+                            if (itemsAdded === 0) {
+                              show('Products from previous order are not available', 'error');
+                              return;
+                            }
+                            show('Cart updated with previous order. Please review and confirm.', 'info');
+                            navigate('/shop/review');
+                          }}
+                          disabled={loadingDistributor === group.conn.distributorId}
+                        >
+                          {t('Review & Edit')}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {group.items.length === 0 ? (
                 <div className="text-sm text-gray-500 py-3">No products for this distributor.</div>
@@ -362,9 +448,9 @@ export function ShopCatalogPage() {
           >
             <div className="flex items-center gap-2">
               <ShoppingCart className="w-4 h-4" />
-              <span>{cartCount} items</span>
+              <span>{cartCount} {t('Items')}</span>
             </div>
-            <span>Review Order {'->'}</span>
+            <span>{t('Review Order')} {'->'}</span>
             <span className="font-bold">Rs {cartTotal.toLocaleString()}</span>
           </button>
         </div>

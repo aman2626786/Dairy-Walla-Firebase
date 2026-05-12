@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle } from 'lucide-react';
+import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle, Share2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -396,10 +396,25 @@ export function DashboardPage() {
       />
       {/* Header — desktop only */}
       <div className="hidden md:block mb-6">
+        <div className="flex justify-between items-start">
+          <div>
         <h1 className="text-xl font-bold text-gray-900">Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {user?.name?.split(' ')[0]} 👋</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {profile?.businessName} · Order window: {profile?.orderWindowStart} – {profile?.orderWindowCutoff}
         </p>
+          </div>
+          <button className="btn-secondary text-sm py-2 px-4 flex items-center gap-2" onClick={() => {
+            const link = `${window.location.origin}/d/${profile?.connectionCode}`;
+            if (navigator.share) {
+              navigator.share({ title: 'Connect with me', text: `Connect with ${profile?.businessName} on DairyWalla:`, url: link }).catch(() => {});
+            } else {
+              navigator.clipboard.writeText(link);
+              show('Share link copied to clipboard!');
+            }
+          }}>
+            <Share2 className="w-4 h-4 text-brand-600" /> Share Profile Link
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

@@ -7,11 +7,13 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { hasUnreadForPage } from '../../utils/notificationRouting';
 import { BrandLogo } from '../ui/BrandLogo';
+import { useTranslation } from '../../utils/i18n';
 
 export function Sidebar() {
   const { user, signOut } = useAuthStore();
   const { notifications } = useAppStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const unread = notifications.filter(n => n.userId === user?.id && !n.read).length;
 
@@ -21,20 +23,20 @@ export function Sidebar() {
   };
 
   const distributorLinks = [
-    { to: '/distributor', icon: <LayoutDashboard className="w-4 h-4" />, label: 'Dashboard', badge: undefined, showDot: false },
-    { to: '/distributor/orders', icon: <ClipboardList className="w-4 h-4" />, label: 'Orders', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'orders') },
-    { to: '/distributor/summary', icon: <BarChart3 className="w-4 h-4" />, label: 'Order Summary', badge: undefined, showDot: false },
-    { to: '/distributor/catalog', icon: <Package className="w-4 h-4" />, label: 'Catalog', badge: undefined, showDot: false },
-    { to: '/distributor/connections', icon: <Users className="w-4 h-4" />, label: 'Shopkeepers', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'connections') },
-    { to: '/distributor/invoices', icon: <FileText className="w-4 h-4" />, label: 'Invoices', badge: undefined, showDot: false },
-    { to: '/distributor/settings', icon: <Settings className="w-4 h-4" />, label: 'Settings', badge: undefined, showDot: false },
+    { to: '/distributor', icon: <LayoutDashboard className="w-4 h-4" />, label: t('Dashboard'), badge: undefined, showDot: false },
+    { to: '/distributor/orders', icon: <ClipboardList className="w-4 h-4" />, label: t('Orders'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'orders') },
+    { to: '/distributor/summary', icon: <BarChart3 className="w-4 h-4" />, label: t('Order Summary'), badge: undefined, showDot: false },
+    { to: '/distributor/catalog', icon: <Package className="w-4 h-4" />, label: t('Catalog'), badge: undefined, showDot: false },
+    { to: '/distributor/connections', icon: <Users className="w-4 h-4" />, label: t('Shopkeepers'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'connections') },
+    { to: '/distributor/invoices', icon: <FileText className="w-4 h-4" />, label: t('Invoices'), badge: undefined, showDot: false },
+    { to: '/distributor/settings', icon: <Settings className="w-4 h-4" />, label: t('Settings'), badge: undefined, showDot: false },
   ];
 
   const shopkeeperLinks = [
-    { to: '/shop', icon: <Store className="w-4 h-4" />, label: 'Order Now', badge: undefined, showDot: false },
-    { to: '/shop/discover', icon: <Search className="w-4 h-4" />, label: 'Discover', badge: 'New', showDot: false },
-    { to: '/shop/history', icon: <ClipboardList className="w-4 h-4" />, label: 'My Orders', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'history') },
-    { to: '/shop/connection', icon: <Users className="w-4 h-4" />, label: 'My Distributor', badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'myDistributor') },
+    { to: '/shop', icon: <Store className="w-4 h-4" />, label: t('Order Now'), badge: undefined, showDot: false },
+    { to: '/shop/discover', icon: <Search className="w-4 h-4" />, label: t('Discover'), badge: 'New', showDot: false },
+    { to: '/shop/history', icon: <ClipboardList className="w-4 h-4" />, label: t('My Orders'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'history') },
+    { to: '/shop/connection', icon: <Users className="w-4 h-4" />, label: t('My Distributor'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'myDistributor') },
   ];
 
   const links = user?.role === 'distributor' ? distributorLinks : shopkeeperLinks;
@@ -84,7 +86,7 @@ export function Sidebar() {
           className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
         >
           <Bell className="w-4 h-4" />
-          Notifications
+          {t('Notifications')}
           {unread > 0 && (
             <span className="ml-auto bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
               {unread > 9 ? '9+' : unread}
@@ -106,7 +108,7 @@ export function Sidebar() {
           <button
             onClick={e => { e.stopPropagation(); handleLogout(); }}
             className="text-gray-400 hover:text-red-500 transition-colors flex-shrink-0"
-            title="Logout"
+            title={t('Logout')}
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>

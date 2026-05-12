@@ -8,12 +8,14 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { hasUnreadForPage } from '../../utils/notificationRouting';
+import { useTranslation } from '../../utils/i18n';
 
 export function MobileNav() {
   const { user, signOut } = useAuthStore();
   const { notifications } = useAppStore();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { t } = useTranslation();
 
   const unread = notifications.filter(n => n.userId === user?.id && !n.read).length;
   const isDistributor = user?.role === 'distributor';
@@ -31,29 +33,29 @@ export function MobileNav() {
   // Primary tabs shown in bottom bar (max 4)
   const primaryTabs = isDistributor
     ? [
-        { to: '/distributor', icon: <LayoutDashboard className="w-5 h-5" />, label: 'Dashboard' },
-        { to: '/distributor/orders', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders', dot: hasOrdersDot },
-        { to: '/distributor/summary', icon: <BarChart3 className="w-5 h-5" />, label: 'Summary' },
-        { to: '/distributor/catalog', icon: <Package className="w-5 h-5" />, label: 'Catalog' },
+        { to: '/distributor', icon: <LayoutDashboard className="w-5 h-5" />, label: t('Dashboard') },
+        { to: '/distributor/orders', icon: <ClipboardList className="w-5 h-5" />, label: t('Orders'), dot: hasOrdersDot },
+        { to: '/distributor/summary', icon: <BarChart3 className="w-5 h-5" />, label: t('Order Summary') },
+        { to: '/distributor/catalog', icon: <Package className="w-5 h-5" />, label: t('Catalog') },
       ]
     : [
-        { to: '/shop', icon: <Store className="w-5 h-5" />, label: 'Order' },
-        { to: '/shop/discover', icon: <Search className="w-5 h-5" />, label: 'Discover', isNew: true },
-        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: 'Orders', dot: hasHistoryDot },
+        { to: '/shop', icon: <Store className="w-5 h-5" />, label: t('Order Now') },
+        { to: '/shop/discover', icon: <Search className="w-5 h-5" />, label: t('Discover'), isNew: true },
+        { to: '/shop/history', icon: <ClipboardList className="w-5 h-5" />, label: t('My Orders'), dot: hasHistoryDot },
       ];
 
   // Extra items shown in the "more" drawer
   const moreItems = isDistributor
     ? [
-        { to: '/distributor/connections', icon: <Users className="w-5 h-5" />, label: 'Shopkeepers', dot: hasConnectionsDot },
-        { to: '/distributor/invoices', icon: <FileText className="w-5 h-5" />, label: 'Invoices' },
-        { to: '/distributor/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
-        { to: '/distributor/settings', icon: <Settings className="w-5 h-5" />, label: 'Settings' },
+        { to: '/distributor/connections', icon: <Users className="w-5 h-5" />, label: t('Shopkeepers'), dot: hasConnectionsDot },
+        { to: '/distributor/invoices', icon: <FileText className="w-5 h-5" />, label: t('Invoices') },
+        { to: '/distributor/notifications', icon: <Bell className="w-5 h-5" />, label: t('Notifications'), badge: unread },
+        { to: '/distributor/settings', icon: <Settings className="w-5 h-5" />, label: t('Settings') },
         { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ]
     : [
-        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: 'My Distributor', dot: hasMyDistributorDot },
-        { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: 'Notifications', badge: unread },
+        { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: t('My Distributor'), dot: hasMyDistributorDot },
+        { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: t('Notifications'), badge: unread },
         { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
       ];
 
@@ -175,7 +177,7 @@ export function MobileNav() {
                 className="flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 w-full transition-colors"
               >
                 <LogOut className="w-5 h-5" />
-                <span className="text-sm font-medium">Logout</span>
+                <span className="text-sm font-medium">{t('Logout')}</span>
               </button>
             </div>
           </div>

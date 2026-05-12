@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Clock, Copy, Check } from 'lucide-react';
+import { Clock, Copy, Check, Share2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
+import { useTranslation, type AppLanguage } from '../../utils/i18n';
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
@@ -29,13 +29,12 @@ export function SettingsPage() {
   const { user } = useAuthStore();
   const { distributorProfiles, updateDistributorSettings } = useAppStore();
   const { show } = useToast();
+  const { t, language, setLanguage } = useTranslation();
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const [start, setStart] = useState(profile?.orderWindowStart || '18:00');
   const [cutoff, setCutoff] = useState(profile?.orderWindowCutoff || '20:00');
   const [copied, setCopied] = useState(false);
-  const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(() => getInvoiceLanguage());
-
   const handleSave = () => {
     if (!profile) return;
     updateDistributorSettings(profile.id, { orderWindowStart: start, orderWindowCutoff: cutoff });
@@ -51,9 +50,9 @@ export function SettingsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
-      <MobileHeader title="Settings" subtitle="Business preferences" />
+      <MobileHeader title={t('Settings')} subtitle="Business preferences" />
       <div className="hidden md:block mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-xl font-bold text-gray-900">{t('Settings')}</h1>
         <p className="text-sm text-gray-500 mt-0.5">Manage your business preferences</p>
       </div>
 
@@ -73,7 +72,18 @@ export function SettingsPage() {
                 {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Share this code with shopkeepers to connect</p>
+            <button className="btn-primary w-full mt-3 flex justify-center items-center gap-2" onClick={() => {
+              const link = `${window.location.origin}/d/${profile?.connectionCode}`;
+              if (navigator.share) {
+                navigator.share({ title: 'Connect with me', text: `Connect with ${profile?.businessName} on DairyWalla:`, url: link }).catch(() => {});
+              } else {
+                navigator.clipboard.writeText(link);
+                show('Share link copied to clipboard!');
+              }
+            }}>
+              <Share2 className="w-4 h-4" /> Share Profile Link
+            </button>
+            <p className="text-xs text-gray-400 mt-3 text-center">Share this code or link with shopkeepers to connect</p>
           </div>
         </div>
       </div>
@@ -121,15 +131,14 @@ export function SettingsPage() {
       </div>
 
       <div className="card p-5 mb-4">
-        <h2 className="font-semibold text-gray-900 text-sm mb-3">Invoice Language</h2>
-        <p className="text-xs text-gray-500 mb-3">Default bill language yahin se set karo.</p>
+        <h2 className="font-semibold text-gray-900 text-sm mb-3">{t('App Language')}</h2>
+        <p className="text-xs text-gray-500 mb-3">{t('Select your preferred language.')}</p>
         <select
-          value={invoiceLanguage}
+          value={language}
           onChange={e => {
-            const next = e.target.value as InvoiceLanguage;
-            setInvoiceLanguageState(next);
-            setInvoiceLanguage(next);
-            show('Invoice language updated');
+            const next = e.target.value as AppLanguage;
+            setLanguage(next);
+            show('Language updated for the app');
           }}
           className="input"
         >

@@ -8,6 +8,7 @@ import { getCurrentLocation, getCoordinatesFromLocation } from "../../utils/loca
 import { auth as firebaseAuth } from "../../lib/firebase";
 import { apiClient } from "../../lib/apiClient";
 import { BrandLogo } from "../../components/ui/BrandLogo";
+import { useTranslation, type AppLanguage } from "../../utils/i18n";
 import type { DistributorType, Role } from "../../types";
 
 type Step = "verifying" | "profile" | "done" | "error";
@@ -51,6 +52,7 @@ export function ConfirmProfilePage() {
         : "dairy";
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
+  const { t, language, setLanguage } = useTranslation();
 
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -196,7 +198,13 @@ export function ConfirmProfilePage() {
 
       setStep("done");
       setTimeout(() => {
-        navigate(p.role === "distributor" ? "/distributor" : "/shop");
+        const pendingConnect = localStorage.getItem('dairy-walla-pending-connect');
+        if (pendingConnect && p.role === 'shopkeeper') {
+           navigate(`/shop/connection?code=${pendingConnect}`);
+           localStorage.removeItem('dairy-walla-pending-connect');
+        } else {
+           navigate(p.role === "distributor" ? "/distributor" : "/shop");
+        }
       }, 1500);
     } catch (err) {
       let msg = "Profile save failed";
@@ -251,6 +259,21 @@ export function ConfirmProfilePage() {
               <div className="text-xs text-gray-500">Selected Role</div>
               <div className="font-semibold text-gray-900 capitalize">{role}</div>
             </div>
+
+            <div className="mb-5 bg-brand-50 p-4 rounded-xl border border-brand-100">
+              <label className="block text-sm font-semibold text-brand-900 mb-1.5">{t('App Language')}</label>
+              <select
+                value={language}
+                onChange={e => setLanguage(e.target.value as AppLanguage)}
+                className="w-full px-3 py-2.5 border border-brand-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+              >
+                <option value="hinglish">Hinglish (Default)</option>
+                <option value="english">English</option>
+                <option value="hindi">Hindi</option>
+              </select>
+              <p className="text-xs text-brand-700 mt-1">{t('Select your preferred language.')}</p>
+            </div>
+
             <h2 className="text-lg font-semibold text-gray-900 mb-4">{role === "distributor" ? "Business Details" : "Shop Details"}</h2>
             <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
               {role === "distributor" ? (

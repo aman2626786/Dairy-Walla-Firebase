@@ -73,7 +73,14 @@ export function LoginPage() {
 
       if (loginResult.user) {
         const u = loginResult.user;
-        navigate(u.role === "distributor" ? "/distributor" : "/shop");
+        const pendingConnect = localStorage.getItem('dairy-walla-pending-connect');
+        if (pendingConnect && u.role === 'shopkeeper') {
+           navigate(`/shop/connection?code=${pendingConnect}`);
+           localStorage.removeItem('dairy-walla-pending-connect');
+        } else {
+           navigate(u.role === "distributor" ? "/distributor" : "/shop");
+        }
+
         try {
           if (u.role === "distributor") {
             const dp = await fetchDistributorProfile(u.id);
