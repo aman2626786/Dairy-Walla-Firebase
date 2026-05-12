@@ -5,6 +5,18 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const app = express();
 
+async function ensurePaymentStatusColumn() {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid';
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE orders
+    SET payment_status = 'unpaid'
+    WHERE payment_status IS NULL;
+  `);
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -247,7 +259,7 @@ app.post('/api/orders', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const order = await prisma.order.create({
       data: {
-        shopkeeperId, shopkeeperName, shopName, distributorId, type: isLate ? 'late' : 'normal', status: isLate ? 'pending' : 'accepted', source: 'web', deliveryDate: new Date(today), total,
+        shopkeeperId, shopkeeperName, shopName, distributorId, type: isLate ? 'late' : 'normal', status: isLate ? 'pending' : 'accepted', paymentStatus: 'unpaid', source: 'web', deliveryDate: new Date(today), total,
         items: { create: items.map((i: any) => ({ productId: i.product.id, productName: i.product.name, brand: i.product.brand, unit: i.product.unit, unitPrice: i.product.price, quantity: i.quantity })) }
       },
       include: { items: true }
@@ -260,6 +272,23 @@ app.post('/api/orders', async (req, res) => {
 app.patch('/api/orders/:id', async (req, res) => {
   try { res.json(await prisma.order.update({ where: { id: req.params.id }, data: req.body })); } 
   catch (e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+app.patch('/api/orders/:id/payment-status', async (req, res) => {
+  try {
+    const { paymentStatus } = req.body;
+    if (paymentStatus !== 'paid' && paymentStatus !== 'unpaid') {
+      return res.status(400).json({ error: 'Invalid payment status' });
+    }
+    const updated = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { paymentStatus }
+    });
+    res.json(updated);
+  } catch (e) {
+    console.error('Payment status update error:', e);
+    return res.status(500).json({ error: 'Payment update failed' });
+  }
 });
 
 // Delivery Groups
@@ -312,7 +341,7 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
       const total = validItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * (item.quantity || 0), 0);
       await prisma.order.create({
         data: {
-          shopkeeperId: conn.shopkeeperId, shopkeeperName: conn.shopkeeperName, shopName: conn.shopName, distributorId: conn.distributorId, type: 'normal', status: 'pending', source: 'web', deliveryDate: today, total,
+          shopkeeperId: conn.shopkeeperId, shopkeeperName: conn.shopkeeperName, shopName: conn.shopName, distributorId: conn.distributorId, type: 'normal', status: 'pending', paymentStatus: 'unpaid', source: 'web', deliveryDate: today, total,
           items: { create: validItems.map(i => ({ productId: i.productId, productName: i.productName, brand: i.brand, unit: i.unit, unitPrice: i.unitPrice, quantity: i.quantity })) }
         }
       });
@@ -322,6 +351,17 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Backend API Server running on http://localhost:${PORT}`);
-});
+
+async function startServer() {
+  try {
+    app.listen(PORT, () => {
+      console.log(`Backend API Server running on http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
+

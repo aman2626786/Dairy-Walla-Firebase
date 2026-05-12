@@ -3,18 +3,18 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model Profile {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   email     String   @unique
   name      String?
   phone     String   @default("")
   pin       String?
   role      String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at")
 
   distributorProfile DistributorProfile?
   shopkeeperProfile  ShopkeeperProfile?
@@ -25,36 +25,36 @@ model Profile {
 }
 
 model DistributorProfile {
-  id                 String   @id @default(uuid()) @db.Uuid
-  userId             String   @unique @map("user_id") @db.Uuid
-  businessName       String   @map("business_name")
-  connectionCode     String   @unique @map("connection_code")
-  orderWindowStart   String?  @default("18:00") @map("order_window_start")
-  orderWindowCutoff  String?  @default("20:00") @map("order_window_cutoff")
-  ownerName          String?  @map("owner_name")
-  company            String?
-  address            String?
-  city               String?
-  deliveryAreas      String?  @map("delivery_areas")
-  gst                String?
-  locationName       String?  @map("location_name")
-  latitude           Float?
-  longitude          Float?
-  profileComplete    Boolean? @default(false) @map("profile_complete")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String   @unique @map("user_id") @db.ObjectId
+  businessName      String   @map("business_name")
+  connectionCode    String   @unique @map("connection_code")
+  orderWindowStart  String?  @default("18:00") @map("order_window_start")
+  orderWindowCutoff String?  @default("20:00") @map("order_window_cutoff")
+  ownerName         String?  @map("owner_name")
+  company           String?
+  address           String?
+  city              String?
+  deliveryAreas     String?  @map("delivery_areas")
+  gst               String?
+  locationName      String?  @map("location_name")
+  latitude          Float?
+  longitude         Float?
+  profileComplete   Boolean? @default(false) @map("profile_complete")
+  createdAt         DateTime @default(now()) @map("created_at")
 
-  user               Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connections        Connection[]
-  products           Product[]
-  deliveryGroups     DeliveryGroup[]
-  orders             Order[]
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connections    Connection[]
+  products       Product[]
+  deliveryGroups DeliveryGroup[]
+  orders         Order[]
 
   @@map("distributor_profiles")
 }
 
 model ShopkeeperProfile {
-  id              String   @id @default(uuid()) @db.Uuid
-  userId          String   @unique @map("user_id") @db.Uuid
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @unique @map("user_id") @db.ObjectId
   shopName        String   @map("shop_name")
   ownerName       String?  @map("owner_name")
   address         String?
@@ -64,136 +64,137 @@ model ShopkeeperProfile {
   latitude        Float?
   longitude       Float?
   profileComplete Boolean? @default(false) @map("profile_complete")
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdAt       DateTime @default(now()) @map("created_at")
 
-  user            Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  connections     Connection[]
-  orders          Order[]
+  user        Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connections Connection[]
+  orders      Order[]
 
   @@map("shopkeeper_profiles")
 }
 
 model Connection {
-  id                 String   @id @default(uuid()) @db.Uuid
-  shopkeeperId       String?  @map("shopkeeper_id") @db.Uuid
-  shopkeeperName     String?  @map("shopkeeper_name")
-  shopName           String?  @map("shop_name")
-  distributorId      String?  @map("distributor_id") @db.Uuid
-  distributorName    String?  @map("distributor_name")
-  businessName       String?  @map("business_name")
-  status             String?  @default("pending")
-  deliveryGroupId    String?  @map("delivery_group_id") @db.Uuid
-  deliveryGroupName  String?  @map("delivery_group_name")
-  shopkeeperPhone    String?  @map("shopkeeper_phone")
-  autoOrderEnabled   Boolean  @default(false) @map("auto_order_enabled")
-  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  shopkeeperId      String?  @map("shopkeeper_id") @db.ObjectId
+  shopkeeperName    String?  @map("shopkeeper_name")
+  shopName          String?  @map("shop_name")
+  distributorId     String?  @map("distributor_id") @db.ObjectId
+  distributorName   String?  @map("distributor_name")
+  businessName      String?  @map("business_name")
+  status            String?  @default("pending")
+  deliveryGroupId   String?  @map("delivery_group_id") @db.ObjectId
+  deliveryGroupName String?  @map("delivery_group_name")
+  shopkeeperPhone   String?  @map("shopkeeper_phone")
+  autoOrderEnabled  Boolean  @default(false) @map("auto_order_enabled")
+  createdAt         DateTime @default(now()) @map("created_at")
 
-  shopkeeper         ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
-  distributor        DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  shopkeeper  ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
+  distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
 
   @@map("connections")
 }
 
 model DeliveryGroup {
-  id             String   @id @default(uuid()) @db.Uuid
-  distributorId  String?  @map("distributor_id") @db.Uuid
-  name           String
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  distributorId String?  @map("distributor_id") @db.ObjectId
+  name          String
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  distributor    DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
 
   @@map("delivery_groups")
 }
 
 model Product {
-  id             String   @id @default(uuid()) @db.Uuid
-  distributorId  String?  @map("distributor_id") @db.Uuid
-  name           String
-  brand          String?
-  category       String   @default("other")
-  unit           String?
-  price          Decimal  @db.Decimal(10, 2)
-  available      Boolean? @default(true)
-  imageUrl       String?  @map("image_url")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  distributorId String?  @map("distributor_id") @db.ObjectId
+  name          String
+  brand         String?
+  category      String   @default("other")
+  unit          String?
+  price         Float
+  available     Boolean? @default(true)
+  imageUrl      String?  @map("image_url")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  distributor    DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
-  orderItems     OrderItem[]
+  distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  orderItems  OrderItem[]
 
   @@map("products")
 }
 
 model Order {
-  id                String   @id @default(uuid()) @db.Uuid
-  shopkeeperId      String?  @map("shopkeeper_id") @db.Uuid
-  shopkeeperName    String?  @map("shopkeeper_name")
-  shopName          String?  @map("shop_name")
-  distributorId     String?  @map("distributor_id") @db.Uuid
-  type              String?  @default("normal")
-  status            String?  @default("pending")
-  source            String?  @default("web")
-  deliveryDate      DateTime? @map("delivery_date") @db.Date
-  deliveryGroupName String?  @map("delivery_group_name")
-  total             Decimal? @default(0) @db.Decimal(10, 2)
-  placedAt          DateTime @default(now()) @map("placed_at") @db.Timestamptz
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  shopkeeperId      String?   @map("shopkeeper_id") @db.ObjectId
+  shopkeeperName    String?   @map("shopkeeper_name")
+  shopName          String?   @map("shop_name")
+  distributorId     String?   @map("distributor_id") @db.ObjectId
+  type              String?   @default("normal")
+  status            String?   @default("pending")
+  paymentStatus     String?   @default("unpaid") @map("payment_status")
+  source            String?   @default("web")
+  deliveryDate      DateTime? @map("delivery_date")
+  deliveryGroupName String?   @map("delivery_group_name")
+  total             Float?    @default(0)
+  placedAt          DateTime  @default(now()) @map("placed_at")
 
-  shopkeeper        ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
-  distributor       DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
-  items             OrderItem[]
-  invoice           Invoice?
+  shopkeeper  ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
+  distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  items       OrderItem[]
+  invoice     Invoice?
 
   @@map("orders")
 }
 
 model OrderItem {
-  id           String   @id @default(uuid()) @db.Uuid
-  orderId      String?  @map("order_id") @db.Uuid
-  productId    String?  @map("product_id") @db.Uuid
-  productName  String?  @map("product_name")
-  brand        String?
-  category     String?
-  unit         String?
-  unitPrice    Decimal? @map("unit_price") @db.Decimal(10, 2)
-  quantity     Int?
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  orderId     String? @map("order_id") @db.ObjectId
+  productId   String? @map("product_id") @db.ObjectId
+  productName String? @map("product_name")
+  brand       String?
+  category    String?
+  unit        String?
+  unitPrice   Float?  @map("unit_price")
+  quantity    Int?
 
-  order        Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product      Product? @relation(fields: [productId], references: [id])
+  order   Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
 
   @@map("order_items")
 }
 
 model Invoice {
-  id            String   @id @default(uuid()) @db.Uuid
-  orderId       String   @unique @map("order_id") @db.Uuid
-  outdated      Boolean? @default(false)
-  totalAmount   Decimal? @map("total_amount") @db.Decimal(10, 2)
-  generatedAt   DateTime @default(now()) @map("generated_at") @db.Timestamptz
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  orderId     String   @unique @map("order_id") @db.ObjectId
+  outdated    Boolean? @default(false)
+  totalAmount Float?   @map("total_amount")
+  generatedAt DateTime @default(now()) @map("generated_at")
 
-  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("invoices")
 }
 
 model Notification {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String?  @map("user_id") @db.Uuid
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String?  @map("user_id") @db.ObjectId
   type      String?
   message   String?
   read      Boolean? @default(false)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at")
 
-  user      Profile? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user Profile? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
 
 model UserRole {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
   role      String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at")
 
-  user      Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, role])
   @@map("user_roles")

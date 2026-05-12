@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import type {
   Connection, Product, Order, DeliveryGroup, Notification, CartItem,
-  ConnectionStatus, OrderStatus, DistributorProfile, ShopkeeperProfile
+  ConnectionStatus, OrderStatus, PaymentStatus, DistributorProfile, ShopkeeperProfile
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -51,6 +51,7 @@ interface AppState {
   // Order actions
   placeOrder: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorId: string, items: CartItem[], isLate: boolean) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  updateOrderPaymentStatus: (orderId: string, paymentStatus: PaymentStatus) => Promise<void>;
 
   // Delivery group actions
   addDeliveryGroup: (distributorId: string, name: string) => Promise<void>;
@@ -151,6 +152,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (data) {
         const parsedOrders = data.map((o: any) => ({
           ...o, total: Number(o.total),
+          paymentStatus: o.paymentStatus === 'paid' ? 'paid' : 'unpaid',
           items: o.items.map((i: any) => ({ ...i, unitPrice: Number(i.unitPrice) }))
         }));
         set({ orders: parsedOrders });
@@ -265,7 +267,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
       const { data } = await axios.post(`${API_URL}/orders`, { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, total });
-      set(state => ({ orders: [{...data.order, total: Number(data.order.total), items: data.order.items.map((i: any) => ({...i, unitPrice: Number(i.unitPrice)}))}, ...state.orders] }));
+      set(state => ({
+        orders: [{
+          ...data.order,
+          total: Number(data.order.total),
+          paymentStatus: data.order.paymentStatus === 'paid' ? 'paid' : 'unpaid',
+          items: data.order.items.map((i: any) => ({ ...i, unitPrice: Number(i.unitPrice) }))
+        }, ...state.orders]
+      }));
       if (data.distributorUserId) {
         await get().addNotification({ userId: data.distributorUserId, type: isLate ? 'late_order' : 'order_placed', message: isLate ? `Late order from ${shopName}` : `New order from ${shopName}`, read: false, createdAt: new Date().toISOString() });
       }
@@ -278,6 +287,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       await axios.patch(`${API_URL}/orders/${orderId}`, { status });
       set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o) }));
     } catch (e) { console.error(e); }
+  },
+
+  updateOrderPaymentStatus: async (orderId, paymentStatus) => {
+    const previous = get().orders.find(o => o.id === orderId)?.paymentStatus;
+    if (!previous) return;
+
+    // Optimistic update so user immediately sees status change
+    set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, paymentStatus } : o) }));
+
+    try {
+      let data: any;
+      try {
+        const response = await axios.patch(`${API_URL}/orders/${orderId}/payment-status`, { paymentStatus });
+        data = response.data;
+      } catch (primaryError) {
+        // Backward compatibility: older backend may not have dedicated endpoint
+        if (axios.isAxiosError(primaryError) && primaryError.response?.status === 404) {
+          const fallbackResponse = await axios.patch(`${API_URL}/orders/${orderId}`, { paymentStatus });
+          data = fallbackResponse.data;
+        } else {
+          throw primaryError;
+        }
+      }
+
+      const confirmedStatus: PaymentStatus = data?.paymentStatus === 'paid' ? 'paid' : 'unpaid';
+      set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, paymentStatus: confirmedStatus } : o) }));
+    } catch (e) {
+      console.error(e);
+      // Rollback if backend update fails
+      set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, paymentStatus: previous } : o) }));
+      throw e;
+    }
   },
 
   addDeliveryGroup: async (distributorId, name) => {

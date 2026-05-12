@@ -6,7 +6,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { useToast } from '../../components/ui/Toast';
 import { format, subDays } from 'date-fns';
-import type { OrderStatus } from '../../types';
+import type { OrderStatus, PaymentStatus } from '../../types';
 import type { ReactElement } from 'react';
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; icon: ReactElement }> = {
@@ -14,6 +14,11 @@ const statusConfig: Record<OrderStatus, { label: string; className: string; icon
   accepted: { label: 'Accepted', className: 'badge-green', icon: <CheckCircle className="w-3 h-3" /> },
   rejected: { label: 'Rejected', className: 'badge-red', icon: <XCircle className="w-3 h-3" /> },
   fulfilled: { label: 'Delivered', className: 'badge-blue', icon: <CheckCircle className="w-3 h-3" /> },
+};
+
+const paymentConfig: Record<PaymentStatus, { label: string; className: string }> = {
+  paid: { label: 'Payment Paid', className: 'badge-green' },
+  unpaid: { label: 'Payment Unpaid', className: 'badge-red' },
 };
 
 export function OrderHistoryPage() {
@@ -24,12 +29,14 @@ export function OrderHistoryPage() {
 
   const myOrders = orders.filter(o => o.shopkeeperName === user?.name);
 
-  // Find yesterday's last order
   const yesterday = subDays(new Date(), 1).toISOString().split('T')[0];
   const yesterdayOrder = myOrders.find(o => o.deliveryDate === yesterday && o.status !== 'rejected');
 
   const handleRepeatOrder = () => {
-    if (!yesterdayOrder) { show('Kal ka koi order nahi mila', 'error'); return; }
+    if (!yesterdayOrder) {
+      show('Kal ka koi order nahi mila', 'error');
+      return;
+    }
     clearCart();
     yesterdayOrder.items.forEach(item => {
       const product = products.find(p => p.id === item.productId);
@@ -49,7 +56,6 @@ export function OrderHistoryPage() {
         <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} orders</p>
       </div>
 
-      {/* Repeat yesterday's order */}
       {yesterdayOrder && (
         <button
           onClick={handleRepeatOrder}
@@ -61,7 +67,7 @@ export function OrderHistoryPage() {
           <div className="flex-1">
             <div className="font-semibold text-brand-800 text-sm">Kal ka Order Repeat Karo</div>
             <div className="text-xs text-brand-600 mt-0.5">
-              {yesterdayOrder.items.length} items · ₹{yesterdayOrder.total.toLocaleString()}
+              {yesterdayOrder.items.length} items - Rs {yesterdayOrder.total.toLocaleString()}
             </div>
           </div>
           <ShoppingCart className="w-4 h-4 text-brand-600" />
@@ -79,15 +85,18 @@ export function OrderHistoryPage() {
         <div className="space-y-3">
           {myOrders.map(order => {
             const config = statusConfig[order.status];
+            const payment = paymentConfig[order.paymentStatus];
+
             return (
               <div key={order.id} className="card p-4">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`${config.className} flex items-center gap-1`}>
                         {config.icon} {config.label}
                       </span>
-                      {order.type === 'late' && <span className="badge-yellow text-xs">⏰ Late</span>}
+                      <span className={payment.className}>{payment.label}</span>
+                      {order.type === 'late' && <span className="badge-yellow text-xs">Late</span>}
                       {order.source === 'whatsapp' && <span className="badge bg-green-100 text-green-700 text-xs">WhatsApp</span>}
                     </div>
                     <div className="text-xs text-gray-500">
@@ -95,7 +104,7 @@ export function OrderHistoryPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-gray-900">₹{order.total.toLocaleString()}</div>
+                    <div className="font-bold text-gray-900">Rs {order.total.toLocaleString()}</div>
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
                   </div>
                 </div>
@@ -103,7 +112,7 @@ export function OrderHistoryPage() {
                   {order.items.map(item => (
                     <div key={item.id} className="flex justify-between text-xs text-gray-600">
                       <span>{item.productName} <span className="text-gray-400">({item.brand})</span></span>
-                      <span>{item.quantity} × ₹{item.unitPrice}</span>
+                      <span>{item.quantity} x Rs {item.unitPrice}</span>
                     </div>
                   ))}
                 </div>

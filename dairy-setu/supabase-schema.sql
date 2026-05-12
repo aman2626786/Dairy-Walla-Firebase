@@ -130,6 +130,7 @@ model Order {
   distributorId     String?  @map("distributor_id") @db.Uuid
   type              String?  @default("normal")
   status            String?  @default("pending")
+  paymentStatus     String?  @default("unpaid") @map("payment_status")
   source            String?  @default("web")
   deliveryDate      DateTime? @map("delivery_date") @db.Date
   deliveryGroupName String?  @map("delivery_group_name")

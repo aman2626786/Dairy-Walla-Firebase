@@ -7,7 +7,7 @@ import { useAppStore } from '../../store/appStore';
 import { useAuthStore } from '../../store/authStore';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
-import type { Order } from '../../types';
+import type { Order, PaymentStatus } from '../../types';
 import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 
@@ -15,7 +15,7 @@ export function ShopkeeperProfilePage() {
   const { shopkeeperId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { connections, orders, shopkeeperProfiles, distributorProfiles, fetchShopkeeperProfileById } = useAppStore();
+  const { connections, orders, shopkeeperProfiles, distributorProfiles, fetchShopkeeperProfileById, updateOrderPaymentStatus } = useAppStore();
   const { show } = useToast();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -68,6 +68,19 @@ export function ShopkeeperProfilePage() {
 
   const canAccess = user?.role === 'distributor' && connection;
   const billableOrders = myOrdersForShopkeeper.filter(o => o.status === 'accepted' || o.status === 'fulfilled');
+  const paymentStyles: Record<PaymentStatus, string> = {
+    paid: 'badge-green',
+    unpaid: 'badge-red',
+  };
+
+  const handlePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
+    try {
+      await updateOrderPaymentStatus(orderId, paymentStatus);
+      show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'}`);
+    } catch {
+      show('Payment status save nahi hua. DB migration check karein.', 'error');
+    }
+  };
 
   const handleDownload = (order: Order) => {
     const distributor = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -227,11 +240,42 @@ export function ShopkeeperProfilePage() {
                   <div>
                     <div className="text-sm font-semibold text-gray-900">Order #{order.id.slice(0, 8)}</div>
                     <div className="text-xs text-gray-500 mt-1">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Status: {order.status} · Type: {order.type}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      Status: {order.status} - Type: {order.type}
+                      <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
+                        {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                      </span>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold text-gray-900">Rs {order.total.toLocaleString()}</div>
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
+                    {order.status !== 'rejected' && (
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button
+                          onClick={() => handlePaymentStatus(order.id, 'paid')}
+                          disabled={order.paymentStatus === 'paid'}
+                          className={`py-1 px-2.5 text-xs rounded-lg border ${
+                            order.paymentStatus === 'paid'
+                              ? 'bg-green-100 border-green-300 text-green-700 cursor-not-allowed'
+                              : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                          }`}
+                        >
+                          Paid
+                        </button>
+                        <button
+                          onClick={() => handlePaymentStatus(order.id, 'unpaid')}
+                          disabled={order.paymentStatus === 'unpaid'}
+                          className={`py-1 px-2.5 text-xs rounded-lg border ${
+                            order.paymentStatus === 'unpaid'
+                              ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
+                              : 'bg-white border-red-200 text-red-700 hover:bg-red-50'
+                          }`}
+                        >
+                          Unpaid
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

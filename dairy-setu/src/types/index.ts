@@ -5,6 +5,7 @@ export type ConnectionStatus = 'pending' | 'active' | 'rejected';
 export type OrderType = 'normal' | 'late';
 
 export type OrderStatus = 'pending' | 'accepted' | 'rejected' | 'fulfilled';
+export type PaymentStatus = 'paid' | 'unpaid';
 
 export type KnownProductCategory = 'milk' | 'paneer' | 'curd' | 'butter' | 'ghee' | 'other';
 export type ProductCategory = KnownProductCategory | (string & {});
@@ -111,6 +112,7 @@ export interface Order {
   distributorId: string;
   type: OrderType;
   status: OrderStatus;
+  paymentStatus: PaymentStatus;
   source: 'web' | 'whatsapp';
   placedAt: string;
   deliveryDate: string;

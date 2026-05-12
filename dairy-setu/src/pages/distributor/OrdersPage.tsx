@@ -6,7 +6,7 @@ import { useToast } from '../../components/ui/Toast';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
-import type { Order, OrderStatus } from '../../types';
+import type { Order, OrderStatus, PaymentStatus } from '../../types';
 
 const statusColors: Record<OrderStatus, string> = {
   pending: 'badge-yellow',
@@ -22,12 +22,23 @@ const statusLabels: Record<OrderStatus, string> = {
   fulfilled: 'Fulfilled',
 };
 
+const paymentLabels: Record<PaymentStatus, string> = {
+  paid: 'Payment Paid',
+  unpaid: 'Payment Unpaid',
+};
+
+const paymentColors: Record<PaymentStatus, string> = {
+  paid: 'badge-green',
+  unpaid: 'badge-red',
+};
+
 export function OrdersPage() {
   const { user } = useAuthStore();
-  const { orders, distributorProfiles, updateOrderStatus, addNotification } = useAppStore();
+  const { orders, distributorProfiles, updateOrderStatus, updateOrderPaymentStatus, addNotification } = useAppStore();
   const { show } = useToast();
   const [filter, setFilter] = useState<'all' | 'normal' | 'late'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -36,6 +47,7 @@ export function OrdersPage() {
   const filtered = myOrders.filter(o => {
     if (filter !== 'all' && o.type !== filter) return false;
     if (statusFilter !== 'all' && o.status !== statusFilter) return false;
+    if (paymentFilter !== 'all' && o.paymentStatus !== paymentFilter) return false;
     return true;
   });
 
@@ -44,7 +56,7 @@ export function OrdersPage() {
     addNotification({
       userId: order.shopkeeperId,
       type: 'order_accepted',
-      message: `Your late order has been accepted`,
+      message: 'Your late order has been accepted',
       read: false,
       createdAt: new Date().toISOString(),
     });
@@ -56,11 +68,20 @@ export function OrdersPage() {
     addNotification({
       userId: order.shopkeeperId,
       type: 'order_rejected',
-      message: `Your late order was not accepted`,
+      message: 'Your late order was not accepted',
       read: false,
       createdAt: new Date().toISOString(),
     });
-    show(`Order rejected`, 'error');
+    show('Order rejected', 'error');
+  };
+
+  const handlePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
+    try {
+      await updateOrderPaymentStatus(order.id, paymentStatus);
+      show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'} for ${order.shopName}`);
+    } catch {
+      show('Payment status save nahi hua. DB migration check karein.', 'error');
+    }
   };
 
   return (
@@ -71,7 +92,6 @@ export function OrdersPage() {
         <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} total orders</p>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-5">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
           {(['all', 'normal', 'late'] as const).map(f => (
@@ -99,6 +119,19 @@ export function OrdersPage() {
             </button>
           ))}
         </div>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(['all', 'paid', 'unpaid'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setPaymentFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
+                paymentFilter === f ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f === 'all' ? 'All Payments' : f === 'paid' ? 'Paid' : 'Unpaid'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -116,17 +149,18 @@ export function OrdersPage() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-semibold text-gray-900 text-sm">{order.shopName}</span>
                     <span className={statusColors[order.status]}>{statusLabels[order.status]}</span>
+                    <span className={paymentColors[order.paymentStatus]}>{paymentLabels[order.paymentStatus]}</span>
                     <span className={order.type === 'late' ? 'badge-yellow' : 'badge-green'}>
-                      {order.type === 'late' ? '⏰ Late' : '✓ Normal'}
+                      {order.type === 'late' ? 'Late' : 'Normal'}
                     </span>
                     {order.source === 'whatsapp' && <span className="badge bg-green-100 text-green-700">WhatsApp</span>}
                   </div>
                   <div className="text-xs text-gray-500 mb-2">
-                    {order.shopkeeperName} · {format(new Date(order.placedAt), 'dd MMM, h:mm a')}
-                    {order.deliveryGroupName && ` · ${order.deliveryGroupName}`}
+                    {order.shopkeeperName} - {format(new Date(order.placedAt), 'dd MMM, h:mm a')}
+                    {order.deliveryGroupName && ` - ${order.deliveryGroupName}`}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-gray-900">Rs {order.total.toLocaleString()}</span>
                     <span className="text-xs text-gray-500">{order.items.length} items</span>
                   </div>
                 </div>
@@ -138,6 +172,32 @@ export function OrdersPage() {
                       </button>
                       <button onClick={() => handleReject(order)} className="btn-danger py-1.5 px-3 text-xs">
                         <XCircle className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  )}
+                  {order.status !== 'rejected' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handlePaymentStatus(order, 'paid')}
+                        disabled={order.paymentStatus === 'paid'}
+                        className={`py-1.5 px-3 text-xs rounded-lg border transition-colors ${
+                          order.paymentStatus === 'paid'
+                            ? 'bg-green-100 border-green-300 text-green-700 cursor-not-allowed'
+                            : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                        }`}
+                      >
+                        Mark Paid
+                      </button>
+                      <button
+                        onClick={() => handlePaymentStatus(order, 'unpaid')}
+                        disabled={order.paymentStatus === 'unpaid'}
+                        className={`py-1.5 px-3 text-xs rounded-lg border transition-colors ${
+                          order.paymentStatus === 'unpaid'
+                            ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
+                            : 'bg-white border-red-200 text-red-700 hover:bg-red-50'
+                        }`}
+                      >
+                        Mark Unpaid
                       </button>
                     </div>
                   )}
@@ -165,15 +225,15 @@ export function OrdersPage() {
                         <tr key={item.id}>
                           <td className="py-1.5 text-gray-700">{item.productName} <span className="text-gray-400">({item.brand})</span></td>
                           <td className="py-1.5 text-right text-gray-700">{item.quantity} {item.unit}</td>
-                          <td className="py-1.5 text-right text-gray-700">₹{item.unitPrice}</td>
-                          <td className="py-1.5 text-right font-semibold text-gray-900">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
+                          <td className="py-1.5 text-right text-gray-700">Rs {item.unitPrice}</td>
+                          <td className="py-1.5 text-right font-semibold text-gray-900">Rs {(item.quantity * item.unitPrice).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr className="border-t border-gray-200">
                         <td colSpan={3} className="pt-2 text-right font-semibold text-gray-700">Total</td>
-                        <td className="pt-2 text-right font-bold text-gray-900">₹{order.total.toLocaleString()}</td>
+                        <td className="pt-2 text-right font-bold text-gray-900">Rs {order.total.toLocaleString()}</td>
                       </tr>
                     </tfoot>
                   </table>
