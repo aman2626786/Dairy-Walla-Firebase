@@ -1,26 +1,16 @@
-import { useEffect } from 'react';
+﻿import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, Tag, Package, Send, CheckCircle, Phone } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { formatDistance } from '../../utils/location';
-import type { KnownProductCategory, ProductCategory } from '../../types';
-
-const knownCategoryEmoji: Record<KnownProductCategory, string> = {
-  milk: '🥛',
-  paneer: '🧀',
-  curd: '🍶',
-  butter: '🧈',
-  ghee: '🫙',
-  other: '📦',
-};
+import { businessLineLabel, getCategoryEmoji, getProductQuantityText, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
+import type { ProductCategory } from '../../types';
 
 const normalizeCategory = (value: string): ProductCategory =>
   (value.trim().toLowerCase().replace(/\s+/g, ' ') || 'other') as ProductCategory;
 
-const getCategoryEmoji = (category: string): string =>
-  knownCategoryEmoji[normalizeCategory(category) as KnownProductCategory] || '📦';
 
 export function DistributorProfilePage() {
   const { distributorId } = useParams();
@@ -36,8 +26,14 @@ export function DistributorProfilePage() {
     distributor as unknown as { phone?: string; contactPhone?: string } | undefined
   )?.contactPhone || '';
   const telPhone = distributorPhone.replace(/[^\d+]/g, '');
+  const distributorType = toDistributorType(distributor?.distributorType);
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
-  const distributorProducts = products.filter(p => p.distributorId === distributorId && p.available);
+  const distributorProducts = products
+    .filter(p => p.distributorId === distributorId && p.available)
+    .map(product => ({
+      ...product,
+      businessLine: inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine),
+    }));
 
   useEffect(() => {
     if (distributorId) {
@@ -93,6 +89,8 @@ export function DistributorProfilePage() {
     acc[category].push(product);
     return acc;
   }, {} as Record<string, typeof distributorProducts>);
+  const dairyProducts = distributorProducts.filter(p => p.businessLine === 'dairy');
+  const iceCreamProducts = distributorProducts.filter(p => p.businessLine === 'icecream');
 
   if (!distributor) {
     return (
@@ -128,6 +126,9 @@ export function DistributorProfilePage() {
               <h2 className="text-xl font-bold text-gray-900 mb-1">{distributor.businessName}</h2>
               <p className="text-sm text-gray-600 mb-2">{distributor.ownerName}</p>
               <div className="flex flex-wrap gap-2">
+                <span className="badge bg-emerald-100 text-emerald-700">
+                  {distributorType === 'dual' ? 'Dairy + Ice Cream' : distributorType === 'icecream' ? 'Ice Cream Distributor' : 'Dairy Distributor'}
+                </span>
                 {distributor.company && (
                   <span className="badge bg-purple-100 text-purple-700 flex items-center gap-1">
                     <Tag className="w-3 h-3" />
@@ -221,6 +222,51 @@ export function DistributorProfilePage() {
               <Package className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500 text-sm">No products available</p>
             </div>
+          ) : distributorType === 'dual' ? (
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">{businessLineLabel('dairy')}</h4>
+                {dairyProducts.length === 0 ? (
+                  <div className="text-xs text-gray-500">No dairy products available.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {dairyProducts.map(product => (
+                      <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
+                        </div>
+                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">{businessLineLabel('icecream')}</h4>
+                {iceCreamProducts.length === 0 ? (
+                  <div className="text-xs text-gray-500">No ice cream products available.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {iceCreamProducts.map(product => (
+                      <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
+                        </div>
+                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="space-y-6">
               {Object.entries(productsByCategory).map(([category, items]) => (
@@ -233,18 +279,14 @@ export function DistributorProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {items.map(product => (
                       <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                        {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                            <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
-                          </div>
-                        )}
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
+                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
-                          <div className="text-xs text-gray-500">{product.brand} · {product.unit}</div>
+                          <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
                         </div>
-                        <div className="font-bold text-gray-900 flex-shrink-0">₹{product.price}</div>
+                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
                       </div>
                     ))}
                   </div>
@@ -255,11 +297,11 @@ export function DistributorProfilePage() {
         </div>
 
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-          <p className="text-xs text-blue-700 font-medium mb-1">💡 Next Steps</p>
+          <p className="text-xs text-blue-700 font-medium mb-1">ðŸ’¡ Next Steps</p>
           <ul className="text-xs text-blue-600 space-y-1">
-            <li>• Send connection request to start ordering</li>
-            <li>• Wait for distributor approval</li>
-            <li>• Once approved, you can place daily orders</li>
+            <li>â€¢ Send connection request to start ordering</li>
+            <li>â€¢ Wait for distributor approval</li>
+            <li>â€¢ Once approved, you can place daily orders</li>
           </ul>
         </div>
       </div>

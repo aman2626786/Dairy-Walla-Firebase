@@ -29,21 +29,71 @@ import { useAppStore } from './store/appStore';
 
 const queryClient = new QueryClient();
 
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext() {
+  if (typeof window === 'undefined' || !window.AudioContext) return null;
+  if (!sharedAudioContext) {
+    sharedAudioContext = new window.AudioContext();
+  }
+  return sharedAudioContext;
+}
+
+async function ensureNotificationPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'denied' as NotificationPermission;
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+    return Notification.permission;
+  }
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return Notification.permission;
+  }
+}
+
 function playNotificationTune() {
-  if (typeof window === 'undefined' || !window.AudioContext) return;
-  const audioContext = new window.AudioContext();
-  const oscillator = audioContext.createOscillator();
+  const audioContext = getAudioContext();
+  if (!audioContext) return;
+
+  if (audioContext.state === 'suspended') {
+    void audioContext.resume().catch(() => undefined);
+  }
+
   const gain = audioContext.createGain();
-  oscillator.type = 'sine';
-  oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
   gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.1, audioContext.currentTime + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.35);
-  oscillator.connect(gain);
+  gain.gain.exponentialRampToValueAtTime(0.12, audioContext.currentTime + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.45);
   gain.connect(audioContext.destination);
-  oscillator.start();
-  oscillator.stop(audioContext.currentTime + 0.35);
-  oscillator.onended = () => void audioContext.close();
+
+  const tone1 = audioContext.createOscillator();
+  tone1.type = 'sine';
+  tone1.frequency.setValueAtTime(880, audioContext.currentTime);
+  tone1.connect(gain);
+  tone1.start();
+  tone1.stop(audioContext.currentTime + 0.18);
+
+  const tone2 = audioContext.createOscillator();
+  tone2.type = 'sine';
+  tone2.frequency.setValueAtTime(1046.5, audioContext.currentTime + 0.18);
+  tone2.connect(gain);
+  tone2.start(audioContext.currentTime + 0.18);
+  tone2.stop(audioContext.currentTime + 0.42);
+}
+
+function showSystemNotification(message: string, id: string) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const notification = new Notification('Dairy Walla Alert', {
+    body: message || 'You have a new update',
+    tag: id,
+    icon: '/dairy-walla-logo.webp',
+    badge: '/dairy-walla-logo.webp',
+  });
+  notification.onclick = () => {
+    window.focus();
+    notification.close();
+  };
 }
 
 function AppWithAuth() {
@@ -135,43 +185,42 @@ function AppWithAuth() {
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
-    if ('Notification' in window && Notification.permission === 'default') {
-      void Notification.requestPermission();
-    }
+    const requestOnIntent = () => {
+      void ensureNotificationPermission();
+    };
+    window.addEventListener('pointerdown', requestOnIntent, { once: true });
+    window.addEventListener('keydown', requestOnIntent, { once: true });
+    void ensureNotificationPermission();
 
     const knownIds = new Set(useAppStore.getState().notifications.map(n => n.id));
 
-    // Poll notifications every 10 seconds since Supabase real-time is removed
-    const intervalId = setInterval(async () => {
+    const pollNotifications = async () => {
       await fetchNotifications(user.id);
       const currentNotifs = useAppStore.getState().notifications;
-      
-      currentNotifs.forEach(incoming => {
-        if (!knownIds.has(incoming.id)) {
-          knownIds.add(incoming.id);
-          playNotificationTune();
-          if ('Notification' in window && Notification.permission === 'granted') {
-            const notification = new Notification('Dairy Walla Alert', {
-              body: incoming.message,
-              tag: incoming.id,
-            });
-            notification.onclick = () => {
-              window.focus();
-              notification.close();
-            };
-          }
-        }
-      });
-    }, 10000);
+
+      const fresh = currentNotifs.filter(incoming => !knownIds.has(incoming.id));
+      if (fresh.length === 0) return;
+
+      fresh.forEach(incoming => knownIds.add(incoming.id));
+      playNotificationTune();
+      fresh.forEach(incoming => showSystemNotification(incoming.message, incoming.id));
+    };
+
+    void pollNotifications();
+    // Poll notifications every 10 seconds since Supabase real-time is removed
+    const intervalId = setInterval(pollNotifications, 10000);
 
     return () => {
       clearInterval(intervalId);
+      window.removeEventListener('pointerdown', requestOnIntent);
+      window.removeEventListener('keydown', requestOnIntent);
     };
   }, [isAuthenticated, user?.id]);
 
   if (!ready) {
     return (
       <Routes>
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmProfilePage />} />
         <Route path="*" element={<LoginPage />} />
       </Routes>
@@ -181,7 +230,7 @@ function AppWithAuth() {
   return (
     <Routes>
       <Route path="/" element={
-        isAuthenticated
+        isAuthenticated && user
           ? <Navigate to={user?.role === 'distributor' ? '/distributor' : '/shop'} replace />
           : <Navigate to="/login" replace />
       } />
@@ -190,7 +239,7 @@ function AppWithAuth() {
       <Route path="/confirm" element={<ConfirmProfilePage />} />
 
       <Route path="/distributor" element={
-        !isAuthenticated
+        !isAuthenticated || !user
           ? <Navigate to="/login" replace />
           : user?.role !== 'distributor'
             ? <Navigate to="/shop" replace />
@@ -209,7 +258,7 @@ function AppWithAuth() {
       </Route>
 
       <Route path="/shop" element={
-        !isAuthenticated
+        !isAuthenticated || !user
           ? <Navigate to="/login" replace />
           : user?.role !== 'shopkeeper'
             ? <Navigate to="/distributor" replace />

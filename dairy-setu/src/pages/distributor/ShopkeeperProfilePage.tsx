@@ -8,6 +8,7 @@ import { useAuthStore } from '../../store/authStore';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import type { Order, PaymentStatus } from '../../types';
+import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
 import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 
@@ -68,39 +69,55 @@ export function ShopkeeperProfilePage() {
 
   const canAccess = user?.role === 'distributor' && connection;
   const billableOrders = myOrdersForShopkeeper.filter(o => o.status === 'accepted' || o.status === 'fulfilled');
+  const distributorProfile = distributorProfiles.find(dp => dp.userId === user?.id);
+  const distributorType = toDistributorType(distributorProfile?.distributorType);
+  const dairyBillableOrders = billableOrders.filter(
+    order => inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine) === 'dairy'
+  );
+  const iceCreamBillableOrders = billableOrders.filter(
+    order => inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine) === 'icecream'
+  );
   const paymentStyles: Record<PaymentStatus, string> = {
     paid: 'badge-green',
     unpaid: 'badge-red',
   };
 
-  const handlePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
+  const handlePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
+    if (order.paymentStatus === 'paid' && paymentStatus === 'unpaid') {
+      show('Payment once paid cannot be marked unpaid again.', 'error');
+      return;
+    }
     try {
-      await updateOrderPaymentStatus(orderId, paymentStatus);
+      await updateOrderPaymentStatus(order.id, paymentStatus);
       show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'}`);
     } catch {
       show('Payment status save nahi hua. DB migration check karein.', 'error');
     }
   };
 
-  const handleDownload = (order: Order) => {
+  const handleDownload = async (order: Order) => {
     const distributor = distributorProfiles.find(dp => dp.userId === user?.id);
     if (!distributor) {
       show('Distributor profile missing. Please complete profile first.', 'error');
       return;
     }
-    const shopkeeperPhone = (shopkeeper as unknown as { phone?: string } | undefined)?.phone;
-    const shopkeeperEmail = (shopkeeper as unknown as { email?: string } | undefined)?.email;
-    downloadInvoicePdf({
-      order,
-      distributor,
-      shopkeeper,
-      distributorPhone: user?.phone,
-      distributorEmail: user?.email,
-      shopkeeperPhone,
-      shopkeeperEmail,
-      language: invoiceLanguage,
-    });
-    show('Invoice PDF downloaded');
+    try {
+      const shopkeeperPhone = shopkeeper?.phone || connection?.shopkeeperPhone;
+      const shopkeeperEmail = shopkeeper?.email;
+      await downloadInvoicePdf({
+        order,
+        distributor,
+        shopkeeper,
+        distributorPhone: distributor.phone || user?.phone,
+        distributorEmail: distributor.email || user?.email,
+        shopkeeperPhone,
+        shopkeeperEmail,
+        language: invoiceLanguage,
+      });
+      show('Invoice PDF downloaded');
+    } catch {
+      show('Invoice generate nahi hua. Please retry.', 'error');
+    }
   };
 
   const handleShare = (order: Order) => {
@@ -205,6 +222,55 @@ export function ShopkeeperProfilePage() {
         </div>
         {billableOrders.length === 0 ? (
           <p className="text-sm text-gray-500">Accepted/Fulfilled orders aane par yahan se bill generate hoga.</p>
+        ) : distributorType === 'dual' ? (
+          <div className="space-y-4">
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-2">Dairy Product Bills</div>
+              {dairyBillableOrders.length === 0 ? (
+                <div className="text-xs text-gray-500">No dairy bills yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {dairyBillableOrders.map(order => (
+                    <div key={order.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">Order #{order.id.slice(0, 8)}</div>
+                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · Rs {order.total.toLocaleString()}</div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedInvoiceOrder(order)}
+                        className="btn-primary py-1.5 px-3 text-xs"
+                      >
+                        Generate Bill
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-700 mb-2">Ice Cream Bills</div>
+              {iceCreamBillableOrders.length === 0 ? (
+                <div className="text-xs text-gray-500">No ice cream bills yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {iceCreamBillableOrders.map(order => (
+                    <div key={order.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">Order #{order.id.slice(0, 8)}</div>
+                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · Rs {order.total.toLocaleString()}</div>
+                      </div>
+                      <button
+                        onClick={() => setSelectedInvoiceOrder(order)}
+                        className="btn-primary py-1.5 px-3 text-xs"
+                      >
+                        Generate Bill
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="space-y-2">
             {billableOrders.map(order => (
@@ -242,6 +308,7 @@ export function ShopkeeperProfilePage() {
                     <div className="text-xs text-gray-500 mt-1">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       Status: {order.status} - Type: {order.type}
+                      <span className="ml-2">Section: {businessLineLabel(inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine))}</span>
                       <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
                         {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
                       </span>
@@ -252,28 +319,18 @@ export function ShopkeeperProfilePage() {
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
                     {order.status !== 'rejected' && (
                       <div className="flex justify-end gap-2 mt-2">
-                        <button
-                          onClick={() => handlePaymentStatus(order.id, 'paid')}
-                          disabled={order.paymentStatus === 'paid'}
-                          className={`py-1 px-2.5 text-xs rounded-lg border ${
-                            order.paymentStatus === 'paid'
-                              ? 'bg-green-100 border-green-300 text-green-700 cursor-not-allowed'
-                              : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
-                          }`}
-                        >
-                          Paid
-                        </button>
-                        <button
-                          onClick={() => handlePaymentStatus(order.id, 'unpaid')}
-                          disabled={order.paymentStatus === 'unpaid'}
-                          className={`py-1 px-2.5 text-xs rounded-lg border ${
-                            order.paymentStatus === 'unpaid'
-                              ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
-                              : 'bg-white border-red-200 text-red-700 hover:bg-red-50'
-                          }`}
-                        >
-                          Unpaid
-                        </button>
+                        {order.paymentStatus === 'paid' ? (
+                          <span className="py-1 px-2.5 text-xs rounded-lg border bg-green-100 border-green-300 text-green-700">
+                            Payment Locked
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handlePaymentStatus(order, 'paid')}
+                            className="py-1 px-2.5 text-xs rounded-lg border bg-white border-green-200 text-green-700 hover:bg-green-50"
+                          >
+                            Mark Paid
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -291,6 +348,11 @@ export function ShopkeeperProfilePage() {
               <div>
                 <div className="font-bold text-lg text-gray-900">{connection.businessName}</div>
                 <div className="text-sm text-gray-500">Invoice</div>
+                <div className="text-xs text-gray-500">
+                  {businessLineLabel(
+                    inferBusinessLineFromCategory(String(selectedInvoiceOrder.businessLine || selectedInvoiceOrder.items?.[0]?.category || 'other'), selectedInvoiceOrder.businessLine)
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-medium text-gray-900">#{selectedInvoiceOrder.id.slice(-6).toUpperCase()}</div>
@@ -302,6 +364,9 @@ export function ShopkeeperProfilePage() {
               <div className="text-xs text-gray-500 mb-1">Bill To</div>
               <div className="font-semibold text-gray-900 text-sm">{selectedInvoiceOrder.shopName}</div>
               <div className="text-xs text-gray-500">{selectedInvoiceOrder.shopkeeperName}</div>
+              <div className="text-xs text-gray-500 mt-1">{shopkeeper?.address || shopkeeper?.city || 'Address not provided'}</div>
+              <div className="text-xs text-gray-500">Phone: {shopkeeper?.phone || connection?.shopkeeperPhone || 'Not provided'}</div>
+              <div className="text-xs text-gray-500">Email: {shopkeeper?.email || 'Not provided'}</div>
             </div>
 
             <table className="w-full text-sm">
@@ -334,7 +399,7 @@ export function ShopkeeperProfilePage() {
               </tfoot>
             </table>
 
-            <div className="flex gap-3 pt-2">
+            <div className="sticky bottom-0 z-10 flex gap-3 bg-white/95 backdrop-blur-sm pt-2 pb-1">
               <button onClick={() => handleDownload(selectedInvoiceOrder)} className="btn-secondary flex-1">Download PDF</button>
               <button onClick={() => handleShare(selectedInvoiceOrder)} className="btn-primary flex-1">Share Invoice</button>
             </div>

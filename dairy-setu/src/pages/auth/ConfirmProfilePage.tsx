@@ -1,27 +1,61 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Milk, Navigation, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
+import { Navigation, ArrowRight, CheckCircle, AlertCircle } from "lucide-react";
+import axios from "axios";
 import { useAuthStore } from "../../store/authStore";
 import { useToast } from "../../components/ui/Toast";
 import { getCurrentLocation, getCoordinatesFromLocation } from "../../utils/location";
 import { auth as firebaseAuth } from "../../lib/firebase";
-import axios from "axios";
-import type { Role } from "../../types";
+import { apiClient } from "../../lib/apiClient";
+import { BrandLogo } from "../../components/ui/BrandLogo";
+import type { DistributorType, Role } from "../../types";
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 type Step = "verifying" | "profile" | "done" | "error";
 const COMPANIES = ["Amul", "Saras", "Mother Dairy", "Parag", "Local Brand", "Multiple Brands"];
 const DELIVERY_TIMINGS = ["Morning (6-9 AM)", "Afternoon (12-3 PM)", "Evening (5-8 PM)", "Any Time"];
+const DISTRIBUTOR_TYPES: Array<{
+  value: DistributorType;
+  label: string;
+  subtitle: string;
+  emoji: string;
+  tone: string;
+}> = [
+  { value: "dairy", label: "Dairy Products", subtitle: "Milk, paneer, ghee", emoji: "🥛", tone: "bg-blue-50 text-blue-700" },
+  { value: "icecream", label: "Ice Cream", subtitle: "Kulfi, cone, cups", emoji: "🍦", tone: "bg-pink-50 text-pink-700" },
+  { value: "dual", label: "Both", subtitle: "Dairy + Ice Cream", emoji: "🥛🍦", tone: "bg-emerald-50 text-emerald-700" },
+];
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hour = Math.floor(index / 2);
+  const minute = index % 2 === 0 ? "00" : "30";
+  const value = `${hour.toString().padStart(2, "0")}:${minute}`;
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const period = hour < 12 ? "AM" : "PM";
+  return { value, label: `${hour12}:${minute} ${period}` };
+});
 
 export function ConfirmProfilePage() {
   const [step, setStep] = useState<Step>("verifying");
-  const [role, setRole] = useState<Role>("shopkeeper");
+  const [searchParams] = useSearchParams();
+  const queryRole = searchParams.get("role");
+  const pendingRole = localStorage.getItem("dairy-walla-pending-role");
+  const queryDistributorType = searchParams.get("type");
+  const pendingDistributorType = localStorage.getItem("dairy-walla-pending-distributor-type");
+  const role: Role = queryRole === "distributor" || queryRole === "shopkeeper"
+    ? queryRole
+    : (pendingRole === "distributor" || pendingRole === "shopkeeper" ? pendingRole : "shopkeeper");
+  const initialDistributorType: DistributorType =
+    queryDistributorType === "dairy" || queryDistributorType === "icecream" || queryDistributorType === "dual"
+      ? queryDistributorType
+      : pendingDistributorType === "dairy" || pendingDistributorType === "icecream" || pendingDistributorType === "dual"
+        ? pendingDistributorType
+        : "dairy";
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
 
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [company, setCompany] = useState("");
+  const [distributorType, setDistributorType] = useState<DistributorType>(initialDistributorType);
   const [city, setCity] = useState("");
   const [deliveryAreas, setDeliveryAreas] = useState("");
   const [orderStart, setOrderStart] = useState("18:00");
@@ -32,44 +66,49 @@ export function ConfirmProfilePage() {
   const [deliveryTiming, setDeliveryTiming] = useState("");
   const [locationName, setLocationName] = useState("");
   const [pin, setPin] = useState("");
+  const [phone, setPhone] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [searchParams] = useSearchParams();
-
   const { show } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     let alive = true;
 
-    const roleFromQuery = searchParams.get("role");
-    if (roleFromQuery === "distributor" || roleFromQuery === "shopkeeper") {
-      setRole(roleFromQuery);
-    }
-
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (fUser) => {
       if (!fUser) {
         if (alive) setStep("error");
         return;
       }
-      const phone = fUser.phoneNumber?.replace('+91', '') || '';
+      const email = fUser.email;
+      if (!email) {
+        if (alive) setStep("error");
+        return;
+      }
       try {
-        const res = await axios.post(`${API_URL}/auth/me`, { phone });
+        const token = await fUser.getIdToken(true);
+        const res = await apiClient.post("/auth/me", {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         if (res.data.needsSetup) {
           if (alive) setStep("profile");
           return;
         }
-        const { profile, dp, sp } = res.data;
-        let resolvedRole: Role = (roleFromQuery || profile.role || "shopkeeper") as Role;
-        if (resolvedRole === "distributor" && !dp && sp) resolvedRole = "shopkeeper";
-        if (resolvedRole === "shopkeeper" && !sp && dp) resolvedRole = "distributor";
+        const { profile } = res.data;
+        if (profile.role !== "distributor" && profile.role !== "shopkeeper") {
+          if (alive) setStep("error");
+          return;
+        }
+        const resolvedRole: Role = profile.role;
         
         useAuthStore.setState({
           user: { name: profile.name || "", role: resolvedRole, phone: profile.phone, id: profile.id, email: profile.email },
           isAuthenticated: true
         });
         localStorage.setItem('dairy-walla-active-role', resolvedRole);
+        localStorage.removeItem("dairy-walla-pending-role");
+        localStorage.removeItem("dairy-walla-pending-distributor-type");
 
-        const targetPath = resolvedRole === "distributor" ? (dp ? "/distributor" : "/shop") : (sp ? "/shop" : "/distributor");
+        const targetPath = resolvedRole === "distributor" ? "/distributor" : "/shop";
         navigate(targetPath, { replace: true });
       } catch (_e) {
         if (alive) setStep("error");
@@ -80,7 +119,7 @@ export function ConfirmProfilePage() {
       alive = false;
       unsubscribe();
     };
-  }, [searchParams, navigate]);
+  }, [navigate]);
 
   const handleGetLocation = async () => {
     setLoadingLocation(true);
@@ -99,27 +138,29 @@ export function ConfirmProfilePage() {
     const sName = role === "distributor" ? businessName : shopName;
     if (!name.trim()) { show("Owner name daalo", "error"); return; }
     if (!sName.trim()) { show(role === "distributor" ? "Business name daalo" : "Shop name daalo", "error"); return; }
+    if (phone.length !== 10) { show("10 digit ka Phone number daalo", "error"); return; }
     if (pin.length !== 6) { show("6 digit ka PIN set karein", "error"); return; }
 
     setLoading(true);
     try {
       const fUser = firebaseAuth.currentUser;
-      if (!fUser) {
+      const email = fUser?.email;
+      if (!email) {
         show("Session expired. Login karo.", "error");
         navigate("/login");
         return;
       }
+      const token = await fUser.getIdToken(true);
 
-      const phoneToSave = fUser.phoneNumber?.replace('+91', '') || "";
-
-      const res = await axios.post(`${API_URL}/auth/setup`, {
-        phone: phoneToSave,
+      const res = await apiClient.post("/auth/setup", {
+        phone,
         role,
         name,
         pin,
         businessData: role === "distributor" ? {
           businessName: businessName.trim(),
           ownerName: ownerName.trim(),
+          distributorType,
           company,
           city: city.trim(),
           deliveryAreas: deliveryAreas.trim(),
@@ -140,6 +181,8 @@ export function ConfirmProfilePage() {
           longitude: coords?.lon,
           profileComplete: true
         } : null
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       const p = res.data.profile;
@@ -148,13 +191,20 @@ export function ConfirmProfilePage() {
         isAuthenticated: true
       });
       localStorage.setItem('dairy-walla-active-role', p.role);
+      localStorage.removeItem("dairy-walla-pending-role");
+      localStorage.removeItem("dairy-walla-pending-distributor-type");
 
       setStep("done");
       setTimeout(() => {
-        navigate(role === "distributor" ? "/distributor" : "/shop");
+        navigate(p.role === "distributor" ? "/distributor" : "/shop");
       }, 1500);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Profile save failed";
+      let msg = "Profile save failed";
+      if (axios.isAxiosError(err)) {
+        msg = (err.response?.data as { error?: string } | undefined)?.error || err.message || msg;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
       show(msg, "error");
     } finally {
       setLoading(false);
@@ -165,8 +215,8 @@ export function ConfirmProfilePage() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-600 shadow-lg mb-3">
-            <Milk className="w-7 h-7 text-white" />
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white border border-gray-200 shadow-sm p-2 mb-3">
+            <BrandLogo className="w-full h-full rounded-xl" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">DairyWalla</h1>
         </div>
@@ -194,33 +244,6 @@ export function ConfirmProfilePage() {
           </div>
         )}
 
-        {/* Role selection */}
-        {false && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Email Verified! 🎉</h2>
-            <p className="text-sm text-gray-500 mb-5">Ab apna role chuniye</p>
-            <div className="space-y-3 mb-5">
-              {(["distributor", "shopkeeper"] as Role[]).map(r => (
-                <button key={r} onClick={() => setRole(r)}
-                  className={"w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all text-left " + (role === r ? "border-brand-500 bg-brand-50" : "border-gray-200 hover:border-gray-300")}>
-                  <span className="text-3xl">{r === "distributor" ? "🚚" : "🏪"}</span>
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-900 text-sm">{r === "distributor" ? "Distributor" : "Shopkeeper"}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{r === "distributor" ? "Dairy products supply karta hoon" : "Shop ke liye order karta hoon"}</div>
-                  </div>
-                  <div className={"w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 " + (role === r ? "border-brand-600 bg-brand-600" : "border-gray-300")}>
-                    {role === r && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setStep("profile")}
-              className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2">
-              Continue <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
         {/* Profile setup */}
         {step === "profile" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
@@ -231,7 +254,47 @@ export function ConfirmProfilePage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">{role === "distributor" ? "Business Details" : "Shop Details"}</h2>
             <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
               {role === "distributor" ? (
-                <>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Distributor Type</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {DISTRIBUTOR_TYPES.map(type => (
+                        <button
+                          key={type.value}
+                          type="button"
+                          onClick={() => setDistributorType(type.value)}
+                          className={`relative border rounded-2xl p-3 text-left transition-colors min-h-[118px] ${
+                            distributorType === type.value
+                              ? "border-brand-500 bg-brand-50 ring-1 ring-brand-200"
+                              : "border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          <span
+                            className={`absolute top-2 right-2 w-4 h-4 rounded-full border flex items-center justify-center ${
+                              distributorType === type.value
+                                ? "border-brand-500 bg-brand-500"
+                                : "border-gray-300 bg-white"
+                            }`}
+                          >
+                            {distributorType === type.value && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                          </span>
+                          <div className={`w-10 h-10 rounded-full mb-2 flex items-center justify-center text-lg ${type.tone}`}>
+                            {type.emoji}
+                          </div>
+                          <div className="text-sm font-semibold text-gray-900">{type.label}</div>
+                          <div className="text-xs text-gray-500 mt-1 leading-snug">{type.subtitle}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm font-medium">+91</span>
+                      <input type="tel" className="w-full px-4 py-2 border border-gray-300 rounded-r-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} maxLength={10} />
+                    </div>
+                  </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Name *</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Aapka naam" value={ownerName} onChange={e => setOwnerName(e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Business Name *</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Sharma Dairy" value={businessName} onChange={e => setBusinessName(e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Brand / Company</label>
@@ -242,12 +305,42 @@ export function ConfirmProfilePage() {
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">City</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Ajmer" value={city} onChange={e => setCity(e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Delivery Areas</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Vaishali Nagar, Civil Lines" value={deliveryAreas} onChange={e => setDeliveryAreas(e.target.value)} /></div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Order Start</label><input type="time" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={orderStart} onChange={e => setOrderStart(e.target.value)} /></div>
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Order Cutoff</label><input type="time" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" value={orderCutoff} onChange={e => setOrderCutoff(e.target.value)} /></div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Order Start</label>
+                      <select
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                        value={orderStart}
+                        onChange={e => setOrderStart(e.target.value)}
+                      >
+                        {TIME_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Order Cutoff</label>
+                      <select
+                        className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
+                        value={orderCutoff}
+                        onChange={e => setOrderCutoff(e.target.value)}
+                      >
+                        {TIME_OPTIONS.map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                </>
+                </div>
               ) : (
-                <>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
+                    <div className="flex">
+                      <span className="inline-flex items-center px-3 rounded-l-xl border border-r-0 border-gray-300 bg-gray-50 text-gray-500 text-sm font-medium">+91</span>
+                      <input type="tel" className="w-full px-4 py-2 border border-gray-300 rounded-r-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                        placeholder="9876543210" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} maxLength={10} />
+                    </div>
+                  </div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Owner Name *</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="Aapka naam" value={shopOwnerName} onChange={e => setShopOwnerName(e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">Shop Name *</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Patel General Store" value={shopName} onChange={e => setShopName(e.target.value)} /></div>
                   <div><label className="block text-sm font-medium text-gray-700 mb-1">City</label><input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="e.g. Ajmer" value={shopCity} onChange={e => setShopCity(e.target.value)} /></div>
@@ -256,7 +349,7 @@ export function ConfirmProfilePage() {
                       <option value="">Select...</option>{DELIVERY_TIMINGS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
-                </>
+                </div>
               )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Set 6-Digit PIN (For future login) *</label>
@@ -293,3 +386,7 @@ export function ConfirmProfilePage() {
     </div>
   );
 }
+
+
+
+

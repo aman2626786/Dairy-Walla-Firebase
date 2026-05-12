@@ -1,367 +1,1281 @@
-import express from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, type Profile } from '@prisma/client';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { cert, getApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getAuth as getFirebaseAdminAuth } from 'firebase-admin/auth';
 
 const prisma = new PrismaClient();
 const app = express();
 
-async function ensurePaymentStatusColumn() {
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS payment_status TEXT NOT NULL DEFAULT 'unpaid';
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE orders
-    SET payment_status = 'unpaid'
-    WHERE payment_status IS NULL;
-  `);
+type AppRole = 'distributor' | 'shopkeeper';
+type DistributorType = 'dairy' | 'icecream' | 'dual';
+type BusinessLine = 'dairy' | 'icecream';
+
+interface AuthenticatedRequest extends Request {
+  authEmail?: string;
+  authUid?: string;
 }
+
+function isRole(value: unknown): value is AppRole {
+  return value === 'distributor' || value === 'shopkeeper';
+}
+
+function isDistributorType(value: unknown): value is DistributorType {
+  return value === 'dairy' || value === 'icecream' || value === 'dual';
+}
+
+function normalizeDistributorType(value: unknown): DistributorType {
+  if (value === 'icecream') return 'icecream';
+  if (value === 'dual') return 'dual';
+  return 'dairy';
+}
+
+function isBusinessLine(value: unknown): value is BusinessLine {
+  return value === 'dairy' || value === 'icecream';
+}
+
+function initializeFirebaseAdmin() {
+  if (getApps().length > 0) {
+    return getFirebaseAdminAuth();
+  }
+
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (serviceAccountJson) {
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    initializeAdminApp({ credential: cert(serviceAccount) });
+    return getFirebaseAdminAuth();
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    initializeAdminApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+    return getFirebaseAdminAuth();
+  }
+
+  throw new Error('Firebase Admin credentials are not configured.');
+}
+
+const adminAuth = initializeFirebaseAdmin();
 
 app.use(cors());
 app.use(express.json());
 
-// Health Check / Keep-Alive Endpoint
-app.get('/api/ping', (req, res) => {
+app.get('/api/ping', (_req, res) => {
   res.status(200).send('pong');
 });
 
-// 1. Get or Verify User Profile
-app.post('/api/auth/me', async (req, res) => {
-  const { phone, role } = req.body; // Role added to check for conflicts
+async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   try {
-    let profile = await prisma.profile.findFirst({ where: { phone } });
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const token = authHeader.slice('Bearer '.length).trim();
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    if (!decodedToken.email) {
+      return res.status(401).json({ error: 'Email claim missing in token' });
+    }
+
+    req.authUid = decodedToken.uid;
+    req.authEmail = decodedToken.email.toLowerCase();
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
+
+app.use('/api', (req, res, next) => {
+  if (req.path === '/ping') {
+    return next();
+  }
+  return requireAuth(req as AuthenticatedRequest, res, next);
+});
+
+async function getRequesterProfile(req: AuthenticatedRequest): Promise<Profile | null> {
+  if (!req.authEmail) return null;
+  return prisma.profile.findUnique({ where: { email: req.authEmail } });
+}
+
+async function requireRequesterProfile(req: Request, res: Response): Promise<Profile | null> {
+  const requester = await getRequesterProfile(req as AuthenticatedRequest);
+  if (!requester) {
+    res.status(404).json({ error: 'Profile not found' });
+    return null;
+  }
+  return requester;
+}
+
+async function getRoleProfiles(userId: string) {
+  const [dp, sp] = await Promise.all([
+    prisma.distributorProfile.findUnique({ where: { userId } }),
+    prisma.shopkeeperProfile.findUnique({ where: { userId } }),
+  ]);
+  return { dp, sp };
+}
+
+function roleConsistencyError(role: AppRole, dp: unknown, sp: unknown): string | null {
+  if (dp && sp) return 'Account data conflict: both distributor and shopkeeper profiles exist.';
+  if (role === 'distributor' && !dp) return 'Distributor profile missing for this account.';
+  if (role === 'shopkeeper' && !sp) return 'Shopkeeper profile missing for this account.';
+  return null;
+}
+
+function normalizePhone(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeCategory(value: unknown): string {
+  return String(value ?? 'other').trim().toLowerCase().replace(/\s+/g, ' ') || 'other';
+}
+
+function inferBusinessLine(category: unknown, provided?: unknown): BusinessLine {
+  if (provided === 'icecream') return 'icecream';
+  if (provided === 'dairy') return 'dairy';
+  const normalized = normalizeCategory(category);
+  const iceCreamKeywords = [
+    'icecream',
+    'ice cream',
+    'kulfi',
+    'cone',
+    'cup',
+    'bar',
+    'candy',
+    'sundae',
+    'gelato',
+    'scoop',
+    'frozen dessert',
+  ];
+  return iceCreamKeywords.some(keyword => normalized.includes(keyword)) ? 'icecream' : 'dairy';
+}
+
+function getAllowedBusinessLines(distributorType: DistributorType): BusinessLine[] {
+  if (distributorType === 'dual') return ['dairy', 'icecream'];
+  return [distributorType === 'icecream' ? 'icecream' : 'dairy'];
+}
+
+function hashPin(pin: string): string {
+  const salt = randomBytes(16).toString('hex');
+  const hash = scryptSync(pin, salt, 32).toString('hex');
+  return `scrypt$${salt}$${hash}`;
+}
+
+function verifyPin(pin: string, storedPin: string | null | undefined): boolean {
+  if (!storedPin) return false;
+  if (!storedPin.startsWith('scrypt$')) {
+    return storedPin === pin;
+  }
+
+  const parts = storedPin.split('$');
+  if (parts.length !== 3) return false;
+  const [, salt, expectedHash] = parts;
+  const actualHash = scryptSync(pin, salt, 32).toString('hex');
+
+  const expectedBuffer = Buffer.from(expectedHash, 'hex');
+  const actualBuffer = Buffer.from(actualHash, 'hex');
+  if (expectedBuffer.length !== actualBuffer.length) return false;
+
+  return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function generateConnectionCode() {
+  return `${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+}
+
+async function notifyShopkeeperPaymentCompleted(
+  order: { id: string; shopkeeperId?: string | null; shopName?: string | null; total?: number | null },
+  distributorBusinessName?: string | null,
+) {
+  if (!order.shopkeeperId) return;
+
+  const shopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { id: order.shopkeeperId } });
+  if (!shopkeeper?.userId) return;
+
+  const shopLabel = String(order.shopName || 'Your shop').trim();
+  const shortOrderId = order.id.slice(-6).toUpperCase();
+  const distributorLabel = String(distributorBusinessName || 'your distributor').trim();
+  const amount = Number(order.total ?? 0);
+  const amountLine = Number.isFinite(amount) && amount > 0 ? ` Amount: Rs ${amount.toLocaleString('en-IN')}.` : '';
+
+  await prisma.notification.create({
+    data: {
+      userId: shopkeeper.userId,
+      type: 'payment_completed',
+      message: `🎉 Payment complete! ${distributorLabel} marked order #${shortOrderId} for ${shopLabel} as completed.${amountLine}`,
+      read: false,
+      createdAt: new Date(),
+    },
+  });
+}
+
+// Auth: verify current user profile by token email
+app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
+  const { role } = req.body;
+  try {
+    const email = req.authEmail;
+    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+
+    const profile = await prisma.profile.findUnique({ where: { email } });
     if (!profile) {
       return res.json({ needsSetup: true });
     }
 
-    // CRITICAL: Check if user is trying to log in with a different role
-    if (role && profile.role !== role) {
-      return res.status(409).json({ 
-        error: `This number is already registered as a ${profile.role}. Please log in with the correct role.` 
-      });
+    if (!isRole(profile.role)) {
+      return res.status(409).json({ error: 'Invalid account role stored for this email.' });
     }
 
-    const dp = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
-    const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
-    
-    res.json({ profile, dp, sp });
+    const { dp, sp } = await getRoleProfiles(profile.id);
+    if (!dp && !sp) {
+      return res.json({ needsSetup: true });
+    }
+
+    if (role && profile.role !== role) {
+      return res.status(409).json({ error: `This email is already registered as a ${profile.role}. Please log in with the correct role.` });
+    }
+
+    const conflict = roleConsistencyError(profile.role, dp, sp);
+    if (conflict) return res.status(409).json({ error: conflict });
+
+    return res.json({ profile, dp, sp });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error' });
   }
 });
 
-// 1.5 Login with PIN
-app.post('/api/auth/login-pin', async (req, res) => {
-  const { phone, pin, role } = req.body;
-  try {
-    const profile = await prisma.profile.findFirst({ where: { phone } });
-    if (!profile) return res.status(404).json({ error: 'Account nahi mila. Pehle Sign Up karein.' });
-    if (!profile.pin) return res.status(400).json({ error: 'Aapne PIN set nahi kiya hai. OTP se login karke Profile me PIN set karein.' });
-    if (profile.pin !== pin) return res.status(401).json({ error: 'Galat PIN.' });
-    if (role && profile.role !== role) {
-      return res.status(409).json({ error: `This number is already registered as a ${profile.role}. Please log in with the correct role.` });
-    }
-
-    const dp = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
-    const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
-    
-    res.json({ profile, dp, sp });
-  } catch (error: any) {
-    console.error("PIN Login Backend Error:", error);
-    const errorMsg = error.message || 'Database Connection Error';
-    res.status(500).json({ error: errorMsg });
-  }
+// Deprecated phone/PIN login path (identity is email-based now)
+app.post('/api/auth/login-pin', async (_req, res) => {
+  return res.status(410).json({ error: 'PIN phone login is disabled. Please continue with Google email login.' });
 });
 
-// 2. Setup Profile
-app.post('/api/auth/setup', async (req, res) => {
+// Setup profile using token email
+app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
   const { phone, role, name, businessData, shopData, pin } = req.body;
   try {
-    let profile = await prisma.profile.findFirst({ where: { phone } });
+    const email = req.authEmail;
+    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+    if (!isRole(role)) return res.status(400).json({ error: 'Invalid role.' });
+
+    if (role === 'distributor' && !businessData) {
+      return res.status(400).json({ error: 'Distributor setup data is required.' });
+    }
+    if (role === 'shopkeeper' && !shopData) {
+      return res.status(400).json({ error: 'Shopkeeper setup data is required.' });
+    }
+    const cleanedPhone = normalizePhone(phone);
+    if (cleanedPhone.length !== 10) {
+      return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+    }
+    const cleanedName = typeof name === 'string' ? name.trim() : '';
+    if (!cleanedName) {
+      return res.status(400).json({ error: 'Name is required.' });
+    }
+    if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) {
+      return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
+    }
+
+    const distributorType = role === 'distributor'
+      ? normalizeDistributorType((businessData as { distributorType?: unknown } | undefined)?.distributorType)
+      : 'dairy';
+    if (role === 'distributor' && !isDistributorType(distributorType)) {
+      return res.status(400).json({ error: 'Invalid distributor type.' });
+    }
+
+    const pinHash = hashPin(pin);
+
+    let profile = await prisma.profile.findUnique({ where: { email } });
     if (!profile) {
+      const phoneConflict = await prisma.profile.findFirst({ where: { phone: cleanedPhone } });
+      if (phoneConflict) {
+        return res.status(409).json({ error: 'This phone number is already linked to another account.' });
+      }
       profile = await prisma.profile.create({
-        data: { phone, role, name, pin, email: `${phone}@dairy.local` }
+        data: {
+          email,
+          phone: cleanedPhone,
+          role,
+          name: cleanedName,
+          pin: pinHash,
+        },
       });
     } else {
-      if (profile.role !== role) {
-        return res.status(409).json({ error: `Cannot change role. This number is already registered as a ${profile.role}.` });
+      if (!isRole(profile.role)) {
+        return res.status(409).json({ error: 'Invalid account role stored for this email.' });
       }
+
+      const { dp: existingDp, sp: existingSp } = await getRoleProfiles(profile.id);
+      const hasRoleData = Boolean(existingDp || existingSp);
+      if (profile.role !== role && hasRoleData) {
+        return res.status(409).json({ error: `Cannot change role. This email is already registered as a ${profile.role}.` });
+      }
+
+      const phoneConflict = await prisma.profile.findFirst({
+        where: {
+          phone: cleanedPhone,
+          id: { not: profile.id },
+        },
+      });
+      if (phoneConflict) {
+        return res.status(409).json({ error: 'This phone number is already linked to another account.' });
+      }
+
       profile = await prisma.profile.update({
         where: { id: profile.id },
-        data: { name, pin }
+        data: {
+          role,
+          name: cleanedName,
+          phone: cleanedPhone,
+          pin: pinHash,
+        },
       });
     }
 
-    if (role === 'distributor' && businessData) {
-      const code = `${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
-      await prisma.distributorProfile.upsert({
-        where: { userId: profile.id },
-        update: { ...businessData },
-        create: { userId: profile.id, connectionCode: code, ...businessData }
-      });
-    } else if (role === 'shopkeeper' && shopData) {
+    if (role === 'distributor') {
+      const existingShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
+      if (existingShopkeeper) {
+        return res.status(409).json({ error: 'This account already has a shopkeeper profile.' });
+      }
+      const distributorPayload = {
+        businessName: String((businessData as { businessName?: unknown })?.businessName ?? '').trim(),
+        distributorType,
+        ownerName: String((businessData as { ownerName?: unknown })?.ownerName ?? '').trim() || null,
+        company: String((businessData as { company?: unknown })?.company ?? '').trim() || null,
+        city: String((businessData as { city?: unknown })?.city ?? '').trim() || null,
+        deliveryAreas: String((businessData as { deliveryAreas?: unknown })?.deliveryAreas ?? '').trim() || null,
+        orderWindowStart: String((businessData as { orderWindowStart?: unknown })?.orderWindowStart ?? '18:00').trim(),
+        orderWindowCutoff: String((businessData as { orderWindowCutoff?: unknown })?.orderWindowCutoff ?? '20:00').trim(),
+        locationName: String((businessData as { locationName?: unknown })?.locationName ?? '').trim() || null,
+        latitude: parseOptionalNumber((businessData as { latitude?: unknown })?.latitude),
+        longitude: parseOptionalNumber((businessData as { longitude?: unknown })?.longitude),
+        profileComplete: true,
+      };
+      if (!distributorPayload.businessName) {
+        return res.status(400).json({ error: 'Business name is required.' });
+      }
+      const existingDistributor = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
+      if (existingDistributor) {
+        await prisma.distributorProfile.update({
+          where: { userId: profile.id },
+          data: distributorPayload,
+        });
+      } else {
+        let created = false;
+        for (let attempt = 0; attempt < 5 && !created; attempt += 1) {
+          try {
+            await prisma.distributorProfile.create({
+              data: { userId: profile.id, connectionCode: generateConnectionCode(), ...distributorPayload },
+            });
+            created = true;
+          } catch (err) {
+            const isConnectionCodeCollision =
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === 'P2002' &&
+              Array.isArray(err.meta?.target) &&
+              err.meta?.target.includes('connection_code');
+
+            if (!isConnectionCodeCollision) throw err;
+          }
+        }
+
+        if (!created) {
+          return res.status(500).json({ error: 'Unable to generate a unique connection code. Please retry.' });
+        }
+      }
+    } else {
+      const existingDistributor = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
+      if (existingDistributor) {
+        return res.status(409).json({ error: 'This account already has a distributor profile.' });
+      }
+      const shopkeeperPayload = {
+        shopName: String((shopData as { shopName?: unknown })?.shopName ?? '').trim(),
+        ownerName: String((shopData as { ownerName?: unknown })?.ownerName ?? '').trim() || null,
+        city: String((shopData as { city?: unknown })?.city ?? '').trim() || null,
+        deliveryTiming: String((shopData as { deliveryTiming?: unknown })?.deliveryTiming ?? '').trim() || null,
+        locationName: String((shopData as { locationName?: unknown })?.locationName ?? '').trim() || null,
+        latitude: parseOptionalNumber((shopData as { latitude?: unknown })?.latitude),
+        longitude: parseOptionalNumber((shopData as { longitude?: unknown })?.longitude),
+        profileComplete: true,
+      };
+      if (!shopkeeperPayload.shopName) {
+        return res.status(400).json({ error: 'Shop name is required.' });
+      }
+
       await prisma.shopkeeperProfile.upsert({
         where: { userId: profile.id },
-        update: { ...shopData },
-        create: { userId: profile.id, ...shopData }
+        update: shopkeeperPayload,
+        create: { userId: profile.id, ...shopkeeperPayload },
       });
     }
-    res.json({ success: true, profile });
+
+    const { dp, sp } = await getRoleProfiles(profile.id);
+    const conflict = roleConsistencyError(role, dp, sp);
+    if (conflict) return res.status(409).json({ error: conflict });
+
+    return res.json({ success: true, profile });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error during setup' });
+    if (error instanceof Prisma.PrismaClientValidationError) {
+      if (error.message.includes('Unknown argument `distributorType`')) {
+        return res.status(500).json({
+          error: 'Backend schema/client out of sync. Run: npm run build:api and restart server.',
+        });
+      }
+      if (error.message.includes('Malformed ObjectID')) {
+        return res.status(409).json({
+          error: 'Account data format issue detected. Please contact support to migrate this profile.',
+        });
+      }
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(409).json({
+        error: 'Duplicate data detected while saving profile. Please try with unique phone number or retry.',
+      });
+    }
+    return res.status(500).json({ error: 'Server error during setup' });
   }
 });
 
-// 3. Delete Profile
-app.delete('/api/auth/me/:phone', async (req, res) => {
+// Delete profile by token email
+app.delete('/api/auth/me', async (req: AuthenticatedRequest, res) => {
   try {
-    await prisma.profile.deleteMany({ where: { phone: req.params.phone } });
-    res.json({ success: true });
+    const profile = await getRequesterProfile(req);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    await prisma.notification.deleteMany({ where: { userId: profile.id } });
+    await prisma.distributorProfile.deleteMany({ where: { userId: profile.id } });
+    await prisma.shopkeeperProfile.deleteMany({ where: { userId: profile.id } });
+    await prisma.profile.delete({ where: { id: profile.id } });
+
+    return res.json({ success: true });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Server error during delete' });
+    console.error('Delete Profile Error:', error);
+    return res.status(500).json({ error: 'Server error during delete' });
   }
 });
 
-// 4. Update Profile Name
-app.patch('/api/auth/user/:id', async (req, res) => {
+app.patch('/api/auth/user/:id', async (req: AuthenticatedRequest, res) => {
   try {
+    const requester = await getRequesterProfile(req);
+    if (!requester) return res.status(404).json({ error: 'Profile not found' });
+    if (requester.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
+
     await prisma.profile.update({ where: { id: req.params.id }, data: req.body });
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ error: 'Server error' });
   }
 });
-
-// --- Phase 2: App Data Routes ---
 
 // Profiles
 app.get('/api/profiles/distributor/:userId', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.id !== req.params.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can access this profile.' });
+    }
+
     const dp = await prisma.distributorProfile.findUnique({ where: { userId: req.params.userId }, include: { user: true } });
     if (!dp) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...dp, phone: dp.user.phone, email: dp.user.email });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json({ ...dp, phone: dp.user.phone, email: dp.user.email });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/profiles/shopkeeper/:userId', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.id !== req.params.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (requester.role !== 'shopkeeper') {
+      return res.status(403).json({ error: 'Only shopkeeper accounts can access this profile.' });
+    }
+
     const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: req.params.userId }, include: { user: true } });
     if (!sp) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...sp, phone: sp.user.phone, email: sp.user.email });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json({ ...sp, phone: sp.user.phone, email: sp.user.email });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/profiles/shopkeeper-by-id/:id', async (req, res) => {
   try {
     const sp = await prisma.shopkeeperProfile.findUnique({ where: { id: req.params.id }, include: { user: true } });
     if (!sp) return res.status(404).json({ error: 'Not found' });
-    res.json({ ...sp, phone: sp.user.phone, email: sp.user.email });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json({ ...sp, phone: sp.user.phone, email: sp.user.email });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.get('/api/distributors', async (req, res) => {
   try {
+    const { lat, lng } = req.query;
     const dps = await prisma.distributorProfile.findMany({ include: { user: true } });
-    res.json(dps.map(dp => ({ ...dp, phone: dp.user.phone, email: dp.user.email })));
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    let results: any[] = dps.map((dp) => ({ ...dp, phone: dp.user.phone, email: dp.user.email }));
+
+    if (lat !== undefined && lng !== undefined) {
+      const userLat = parseFloat(lat as string);
+      const userLng = parseFloat(lng as string);
+      if (!Number.isNaN(userLat) && !Number.isNaN(userLng)) {
+        results = results
+          .map((dp) => {
+            let distance: number | null = null;
+            if (dp.latitude !== null && dp.latitude !== undefined && dp.longitude !== null && dp.longitude !== undefined) {
+              distance = getDistanceFromLatLonInKm(userLat, userLng, dp.latitude, dp.longitude);
+            }
+            return { ...dp, distance };
+          })
+          .sort((a, b) => {
+            if (a.distance === null) return 1;
+            if (b.distance === null) return -1;
+            return a.distance - b.distance;
+          });
+      }
+    }
+
+    return res.json(results);
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.patch('/api/profiles/distributor/:id', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can update distributor profile.' });
+    }
+
+    const ownProfile = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownProfile || ownProfile.id !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const updated = await prisma.distributorProfile.update({ where: { id: req.params.id }, data: req.body });
-    res.json(updated);
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json(updated);
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.patch('/api/profiles/shopkeeper/:id', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'shopkeeper') {
+      return res.status(403).json({ error: 'Only shopkeeper accounts can update shopkeeper profile.' });
+    }
+
+    const ownProfile = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownProfile || ownProfile.id !== req.params.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const updated = await prisma.shopkeeperProfile.update({ where: { id: req.params.id }, data: req.body });
-    res.json(updated);
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json(updated);
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Connections
 app.get('/api/connections/:role/:userId', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
     const { role, userId } = req.params;
+    if (requester.id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (requester.role !== role) {
+      return res.status(403).json({ error: 'Role mismatch.' });
+    }
+
     if (role === 'distributor') {
       const dp = await prisma.distributorProfile.findUnique({ where: { userId } });
       if (!dp) return res.json([]);
-      res.json(await prisma.connection.findMany({ where: { distributorId: dp.id } }));
-    } else {
-      const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId } });
-      if (!sp) return res.json([]);
-      res.json(await prisma.connection.findMany({ where: { shopkeeperId: sp.id } }));
+      return res.json(await prisma.connection.findMany({ where: { distributorId: dp.id } }));
     }
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+
+    const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId } });
+    if (!sp) return res.json([]);
+    return res.json(await prisma.connection.findMany({ where: { shopkeeperId: sp.id } }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.post('/api/connections', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'shopkeeper') {
+      return res.status(403).json({ error: 'Only shopkeepers can request new connections.' });
+    }
+
     const { shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone } = req.body;
+    const ownShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownShopkeeper || ownShopkeeper.id !== shopkeeperId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const dp = await prisma.distributorProfile.findUnique({ where: { connectionCode: distributorCode } });
     if (!dp) return res.status(404).json({ error: 'Invalid code' });
+
     const conn = await prisma.connection.create({
       data: {
-        shopkeeperId, shopkeeperName, shopName, shopkeeperPhone,
-        distributorId: dp.id, distributorName: dp.ownerName || '', businessName: dp.businessName,
-        status: 'pending', autoOrderEnabled: false
-      }
+        shopkeeperId,
+        shopkeeperName,
+        shopName,
+        shopkeeperPhone,
+        distributorId: dp.id,
+        distributorName: dp.ownerName || '',
+        businessName: dp.businessName,
+        status: 'pending',
+        autoOrderEnabled: false,
+      },
     });
-    res.json({ connection: conn, distributorUserId: dp.userId });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+
+    return res.json({ connection: conn, distributorUserId: dp.userId });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.patch('/api/connections/:id', async (req, res) => {
-  try { res.json(await prisma.connection.update({ where: { id: req.params.id }, data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    const conn = await prisma.connection.findUnique({ where: { id: req.params.id } });
+    if (!conn) return res.status(404).json({ error: 'Not found' });
+
+    if (requester.role === 'distributor') {
+      const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+      if (!ownDp || conn.distributorId !== ownDp.id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (requester.role === 'shopkeeper') {
+      const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+      if (!ownSp || conn.shopkeeperId !== ownSp.id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.json(await prisma.connection.update({ where: { id: req.params.id }, data: req.body }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Products
 app.get('/api/products/:distributorId', async (req, res) => {
-  try { res.json(await prisma.product.findMany({ where: { distributorId: req.params.distributorId } })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+
+    const distributorId = req.params.distributorId;
+    const distributorProfile = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+    if (!distributorProfile) return res.status(404).json({ error: 'Distributor not found' });
+
+    if (requester.role === 'distributor') {
+      if (requester.id !== distributorProfile.userId) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (requester.role === 'shopkeeper') {
+      const ownShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+      if (!ownShopkeeper) return res.status(403).json({ error: 'Forbidden' });
+      const activeConnection = await prisma.connection.findFirst({
+        where: {
+          shopkeeperId: ownShopkeeper.id,
+          distributorId,
+          status: 'active',
+        },
+      });
+      if (!activeConnection) {
+        return res.status(403).json({ error: 'Only connected shopkeepers can view products.' });
+      }
+    } else {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const distributorType = normalizeDistributorType(distributorProfile.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
+    const products = await prisma.product.findMany({ where: { distributorId } });
+    const safeProducts = products.filter(product => {
+      const businessLine = inferBusinessLine(product.category, product.businessLine);
+      return allowedLines.includes(businessLine);
+    });
+    return res.json(
+      safeProducts.map(product => ({
+        ...product,
+        category: normalizeCategory(product.category),
+        businessLine: inferBusinessLine(product.category, product.businessLine),
+        quantity: String(product.unit ?? '').trim(),
+      }))
+    );
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.post('/api/products', async (req, res) => {
-  try { res.json(await prisma.product.create({ data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can add products.' });
+    }
+
+    const ownDistributor = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDistributor) return res.status(403).json({ error: 'Distributor profile not found' });
+
+    const distributorId = String(req.body?.distributorId ?? '');
+    if (distributorId !== ownDistributor.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const name = String(req.body?.name ?? '').trim();
+    const brand = String(req.body?.brand ?? '').trim();
+    const quantity = String(req.body?.quantity ?? req.body?.unit ?? '').trim();
+    const category = normalizeCategory(req.body?.category);
+    const price = Number(req.body?.price);
+    const available = req.body?.available !== false;
+    const businessLine = inferBusinessLine(category, req.body?.businessLine);
+
+    if (!name || !brand || !quantity || !Number.isFinite(price) || price < 0) {
+      return res.status(400).json({ error: 'Invalid product payload.' });
+    }
+
+    const distributorType = normalizeDistributorType(ownDistributor.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
+    if (!allowedLines.includes(businessLine)) {
+      return res.status(400).json({ error: `This distributor can only add ${allowedLines.join(' / ')} products.` });
+    }
+
+    const created = await prisma.product.create({
+      data: {
+        distributorId,
+        name,
+        brand,
+        category,
+        businessLine,
+        unit: quantity,
+        price,
+        available,
+        imageUrl: null,
+      },
+    });
+
+    return res.json({ ...created, quantity: String(created.unit ?? '').trim() });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.patch('/api/products/:id', async (req, res) => {
-  try { res.json(await prisma.product.update({ where: { id: req.params.id }, data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can update products.' });
+    }
+    const ownDistributor = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDistributor) return res.status(403).json({ error: 'Distributor profile not found' });
+
+    const existing = await prisma.product.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.distributorId !== ownDistributor.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const category = req.body?.category !== undefined ? normalizeCategory(req.body.category) : normalizeCategory(existing.category);
+    const businessLine = inferBusinessLine(category, req.body?.businessLine ?? existing.businessLine);
+    const distributorType = normalizeDistributorType(ownDistributor.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
+    if (!allowedLines.includes(businessLine)) {
+      return res.status(400).json({ error: `This distributor can only keep ${allowedLines.join(' / ')} products.` });
+    }
+    if (req.body?.quantity !== undefined || req.body?.unit !== undefined) {
+      const normalizedQuantity = String(req.body?.quantity ?? req.body?.unit ?? '').trim();
+      if (!normalizedQuantity) {
+        return res.status(400).json({ error: 'Quantity is required.' });
+      }
+    }
+
+    const updatePayload = {
+      distributorId: existing.distributorId,
+      ...(req.body?.name !== undefined ? { name: String(req.body.name).trim() } : {}),
+      ...(req.body?.brand !== undefined ? { brand: String(req.body.brand).trim() } : {}),
+      ...((req.body?.quantity !== undefined || req.body?.unit !== undefined)
+        ? { unit: String(req.body?.quantity ?? req.body?.unit ?? '').trim() }
+        : {}),
+      ...(req.body?.price !== undefined ? { price: Number(req.body.price) } : {}),
+      ...(req.body?.available !== undefined ? { available: req.body.available !== false } : {}),
+      ...(req.body?.category !== undefined ? { category } : {}),
+      businessLine,
+      ...(req.body?.imageUrl !== undefined ? { imageUrl: null } : {}),
+    };
+
+    const updated = await prisma.product.update({ where: { id: req.params.id }, data: updatePayload });
+    return res.json({ ...updated, quantity: String(updated.unit ?? '').trim() });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.delete('/api/products/:id', async (req, res) => {
-  try { await prisma.product.delete({ where: { id: req.params.id } }); res.json({ success: true }); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can delete products.' });
+    }
+    const ownDistributor = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDistributor) return res.status(403).json({ error: 'Distributor profile not found' });
+    const existing = await prisma.product.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.distributorId !== ownDistributor.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await prisma.product.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Orders
 app.get('/api/orders/:role/:userId', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
     const { role, userId } = req.params;
+    if (requester.id !== userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (requester.role !== role) {
+      return res.status(403).json({ error: 'Role mismatch.' });
+    }
+
     const dp = role === 'distributor' ? await prisma.distributorProfile.findUnique({ where: { userId } }) : null;
     const sp = role === 'shopkeeper' ? await prisma.shopkeeperProfile.findUnique({ where: { userId } }) : null;
     const profileId = dp?.id || sp?.id;
     if (!profileId) return res.json([]);
 
     const field = role === 'distributor' ? 'distributorId' : 'shopkeeperId';
-    res.json(await prisma.order.findMany({ where: { [field]: profileId }, include: { items: true }, orderBy: { placedAt: 'desc' } }));
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+    return res.json(await prisma.order.findMany({ where: { [field]: profileId }, include: { items: true }, orderBy: { placedAt: 'desc' } }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, total } = req.body;
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'shopkeeper') {
+      return res.status(403).json({ error: 'Only shopkeeper accounts can place orders.' });
+    }
+
+    const { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate } = req.body;
+    const ownShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownShopkeeper || ownShopkeeper.id !== shopkeeperId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const activeConnection = await prisma.connection.findFirst({
+      where: {
+        shopkeeperId,
+        distributorId,
+        status: 'active',
+      },
+    });
+    if (!activeConnection) {
+      return res.status(403).json({ error: 'Active connection required before placing order.' });
+    }
+
+    const distributorProfile = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+    if (!distributorProfile) return res.status(404).json({ error: 'Distributor not found' });
+    const distributorType = normalizeDistributorType(distributorProfile.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
+
+    const rawItems = Array.isArray(items) ? items : [];
+    if (rawItems.length === 0) {
+      return res.status(400).json({ error: 'Order must have at least one item.' });
+    }
+
+    const requestedItems = rawItems
+      .map((item: any) => ({
+        productId: String(item?.product?.id ?? ''),
+        quantity: Number(item?.quantity ?? 0),
+      }))
+      .filter(item => item.productId.length > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
+
+    if (requestedItems.length === 0) {
+      return res.status(400).json({ error: 'Order has invalid items.' });
+    }
+
+    const productIds = Array.from(new Set(requestedItems.map(item => item.productId)));
+    const products = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        distributorId,
+        available: true,
+      },
+    });
+    if (products.length !== productIds.length) {
+      return res.status(400).json({ error: 'Some selected products are invalid or unavailable.' });
+    }
+    const productById = new Map(products.map(product => [product.id, product]));
+
+    const lineSet = new Set<BusinessLine>();
+    const orderItemsPayload = requestedItems.map(item => {
+      const product = productById.get(item.productId);
+      if (!product) throw new Error('INVALID_PRODUCT');
+      const businessLine = inferBusinessLine(product.category, product.businessLine);
+      lineSet.add(businessLine);
+      return {
+        productId: product.id,
+        productName: product.name,
+        brand: product.brand,
+        category: product.category,
+        businessLine,
+        unit: product.unit,
+        unitPrice: product.price,
+        quantity: item.quantity,
+      };
+    });
+
+    if (lineSet.size > 1) {
+      return res.status(400).json({ error: 'Dual distributor orders must contain only one section at a time (Dairy or Ice Cream).' });
+    }
+
+    const orderLine = orderItemsPayload[0]?.businessLine || inferBusinessLine('other');
+    if (!allowedLines.includes(orderLine)) {
+      return res.status(400).json({ error: `This distributor accepts only ${allowedLines.join(' / ')} orders.` });
+    }
+
+    const total = orderItemsPayload.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0);
+
     const today = new Date().toISOString().split('T')[0];
     const order = await prisma.order.create({
       data: {
-        shopkeeperId, shopkeeperName, shopName, distributorId, type: isLate ? 'late' : 'normal', status: isLate ? 'pending' : 'accepted', paymentStatus: 'unpaid', source: 'web', deliveryDate: new Date(today), total,
-        items: { create: items.map((i: any) => ({ productId: i.product.id, productName: i.product.name, brand: i.product.brand, unit: i.product.unit, unitPrice: i.product.price, quantity: i.quantity })) }
+        shopkeeperId,
+        shopkeeperName,
+        shopName,
+        distributorId,
+        businessLine: orderLine,
+        type: isLate ? 'late' : 'normal',
+        status: isLate ? 'pending' : 'accepted',
+        paymentStatus: 'unpaid',
+        source: 'web',
+        deliveryDate: new Date(today),
+        total,
+        items: {
+          create: orderItemsPayload,
+        },
       },
-      include: { items: true }
+      include: { items: true },
     });
-    const dp = await prisma.distributorProfile.findUnique({ where: { id: distributorId }});
-    res.json({ order, distributorUserId: dp?.userId });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+
+    const dp = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+    return res.json({ order, distributorUserId: dp?.userId });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.patch('/api/orders/:id', async (req, res) => {
-  try { res.json(await prisma.order.update({ where: { id: req.params.id }, data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: 'Not found' });
+
+    if (requester.role === 'distributor') {
+      const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+      if (!ownDp || order.distributorId !== ownDp.id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (requester.role === 'shopkeeper') {
+      const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+      if (!ownSp || order.shopkeeperId !== ownSp.id) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    // One-way payment lock: once paid, do not allow reverting to unpaid.
+    if (order.paymentStatus === 'paid' && req.body?.paymentStatus === 'unpaid') {
+      return res.status(409).json({ error: 'Payment already marked as paid. Reverting to unpaid is not allowed.' });
+    }
+
+    const updated = await prisma.order.update({ where: { id: req.params.id }, data: req.body });
+
+    if (order.paymentStatus !== 'paid' && updated.paymentStatus === 'paid') {
+      const distributor = order.distributorId
+        ? await prisma.distributorProfile.findUnique({ where: { id: order.distributorId } })
+        : null;
+      try {
+        await notifyShopkeeperPaymentCompleted(updated, distributor?.businessName);
+      } catch (notificationError) {
+        console.error('Payment-complete notification failed:', notificationError);
+      }
+    }
+
+    return res.json(updated);
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 app.patch('/api/orders/:id/payment-status', async (req, res) => {
   try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can change payment status.' });
+    }
+
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp) return res.status(403).json({ error: 'Forbidden' });
+
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order || order.distributorId !== ownDp.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
     const { paymentStatus } = req.body;
     if (paymentStatus !== 'paid' && paymentStatus !== 'unpaid') {
       return res.status(400).json({ error: 'Invalid payment status' });
     }
-    const updated = await prisma.order.update({
-      where: { id: req.params.id },
-      data: { paymentStatus }
-    });
-    res.json(updated);
+
+    // One-way payment lock: once paid, do not allow reverting to unpaid.
+    if (order.paymentStatus === 'paid' && paymentStatus === 'unpaid') {
+      return res.status(409).json({ error: 'Payment already marked as paid. Reverting to unpaid is not allowed.' });
+    }
+
+    const updated = await prisma.order.update({ where: { id: req.params.id }, data: { paymentStatus } });
+    if (order.paymentStatus !== 'paid' && updated.paymentStatus === 'paid') {
+      try {
+        await notifyShopkeeperPaymentCompleted(updated, ownDp.businessName);
+      } catch (notificationError) {
+        console.error('Payment-complete notification failed:', notificationError);
+      }
+    }
+    return res.json(updated);
   } catch (e) {
     console.error('Payment status update error:', e);
     return res.status(500).json({ error: 'Payment update failed' });
   }
 });
 
-// Delivery Groups
+// Delivery groups
 app.get('/api/delivery-groups/:distributorId', async (req, res) => {
-  try { res.json(await prisma.deliveryGroup.findMany({ where: { distributorId: req.params.distributorId }})); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can access delivery groups.' });
+    }
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp || ownDp.id !== req.params.distributorId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.json(await prisma.deliveryGroup.findMany({ where: { distributorId: req.params.distributorId } }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.post('/api/delivery-groups', async (req, res) => {
-  try { res.json(await prisma.deliveryGroup.create({ data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can create delivery groups.' });
+    }
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp || ownDp.id !== req.body.distributorId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.json(await prisma.deliveryGroup.create({ data: req.body }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.delete('/api/delivery-groups/:id', async (req, res) => {
-  try { await prisma.deliveryGroup.delete({ where: { id: req.params.id }}); res.json({ success: true }); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can delete delivery groups.' });
+    }
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp) return res.status(403).json({ error: 'Forbidden' });
+    const group = await prisma.deliveryGroup.findUnique({ where: { id: req.params.id } });
+    if (!group || group.distributorId !== ownDp.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await prisma.deliveryGroup.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Notifications
 app.get('/api/notifications/:userId', async (req, res) => {
-  try { res.json(await prisma.notification.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: 'desc' } })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.id !== req.params.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.json(await prisma.notification.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: 'desc' } }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.post('/api/notifications', async (req, res) => {
-  try { res.json(await prisma.notification.create({ data: req.body })); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    return res.json(await prisma.notification.create({ data: req.body }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.patch('/api/notifications/:id/read', async (req, res) => {
-  try { res.json(await prisma.notification.update({ where: { id: req.params.id }, data: { read: true }})); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    const notification = await prisma.notification.findUnique({ where: { id: req.params.id } });
+    if (!notification || notification.userId !== requester.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    return res.json(await prisma.notification.update({ where: { id: req.params.id }, data: { read: true } }));
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 app.patch('/api/notifications/user/:userId/read-all', async (req, res) => {
-  try { await prisma.notification.updateMany({ where: { userId: req.params.userId }, data: { read: true }}); res.json({ success: true }); } 
-  catch (e) { res.status(500).json({ error: 'Server error' }); }
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.id !== req.params.userId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await prisma.notification.updateMany({ where: { userId: req.params.userId }, data: { read: true } });
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Auto orders
 app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
   try {
-    const dp = await prisma.distributorProfile.findUnique({ where: { userId: req.params.distributorUserId }});
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor' || requester.id !== req.params.distributorUserId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const dp = await prisma.distributorProfile.findUnique({ where: { userId: req.params.distributorUserId } });
     if (!dp) return res.status(404).json({ error: 'Not found' });
+
     const todayStr = new Date().toISOString().split('T')[0];
     const today = new Date(todayStr);
     const activeConns = await prisma.connection.findMany({ where: { distributorId: dp.id, status: 'active', autoOrderEnabled: true } });
+
     for (const conn of activeConns) {
       const todayOrderCount = await prisma.order.count({ where: { shopkeeperId: conn.shopkeeperId!, distributorId: conn.distributorId!, deliveryDate: today } });
       if (todayOrderCount > 0) continue;
-      const lastOrder = await prisma.order.findFirst({ where: { shopkeeperId: conn.shopkeeperId!, distributorId: conn.distributorId! }, orderBy: { placedAt: 'desc' }, include: { items: true } });
+
+      const lastOrder = await prisma.order.findFirst({
+        where: { shopkeeperId: conn.shopkeeperId!, distributorId: conn.distributorId! },
+        orderBy: { placedAt: 'desc' },
+        include: { items: true },
+      });
       if (!lastOrder) continue;
-      const validItems = lastOrder.items.filter(i => (i.quantity || 0) > 0);
+
+      const validItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
       if (validItems.length === 0) continue;
+
+      const orderBusinessLine = isBusinessLine(lastOrder.businessLine)
+        ? lastOrder.businessLine
+        : inferBusinessLine(validItems[0]?.category ?? 'other', validItems[0]?.businessLine ?? undefined);
+
       const total = validItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * (item.quantity || 0), 0);
       await prisma.order.create({
         data: {
-          shopkeeperId: conn.shopkeeperId, shopkeeperName: conn.shopkeeperName, shopName: conn.shopName, distributorId: conn.distributorId, type: 'normal', status: 'pending', paymentStatus: 'unpaid', source: 'web', deliveryDate: today, total,
-          items: { create: validItems.map(i => ({ productId: i.productId, productName: i.productName, brand: i.brand, unit: i.unit, unitPrice: i.unitPrice, quantity: i.quantity })) }
-        }
+          shopkeeperId: conn.shopkeeperId,
+          shopkeeperName: conn.shopkeeperName,
+          shopName: conn.shopName,
+          distributorId: conn.distributorId,
+          businessLine: orderBusinessLine,
+          type: 'normal',
+          status: 'pending',
+          paymentStatus: 'unpaid',
+          source: 'web',
+          deliveryDate: today,
+          total,
+          items: {
+            create: validItems.map((i) => ({
+              productId: i.productId,
+              productName: i.productName,
+              brand: i.brand,
+              category: i.category,
+              businessLine: isBusinessLine(i.businessLine) ? i.businessLine : orderBusinessLine,
+              unit: i.unit,
+              unitPrice: i.unitPrice,
+              quantity: i.quantity,
+            })),
+          },
+        },
       });
     }
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: 'Server error' }); }
+
+    return res.json({ success: true });
+  } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
 
-async function startServer() {
-  try {
-    app.listen(PORT, () => {
-      console.log(`Backend API Server running on http://localhost:${PORT}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-startServer();
-
+app.listen(PORT, () => {
+  console.log(`Backend API Server running on http://localhost:${PORT}`);
+});

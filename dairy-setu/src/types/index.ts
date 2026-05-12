@@ -1,4 +1,6 @@
 export type Role = 'distributor' | 'shopkeeper';
+export type DistributorType = 'dairy' | 'icecream' | 'dual';
+export type BusinessLine = 'dairy' | 'icecream';
 
 export type ConnectionStatus = 'pending' | 'active' | 'rejected';
 
@@ -22,6 +24,7 @@ export interface DistributorProfile {
   id: string;
   userId: string;
   businessName: string;
+  distributorType?: DistributorType;
   phone?: string;
   email?: string;
   connectionCode: string;
@@ -39,6 +42,7 @@ export interface DistributorProfile {
   latitude?: number;
   longitude?: number;
   locationName?: string; // e.g. "Vaishali Nagar, Ajmer"
+  distance?: number; // Distance from shopkeeper in km
 }
 
 export interface ShopkeeperProfile {
@@ -87,6 +91,8 @@ export interface Product {
   name: string;
   brand: string;
   category: ProductCategory;
+  businessLine?: BusinessLine;
+  quantity?: string;
   unit: string;
   price: number;
   available: boolean;
@@ -99,6 +105,8 @@ export interface OrderItem {
   productId: string;
   productName: string;
   brand: string;
+  category?: ProductCategory;
+  businessLine?: BusinessLine;
   unit: string;
   unitPrice: number;
   quantity: number;
@@ -110,6 +118,7 @@ export interface Order {
   shopkeeperName: string;
   shopName: string;
   distributorId: string;
+  businessLine?: BusinessLine;
   type: OrderType;
   status: OrderStatus;
   paymentStatus: PaymentStatus;

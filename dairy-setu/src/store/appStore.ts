@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import axios from 'axios';
+import { apiClient } from '../lib/apiClient';
+import { inferBusinessLineFromCategory } from '../utils/businessLine';
 import type {
   Connection, Product, Order, DeliveryGroup, Notification, CartItem,
-  ConnectionStatus, OrderStatus, PaymentStatus, DistributorProfile, ShopkeeperProfile
+  BusinessLine, ConnectionStatus, OrderStatus, PaymentStatus, DistributorProfile, ShopkeeperProfile
 } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -23,7 +25,7 @@ interface AppState {
   fetchShopkeeperProfile: (userId: string) => Promise<ShopkeeperProfile | null>;
   fetchShopkeeperProfileById: (shopkeeperId: string) => Promise<ShopkeeperProfile | null>;
   ensureShopkeeperProfile: (userId: string) => ShopkeeperProfile | null;
-  fetchAllDistributors: () => Promise<void>;
+  fetchAllDistributors: (lat?: number, lng?: number) => Promise<void>;
   fetchConnections: (userId: string, role: 'distributor' | 'shopkeeper') => Promise<void>;
   fetchProducts: (distributorId: string) => Promise<void>;
   fetchOrders: (userId: string, role: 'distributor' | 'shopkeeper') => Promise<void>;
@@ -49,7 +51,7 @@ interface AppState {
   deleteProduct: (id: string) => Promise<boolean>;
 
   // Order actions
-  placeOrder: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorId: string, items: CartItem[], isLate: boolean) => Promise<Order>;
+  placeOrder: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorId: string, items: CartItem[], isLate: boolean, businessLine: BusinessLine) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   updateOrderPaymentStatus: (orderId: string, paymentStatus: PaymentStatus) => Promise<void>;
 
@@ -65,22 +67,27 @@ interface AppState {
   // Cart actions (local only)
   setCartQuantity: (product: Product, quantity: number) => void;
   clearCart: () => void;
+  resetState: () => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  connections: [],
-  products: [],
-  orders: [],
-  deliveryGroups: [],
-  notifications: [],
-  distributorProfiles: [],
-  shopkeeperProfiles: [],
-  cart: [],
+const initialState = {
+  connections: [] as Connection[],
+  products: [] as Product[],
+  orders: [] as Order[],
+  deliveryGroups: [] as DeliveryGroup[],
+  notifications: [] as Notification[],
+  distributorProfiles: [] as DistributorProfile[],
+  shopkeeperProfiles: [] as ShopkeeperProfile[],
+  cart: [] as CartItem[],
   loading: false,
+};
+
+export const useAppStore = create<AppState>((set, get) => ({
+  ...initialState,
 
   fetchDistributorProfile: async (userId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/profiles/distributor/${userId}`);
+      const { data } = await apiClient.get(`${API_URL}/profiles/distributor/${userId}`);
       set(state => ({
         distributorProfiles: state.distributorProfiles.some(d => d.userId === userId)
           ? state.distributorProfiles.map(d => d.userId === userId ? data : d)
@@ -92,7 +99,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchShopkeeperProfile: async (userId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/profiles/shopkeeper/${userId}`);
+      const { data } = await apiClient.get(`${API_URL}/profiles/shopkeeper/${userId}`);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.userId === userId)
           ? state.shopkeeperProfiles.map(s => s.userId === userId ? data : s)
@@ -110,7 +117,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchShopkeeperProfileById: async (shopkeeperId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/profiles/shopkeeper-by-id/${shopkeeperId}`);
+      const { data } = await apiClient.get(`${API_URL}/profiles/shopkeeper-by-id/${shopkeeperId}`);
       set(state => ({
         shopkeeperProfiles: state.shopkeeperProfiles.some(s => s.id === shopkeeperId)
           ? state.shopkeeperProfiles.map(s => s.id === shopkeeperId ? data : s)
@@ -120,25 +127,35 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch { return null; }
   },
 
-  fetchAllDistributors: async () => {
+  fetchAllDistributors: async (lat?: number, lng?: number) => {
     try {
-      const { data } = await axios.get(`${API_URL}/distributors`);
+      let url = `${API_URL}/distributors`;
+      if (lat !== undefined && lng !== undefined) {
+        url += `?lat=${lat}&lng=${lng}`;
+      }
+      const { data } = await apiClient.get(url);
       if (data) set({ distributorProfiles: data });
     } catch (e) { console.error(e); }
   },
 
   fetchConnections: async (userId, role) => {
     try {
-      const { data } = await axios.get(`${API_URL}/connections/${role}/${userId}`);
+      const { data } = await apiClient.get(`${API_URL}/connections/${role}/${userId}`);
       if (data) set({ connections: data });
     } catch (e) { console.error(e); }
   },
 
   fetchProducts: async (distributorId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/products/${distributorId}`);
+      const { data } = await apiClient.get(`${API_URL}/products/${distributorId}`);
       if (data) {
-        const parsedData = data.map((p: any) => ({ ...p, price: Number(p.price) }));
+        const parsedData = data.map((p: any) => ({
+          ...p,
+          category: String(p.category || 'other').toLowerCase(),
+          businessLine: inferBusinessLineFromCategory(String(p.category || 'other'), p.businessLine),
+          quantity: String(p.quantity ?? p.unit ?? '').trim(),
+          price: Number(p.price),
+        }));
         set(state => ({
           products: [...state.products.filter(p => p.distributorId !== distributorId), ...parsedData],
         }));
@@ -148,12 +165,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchOrders: async (userId, role) => {
     try {
-      const { data } = await axios.get(`${API_URL}/orders/${role}/${userId}`);
+      const { data } = await apiClient.get(`${API_URL}/orders/${role}/${userId}`);
       if (data) {
         const parsedOrders = data.map((o: any) => ({
           ...o, total: Number(o.total),
+          businessLine: inferBusinessLineFromCategory(String(o.businessLine || o.items?.[0]?.category || 'other'), o.businessLine),
           paymentStatus: o.paymentStatus === 'paid' ? 'paid' : 'unpaid',
-          items: o.items.map((i: any) => ({ ...i, unitPrice: Number(i.unitPrice) }))
+          items: o.items.map((i: any) => ({
+            ...i,
+            category: String(i.category || 'other').toLowerCase(),
+            businessLine: inferBusinessLineFromCategory(String(i.category || 'other'), i.businessLine),
+            unitPrice: Number(i.unitPrice),
+          }))
         }));
         set({ orders: parsedOrders });
       }
@@ -162,14 +185,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchNotifications: async (userId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/notifications/${userId}`);
+      const { data } = await apiClient.get(`${API_URL}/notifications/${userId}`);
       if (data) set({ notifications: data });
     } catch (e) { console.error(e); }
   },
 
   fetchDeliveryGroups: async (distributorId) => {
     try {
-      const { data } = await axios.get(`${API_URL}/delivery-groups/${distributorId}`);
+      const { data } = await apiClient.get(`${API_URL}/delivery-groups/${distributorId}`);
       if (data) set({ deliveryGroups: data });
     } catch (e) { console.error(e); }
   },
@@ -184,21 +207,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateDistributorSettings: async (distributorId, updates) => {
     try {
-      await axios.patch(`${API_URL}/profiles/distributor/${distributorId}`, updates);
+      await apiClient.patch(`${API_URL}/profiles/distributor/${distributorId}`, updates);
       set(state => ({ distributorProfiles: state.distributorProfiles.map(dp => dp.id === distributorId ? { ...dp, ...updates } : dp) }));
     } catch (e) { console.error(e); }
   },
 
   updateShopkeeperProfile: async (shopkeeperId, updates) => {
     try {
-      await axios.patch(`${API_URL}/profiles/shopkeeper/${shopkeeperId}`, updates);
+      await apiClient.patch(`${API_URL}/profiles/shopkeeper/${shopkeeperId}`, updates);
       set(state => ({ shopkeeperProfiles: state.shopkeeperProfiles.map(sp => sp.id === shopkeeperId ? { ...sp, ...updates } : sp) }));
     } catch (e) { console.error(e); }
   },
 
   requestConnection: async (shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone) => {
     try {
-      const { data } = await axios.post(`${API_URL}/connections`, { shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone });
+      const { data } = await apiClient.post(`${API_URL}/connections`, { shopkeeperId, shopkeeperName, shopName, distributorCode, shopkeeperPhone });
       if (data && data.connection) {
         set(state => ({ connections: [...state.connections, data.connection] }));
         await get().addNotification({ userId: data.distributorUserId, type: 'new_connection', message: `${shopName} wants to connect with you`, read: false, createdAt: new Date().toISOString() });
@@ -210,37 +233,46 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateConnectionStatus: async (connectionId, status) => {
     try {
-      await axios.patch(`${API_URL}/connections/${connectionId}`, { status });
+      await apiClient.patch(`${API_URL}/connections/${connectionId}`, { status });
       set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, status } : c) }));
     } catch (e) { console.error(e); }
   },
 
   assignDeliveryGroup: async (connectionId, groupId, groupName) => {
     try {
-      await axios.patch(`${API_URL}/connections/${connectionId}`, { deliveryGroupId: groupId, deliveryGroupName: groupName });
+      await apiClient.patch(`${API_URL}/connections/${connectionId}`, { deliveryGroupId: groupId, deliveryGroupName: groupName });
       set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, deliveryGroupId: groupId, deliveryGroupName: groupName } : c) }));
     } catch (e) { console.error(e); }
   },
 
   toggleConnectionAutoOrder: async (connectionId, enabled) => {
     try {
-      await axios.patch(`${API_URL}/connections/${connectionId}`, { autoOrderEnabled: enabled });
+      await apiClient.patch(`${API_URL}/connections/${connectionId}`, { autoOrderEnabled: enabled });
       set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, autoOrderEnabled: enabled } : c) }));
     } catch (e) { console.error(e); }
   },
 
   runAutoOrdersForDistributor: async (distributorUserId) => {
     try {
-      await axios.post(`${API_URL}/auto-orders/${distributorUserId}`);
+      await apiClient.post(`${API_URL}/auto-orders/${distributorUserId}`);
       await get().fetchOrders(distributorUserId, 'distributor');
     } catch (e) { console.error(e); }
   },
 
   addProduct: async (product) => {
     try {
-      const { data } = await axios.post(`${API_URL}/products`, product);
+      const { data } = await apiClient.post(`${API_URL}/products`, product);
       if (data) {
-        set(state => ({ products: [...state.products, { ...data, price: Number(data.price) }] }));
+        set(state => ({
+          products: [
+            ...state.products,
+            {
+              ...data,
+              quantity: String(data.quantity ?? data.unit ?? '').trim(),
+              price: Number(data.price),
+            },
+          ],
+        }));
         return true;
       }
     } catch (e) { console.error(e); return false; }
@@ -249,7 +281,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateProduct: async (id, updates) => {
     try {
-      await axios.patch(`${API_URL}/products/${id}`, updates);
+      await apiClient.patch(`${API_URL}/products/${id}`, updates);
       set(state => ({ products: state.products.map(p => p.id === id ? { ...p, ...updates } : p) }));
       return true;
     } catch (e) { console.error(e); return false; }
@@ -257,16 +289,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteProduct: async (id) => {
     try {
-      await axios.delete(`${API_URL}/products/${id}`);
+      await apiClient.delete(`${API_URL}/products/${id}`);
       set(state => ({ products: state.products.filter(p => p.id !== id) }));
       return true;
     } catch (e) { console.error(e); return false; }
   },
 
-  placeOrder: async (shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate) => {
+  placeOrder: async (shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, businessLine) => {
     try {
       const total = items.reduce((s, i) => s + i.product.price * i.quantity, 0);
-      const { data } = await axios.post(`${API_URL}/orders`, { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, total });
+      const { data } = await apiClient.post(`${API_URL}/orders`, { shopkeeperId, shopkeeperName, shopName, distributorId, items, isLate, total, businessLine });
       set(state => ({
         orders: [{
           ...data.order,
@@ -284,7 +316,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateOrderStatus: async (orderId, status) => {
     try {
-      await axios.patch(`${API_URL}/orders/${orderId}`, { status });
+      await apiClient.patch(`${API_URL}/orders/${orderId}`, { status });
       set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o) }));
     } catch (e) { console.error(e); }
   },
@@ -292,6 +324,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateOrderPaymentStatus: async (orderId, paymentStatus) => {
     const previous = get().orders.find(o => o.id === orderId)?.paymentStatus;
     if (!previous) return;
+    if (previous === 'paid' && paymentStatus === 'unpaid') {
+      throw new Error('Payment already locked as paid.');
+    }
 
     // Optimistic update so user immediately sees status change
     set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, paymentStatus } : o) }));
@@ -299,12 +334,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       let data: any;
       try {
-        const response = await axios.patch(`${API_URL}/orders/${orderId}/payment-status`, { paymentStatus });
+        const response = await apiClient.patch(`${API_URL}/orders/${orderId}/payment-status`, { paymentStatus });
         data = response.data;
       } catch (primaryError) {
         // Backward compatibility: older backend may not have dedicated endpoint
         if (axios.isAxiosError(primaryError) && primaryError.response?.status === 404) {
-          const fallbackResponse = await axios.patch(`${API_URL}/orders/${orderId}`, { paymentStatus });
+          const fallbackResponse = await apiClient.patch(`${API_URL}/orders/${orderId}`, { paymentStatus });
           data = fallbackResponse.data;
         } else {
           throw primaryError;
@@ -323,35 +358,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addDeliveryGroup: async (distributorId, name) => {
     try {
-      const { data } = await axios.post(`${API_URL}/delivery-groups`, { distributorId, name });
+      const { data } = await apiClient.post(`${API_URL}/delivery-groups`, { distributorId, name });
       if (data) set(state => ({ deliveryGroups: [...state.deliveryGroups, data] }));
     } catch (e) { console.error(e); }
   },
 
   deleteDeliveryGroup: async (id) => {
     try {
-      await axios.delete(`${API_URL}/delivery-groups/${id}`);
+      await apiClient.delete(`${API_URL}/delivery-groups/${id}`);
       set(state => ({ deliveryGroups: state.deliveryGroups.filter(g => g.id !== id) }));
     } catch (e) { console.error(e); }
   },
 
   markNotificationRead: async (id) => {
     try {
-      await axios.patch(`${API_URL}/notifications/${id}/read`);
+      await apiClient.patch(`${API_URL}/notifications/${id}/read`);
       set(state => ({ notifications: state.notifications.map(n => n.id === id ? { ...n, read: true } : n) }));
     } catch (e) { console.error(e); }
   },
 
   markAllRead: async (userId) => {
     try {
-      await axios.patch(`${API_URL}/notifications/user/${userId}/read-all`);
+      await apiClient.patch(`${API_URL}/notifications/user/${userId}/read-all`);
       set(state => ({ notifications: state.notifications.map(n => n.userId === userId ? { ...n, read: true } : n) }));
     } catch (e) { console.error(e); }
   },
 
   addNotification: async (notification) => {
     try {
-      const { data } = await axios.post(`${API_URL}/notifications`, notification);
+      const { data } = await apiClient.post(`${API_URL}/notifications`, notification);
       if (data) set(state => ({ notifications: [data, ...state.notifications] }));
     } catch (e) { console.error(e); }
   },
@@ -365,9 +400,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         c => c.product.distributorId !== product.distributorId
       );
       if (hasOtherDistributorItem) return { cart: state.cart };
+      const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+      const hasOtherBusinessLine = state.cart.some(
+        c => inferBusinessLineFromCategory(String(c.product.category || 'other'), c.product.businessLine) !== productLine
+      );
+      if (hasOtherBusinessLine) return { cart: state.cart };
       return { cart: [...state.cart, { product, quantity }] };
     });
   },
 
   clearCart: () => set({ cart: [] }),
+  resetState: () => set({ ...initialState }),
 }));
+
+

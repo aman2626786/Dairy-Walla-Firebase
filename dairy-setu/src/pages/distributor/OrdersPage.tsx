@@ -76,6 +76,10 @@ export function OrdersPage() {
   };
 
   const handlePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
+    if (order.paymentStatus === 'paid' && paymentStatus === 'unpaid') {
+      show('Payment once paid cannot be marked unpaid again.', 'error');
+      return;
+    }
     try {
       await updateOrderPaymentStatus(order.id, paymentStatus);
       show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'} for ${order.shopName}`);
@@ -177,28 +181,18 @@ export function OrdersPage() {
                   )}
                   {order.status !== 'rejected' && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handlePaymentStatus(order, 'paid')}
-                        disabled={order.paymentStatus === 'paid'}
-                        className={`py-1.5 px-3 text-xs rounded-lg border transition-colors ${
-                          order.paymentStatus === 'paid'
-                            ? 'bg-green-100 border-green-300 text-green-700 cursor-not-allowed'
-                            : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
-                        }`}
-                      >
-                        Mark Paid
-                      </button>
-                      <button
-                        onClick={() => handlePaymentStatus(order, 'unpaid')}
-                        disabled={order.paymentStatus === 'unpaid'}
-                        className={`py-1.5 px-3 text-xs rounded-lg border transition-colors ${
-                          order.paymentStatus === 'unpaid'
-                            ? 'bg-red-100 border-red-300 text-red-700 cursor-not-allowed'
-                            : 'bg-white border-red-200 text-red-700 hover:bg-red-50'
-                        }`}
-                      >
-                        Mark Unpaid
-                      </button>
+                      {order.paymentStatus === 'paid' ? (
+                        <span className="py-1.5 px-3 text-xs rounded-lg border bg-green-100 border-green-300 text-green-700">
+                          Payment Locked
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handlePaymentStatus(order, 'paid')}
+                          className="py-1.5 px-3 text-xs rounded-lg border transition-colors bg-white border-green-200 text-green-700 hover:bg-green-50"
+                        >
+                          Mark Paid
+                        </button>
+                      )}
                     </div>
                   )}
                   <button

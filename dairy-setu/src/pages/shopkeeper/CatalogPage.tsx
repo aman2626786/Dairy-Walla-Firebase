@@ -5,22 +5,18 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import type { KnownProductCategory, Product, ProductCategory } from '../../types';
-
-const knownCategoryEmoji: Record<KnownProductCategory, string> = {
-  milk: 'M',
-  paneer: 'P',
-  curd: 'C',
-  butter: 'B',
-  ghee: 'G',
-  other: 'O',
-};
+import {
+  businessLineLabel,
+  getAllowedBusinessLines,
+  getCategoryEmoji,
+  getProductQuantityText,
+  inferBusinessLineFromCategory,
+  toDistributorType,
+} from '../../utils/businessLine';
+import type { Product, ProductCategory } from '../../types';
 
 const normalizeCategory = (value: string): ProductCategory =>
   (value.trim().toLowerCase().replace(/\s+/g, ' ') || 'other') as ProductCategory;
-
-const getCategoryEmoji = (category: string): string =>
-  knownCategoryEmoji[normalizeCategory(category) as KnownProductCategory] || 'O';
 
 function ProductCard({ product, quantity, onQtyChange, canAdd }: {
   product: Product;
@@ -30,18 +26,14 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
 }) {
   return (
     <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'}`}>
-      {product.imageUrl ? (
-        <img src={product.imageUrl} alt={product.name} className="w-full h-32 object-cover rounded-xl mb-3" />
-      ) : (
-        <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
-          <span className="text-2xl font-semibold text-gray-500">{getCategoryEmoji(String(product.category))}</span>
-        </div>
-      )}
+      <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
+        <span className="text-4xl">{getCategoryEmoji(String(product.category))}</span>
+      </div>
 
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.name}</div>
-          <div className="text-xs text-gray-500">{product.brand} - {product.unit}</div>
+          <div className="text-xs text-gray-500">{product.brand} - {getProductQuantityText(product.quantity, product.unit)}</div>
         </div>
         <div className="text-right flex-shrink-0">
           <div className="font-bold text-gray-900">Rs {product.price}</div>
@@ -117,9 +109,12 @@ export function ShopCatalogPage() {
   const now = new Date();
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-  const availableProducts = products.filter(
-    p => activeConnections.some(c => c.distributorId === p.distributorId) && p.available
-  );
+  const availableProducts = products
+    .filter(p => activeConnections.some(c => c.distributorId === p.distributorId) && p.available)
+    .map(product => ({
+      ...product,
+      businessLine: inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine),
+    }));
 
   const categories = [...new Set(availableProducts.map(p => normalizeCategory(String(p.category))))] as ProductCategory[];
 
@@ -135,19 +130,31 @@ export function ShopCatalogPage() {
 
   const groupedByDistributor = uniqueConnections.map(conn => {
     const distributorProfile = distributorProfiles.find(dp => dp.id === conn.distributorId);
+    const distributorType = toDistributorType(distributorProfile?.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
     const isLate = distributorProfile ? currentTime > distributorProfile.orderWindowCutoff : false;
     const isBeforeWindow = distributorProfile ? currentTime < distributorProfile.orderWindowStart : false;
 
-    const items = products.filter(p => {
+    const items = availableProducts.filter(p => {
       if (p.distributorId !== conn.distributorId || !p.available) return false;
       const matchSearch =
         p.name.toLowerCase().includes(search.toLowerCase()) ||
         p.brand.toLowerCase().includes(search.toLowerCase());
       const matchCat = filterCat === 'all' || normalizeCategory(String(p.category)) === filterCat;
-      return matchSearch && matchCat;
+      const line = inferBusinessLineFromCategory(String(p.category || 'other'), p.businessLine);
+      return matchSearch && matchCat && allowedLines.includes(line);
     });
 
-    return { conn, distributorProfile, isLate, isBeforeWindow, items };
+    return {
+      conn,
+      distributorProfile,
+      distributorType,
+      isLate,
+      isBeforeWindow,
+      items,
+      dairyItems: items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'dairy'),
+      iceCreamItems: items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'icecream'),
+    };
   });
 
   const filteredCount = groupedByDistributor.reduce((sum, group) => sum + group.items.length, 0);
@@ -156,6 +163,9 @@ export function ShopCatalogPage() {
     ? groupedByDistributor.filter(group => group.items.length > 0)
     : groupedByDistributor;
   const lockedDistributorId = cart[0]?.product.distributorId || null;
+  const lockedBusinessLine = cart[0]
+    ? inferBusinessLineFromCategory(String(cart[0].product.category || 'other'), cart[0].product.businessLine)
+    : null;
   const cartTotal = cart.reduce((sum, c) => sum + c.product.price * c.quantity, 0);
   const cartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
@@ -227,6 +237,11 @@ export function ShopCatalogPage() {
                   First distributor already selected in cart. Place this order first to add from another distributor.
                 </div>
               )}
+              {group.distributorType === 'dual' && lockedDistributorId === group.conn.distributorId && lockedBusinessLine && (
+                <div className="mb-3 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                  Active order section: {businessLineLabel(lockedBusinessLine)}. Ek order me sirf ek section allowed hai.
+                </div>
+              )}
 
               {group.distributorProfile && (
                 <div className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${
@@ -261,12 +276,67 @@ export function ShopCatalogPage() {
 
               {group.items.length === 0 ? (
                 <div className="text-sm text-gray-500 py-3">No products for this distributor.</div>
+              ) : group.distributorType === 'dual' ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Dairy Products</h3>
+                    {group.dairyItems.length === 0 ? (
+                      <div className="text-xs text-gray-500 mb-2">No dairy products available.</div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {group.dairyItems.map(product => {
+                          const cartItem = cart.find(c => c.product.id === product.id);
+                          const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                          const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                          const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                          const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
+                          return (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              quantity={cartItem?.quantity || 0}
+                              canAdd={canAdd}
+                              onQtyChange={qty => setCartQuantity(product, qty)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Ice Cream</h3>
+                    {group.iceCreamItems.length === 0 ? (
+                      <div className="text-xs text-gray-500">No ice cream products available.</div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {group.iceCreamItems.map(product => {
+                          const cartItem = cart.find(c => c.product.id === product.id);
+                          const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                          const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                          const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                          const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
+                          return (
+                            <ProductCard
+                              key={product.id}
+                              product={product}
+                              quantity={cartItem?.quantity || 0}
+                              canAdd={canAdd}
+                              onQtyChange={qty => setCartQuantity(product, qty)}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {group.items.map(product => {
                     const cartItem = cart.find(c => c.product.id === product.id);
-                    const canAdd =
-                      !!cartItem || !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                    const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                    const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                    const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                    const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
                     return (
                       <ProductCard
                         key={product.id}

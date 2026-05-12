@@ -10,16 +10,18 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } fro
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ProductCategory } from '../../types';
+import { addPdfLogoWatermark, getPdfBrandAssets } from '../../utils/pdfBranding';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 // Category display order and labels
 const CATEGORY_ORDER: ProductCategory[] = ['milk', 'paneer', 'curd', 'butter', 'ghee', 'other'];
 const CATEGORY_LABELS: Record<ProductCategory, string> = {
-  milk: '🥛 Milk',
-  paneer: '🧀 Paneer',
-  curd: '🍶 Curd',
-  butter: '🧈 Butter',
-  ghee: '🫙 Ghee',
-  other: '📦 Other',
+  milk: 'Milk',
+  paneer: 'Paneer',
+  curd: 'Curd',
+  butter: 'Butter',
+  ghee: 'Ghee',
+  other: 'Other',
 };
 const CATEGORY_COLORS: Record<ProductCategory, string> = {
   milk: 'bg-blue-50 border-blue-200 text-blue-800',
@@ -29,6 +31,14 @@ const CATEGORY_COLORS: Record<ProductCategory, string> = {
   ghee: 'bg-amber-50 border-amber-200 text-amber-800',
   other: 'bg-gray-50 border-gray-200 text-gray-700',
 };
+const SUMMARY_CATEGORIES = new Set(CATEGORY_ORDER);
+
+function normalizeSummaryCategory(category: unknown): ProductCategory {
+  const normalized = String(category ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return SUMMARY_CATEGORIES.has(normalized as ProductCategory)
+    ? (normalized as ProductCategory)
+    : 'other';
+}
 
 type FilterPeriod = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
@@ -59,7 +69,7 @@ function getDateRange(period: FilterPeriod, customFrom: string, customTo: string
       return {
         from: customFrom ? new Date(customFrom) : new Date(),
         to: customTo ? new Date(customTo + 'T23:59:59') : new Date(),
-        label: customFrom && customTo ? `${format(new Date(customFrom), 'dd MMM')} – ${format(new Date(customTo), 'dd MMM')}` : 'Custom',
+        label: customFrom && customTo ? `${format(new Date(customFrom), 'dd MMM')} - ${format(new Date(customTo), 'dd MMM')}` : 'Custom',
       };
   }
 }
@@ -88,23 +98,25 @@ export function SummaryPage() {
     });
   }, [orders, profile, from, to]);
 
-  // Aggregate by product — keep category from products store
+  // Aggregate by product  keep category from products store
   const summaryByCategory = useMemo(() => {
     const map = new Map<string, SummaryItem>();
 
     filteredOrders.forEach(order => {
-      order.items.forEach(item => {
-        const existing = map.get(item.productId);
+      const items = Array.isArray(order.items) ? order.items : [];
+
+      items.forEach(item => {
+        const productKey = item.productId || `${item.productName}-${item.brand}-${item.unit}`;
+        const existing = map.get(productKey);
         if (existing) {
           existing.totalQty += item.quantity;
           existing.totalValue += item.quantity * item.unitPrice;
         } else {
-          const category = ((item as any).category as ProductCategory | undefined) || 'other';
-          map.set(item.productId, {
-            productId: item.productId,
+          map.set(productKey, {
+            productId: productKey,
             productName: item.productName,
             brand: item.brand,
-            category,
+            category: normalizeSummaryCategory((item as any).category),
             unit: item.unit,
             totalQty: item.quantity,
             totalValue: item.quantity * item.unitPrice,
@@ -117,7 +129,9 @@ export function SummaryPage() {
     const grouped: Record<ProductCategory, SummaryItem[]> = {
       milk: [], paneer: [], curd: [], butter: [], ghee: [], other: [],
     };
-    map.forEach(item => grouped[item.category].push(item));
+    map.forEach(item => {
+      grouped[normalizeSummaryCategory(item.category)].push(item);
+    });
 
     return grouped;
   }, [filteredOrders]);
@@ -142,59 +156,65 @@ export function SummaryPage() {
   // Generate bill text for sharing
   const generateBillText = () => {
     const lines: string[] = [];
-    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lines.push('------------------------');
     lines.push(`  ${profile?.businessName}`);
-    lines.push(`  Order Summary — ${label}`);
-    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lines.push(`  Order Summary - ${label}`);
+    lines.push('------------------------');
     lines.push('');
 
     CATEGORY_ORDER.forEach(cat => {
       const items = summaryByCategory[cat];
       if (items.length === 0) return;
-      lines.push(`▸ ${CATEGORY_LABELS[cat].toUpperCase()}`);
-      lines.push(`${'─'.repeat(24)}`);
+      lines.push(`- ${CATEGORY_LABELS[cat].toUpperCase()}`);
       items.forEach(item => {
         lines.push(`  ${item.productName} (${item.brand})`);
-        lines.push(`  ${item.totalQty} ${item.unit} × ₹${(item.totalValue / item.totalQty).toFixed(0)} = ₹${item.totalValue.toLocaleString()}`);
+        lines.push(`  ${item.totalQty} ${item.unit} x Rs. ${(item.totalValue / item.totalQty).toFixed(0)} = Rs. ${item.totalValue.toLocaleString()}`);
       });
       lines.push('');
     });
 
-    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lines.push('------------------------');
     lines.push(`  Total Orders : ${filteredOrders.length}`);
     lines.push(`  Total Qty    : ${totalQty} units`);
-    lines.push(`  Total Value  : ₹${totalValue.toLocaleString()}`);
-    lines.push(`━━━━━━━━━━━━━━━━━━━━━━━━`);
+    lines.push(`  Total Value  : Rs. ${totalValue.toLocaleString()}`);
+    lines.push('------------------------');
     lines.push(`  Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`);
 
     return lines.join('\n');
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
+    const brandAssets = await getPdfBrandAssets();
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
     let y = 15;
 
-    // ── Header ──────────────────────────────────────────────────
-    doc.setFillColor(22, 163, 74); // brand-600 green
-    doc.rect(0, 0, pageW, 28, 'F');
+    if (brandAssets?.watermarkDataUrl) {
+      addPdfLogoWatermark(doc, brandAssets.watermarkDataUrl);
+    }
+
+    doc.setFillColor(22, 163, 74);
+    doc.rect(0, 0, pageW, 32, 'F');
+
+    if (brandAssets?.logoDataUrl) {
+      doc.setFillColor(255, 255, 255);
+      doc.roundedRect(5, 4, 24, 24, 2, 2, 'F');
+      doc.addImage(brandAssets.logoDataUrl, 'PNG', 6.5, 5.5, 21, 21, undefined, 'FAST');
+    }
 
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(profile?.businessName || 'DairyWalla', pageW / 2, 12, { align: 'center' });
+    doc.text(profile?.businessName || 'DairyWalla', 33, 11);
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Order Summary Bill  •  ${label}`, pageW / 2, 19, { align: 'center' });
-    doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`, pageW / 2, 24, { align: 'center' });
+    doc.text(`Order Summary Bill - ${label}`, 33, 17);
+    doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`, 33, 22);
+    doc.text(`Total Orders: ${filteredOrders.length}  |  Total Value: Rs. ${totalValue.toLocaleString()}`, 33, 27);
 
-    y = 36;
-
-    // ── Stats row ────────────────────────────────────────────────
-    doc.setTextColor(60, 60, 60);
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
+    y = 40;
 
     const stats = [
       { label: 'Total Orders', value: String(filteredOrders.length) },
@@ -218,22 +238,21 @@ export function SummaryPage() {
 
     y += 22;
 
-    // ── Category sections ────────────────────────────────────────
     const categoryBgColors: Record<ProductCategory, [number, number, number]> = {
-      milk:   [219, 234, 254],
+      milk: [219, 234, 254],
       paneer: [254, 249, 195],
-      curd:   [237, 233, 254],
+      curd: [237, 233, 254],
       butter: [255, 237, 213],
-      ghee:   [254, 243, 199],
-      other:  [243, 244, 246],
+      ghee: [254, 243, 199],
+      other: [243, 244, 246],
     };
     const categoryTextColors: Record<ProductCategory, [number, number, number]> = {
-      milk:   [29, 78, 216],
+      milk: [29, 78, 216],
       paneer: [133, 77, 14],
-      curd:   [109, 40, 217],
+      curd: [109, 40, 217],
       butter: [154, 52, 18],
-      ghee:   [120, 53, 15],
-      other:  [55, 65, 81],
+      ghee: [120, 53, 15],
+      other: [55, 65, 81],
     };
 
     CATEGORY_ORDER.forEach(cat => {
@@ -241,9 +260,8 @@ export function SummaryPage() {
       if (items.length === 0) return;
 
       const catTotal = items.reduce((s, i) => s + i.totalValue, 0);
-      const catQty   = items.reduce((s, i) => s + i.totalQty, 0);
+      const catQty = items.reduce((s, i) => s + i.totalQty, 0);
 
-      // Category header bar
       const [br, bg, bb] = categoryBgColors[cat];
       const [tr, tg, tb] = categoryTextColors[cat];
       doc.setFillColor(br, bg, bb);
@@ -254,11 +272,10 @@ export function SummaryPage() {
       doc.text(CATEGORY_LABELS[cat].replace(/[^\w\s]/g, '').trim(), 18, y + 5.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(`${catQty} units  •  Rs. ${catTotal.toLocaleString()}`, pageW - 17, y + 5.5, { align: 'right' });
+      doc.text(`${catQty} units  |  Rs. ${catTotal.toLocaleString()}`, pageW - 17, y + 5.5, { align: 'right' });
 
       y += 10;
 
-      // Products table for this category
       autoTable(doc, {
         startY: y,
         margin: { left: 15, right: 15 },
@@ -291,7 +308,6 @@ export function SummaryPage() {
       y = (doc as any).lastAutoTable.finalY + 6;
     });
 
-    // ── Grand total ──────────────────────────────────────────────
     doc.setFillColor(22, 163, 74);
     doc.rect(15, y, pageW - 30, 12, 'F');
     doc.setFont('helvetica', 'bold');
@@ -300,23 +316,20 @@ export function SummaryPage() {
     doc.text('GRAND TOTAL', 20, y + 8);
     doc.text(`Rs. ${totalValue.toLocaleString()}`, pageW - 17, y + 8, { align: 'right' });
 
-    // ── Footer ───────────────────────────────────────────────────
-    y += 18;
+    y = Math.min(y + 18, pageH - 8);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text('Generated by DairyWalla  •  Smart dairy ordering platform', pageW / 2, y, { align: 'center' });
+    doc.text('Generated by DairyWalla | Smart dairy ordering platform', pageW / 2, y, { align: 'center' });
 
-    // Save
     const filename = `DairyWalla-Bill-${label.replace(/\s/g, '-')}-${format(new Date(), 'ddMMMyyyy')}.pdf`;
     doc.save(filename);
     show('PDF downloaded!');
   };
-
   const handleShare = () => {
     const text = generateBillText();
     if (navigator.share) {
-      navigator.share({ title: `DairyWalla Bill — ${label}`, text });
+      navigator.share({ title: `DairyWalla Bill - ${label}`, text });
     } else {
       navigator.clipboard.writeText(text);
       show('Bill copied to clipboard!');
@@ -325,7 +338,7 @@ export function SummaryPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <MobileHeader title="Order Summary" subtitle={`${filteredOrders.length} orders · ₹${totalValue.toLocaleString()}`} />
+      <MobileHeader title="Order Summary" subtitle={`${filteredOrders.length} orders | Rs. ${totalValue.toLocaleString()}`} />
       <div className="hidden md:block mb-6">
         <h1 className="text-xl font-bold text-gray-900">Order Summary</h1>
         <p className="text-sm text-gray-500 mt-0.5">Aggregated demand with date filtering</p>
@@ -397,7 +410,7 @@ export function SummaryPage() {
               <div className="text-xs text-gray-500">Total Units</div>
             </div>
             <div className="card p-3 text-center">
-              <div className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
+              <div className="text-xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</div>
               <div className="text-xs text-gray-500">Value</div>
             </div>
           </div>
@@ -426,7 +439,7 @@ export function SummaryPage() {
                     <span className="font-semibold text-sm">{CATEGORY_LABELS[cat]}</span>
                     <div className="flex items-center gap-3 text-xs font-medium">
                       <span>{catQty} units</span>
-                      <span>₹{catTotal.toLocaleString()}</span>
+                      <span>Rs. {catTotal.toLocaleString()}</span>
                     </div>
                   </div>
 
@@ -436,11 +449,11 @@ export function SummaryPage() {
                       <div key={item.productId} className="px-4 py-3 flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium text-gray-900">{item.productName}</div>
-                          <div className="text-xs text-gray-400">{item.brand} · {item.unit}</div>
+                          <div className="text-xs text-gray-400">{item.brand} | {item.unit}</div>
                         </div>
                         <div className="text-right ml-4">
                           <div className="text-sm font-bold text-gray-900">{item.totalQty} <span className="text-xs font-normal text-gray-400">units</span></div>
-                          <div className="text-xs text-brand-600 font-semibold">₹{item.totalValue.toLocaleString()}</div>
+                          <div className="text-xs text-brand-600 font-semibold">Rs. {item.totalValue.toLocaleString()}</div>
                         </div>
                       </div>
                     ))}
@@ -453,21 +466,29 @@ export function SummaryPage() {
           {/* Grand total */}
           <div className="card p-4 mt-3 flex items-center justify-between bg-brand-50 border-brand-200">
             <span className="font-bold text-gray-900">Grand Total</span>
-            <span className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</span>
+            <span className="text-xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</span>
           </div>
         </>
       )}
 
       {/* Bill Modal */}
-      <Modal open={billModalOpen} onClose={() => setBillModalOpen(false)} title={`Bill — ${label}`} size="lg">
+      <Modal open={billModalOpen} onClose={() => setBillModalOpen(false)} title={`Bill - ${label}`} size="lg">
         <div className="space-y-4">
           {/* Bill preview */}
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+          <div className="relative bg-gray-50 rounded-xl p-4 border border-gray-200 overflow-hidden">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10">
+              <div className="w-56 h-56">
+                <BrandLogo className="w-full h-full" />
+              </div>
+            </div>
             {/* Header */}
-            <div className="text-center mb-4 pb-3 border-b border-gray-200">
+            <div className="relative text-center mb-4 pb-3 border-b border-gray-200">
+              <div className="w-14 h-14 mx-auto mb-2 rounded-xl border border-gray-200 bg-white p-1.5">
+                <BrandLogo className="w-full h-full rounded-lg" />
+              </div>
               <div className="font-bold text-lg text-gray-900">{profile?.businessName}</div>
               <div className="text-sm text-gray-500">Order Summary Bill</div>
-              <div className="text-xs text-gray-400 mt-0.5">{label} · Generated {format(new Date(), 'dd MMM yyyy')}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{label} - Generated {format(new Date(), 'dd MMM yyyy')}</div>
             </div>
 
             {/* Category sections */}
@@ -499,15 +520,15 @@ export function SummaryPage() {
                               <div className="text-gray-400">{item.brand}</div>
                             </td>
                             <td className="py-1.5 text-right text-gray-700">{item.totalQty} {item.unit}</td>
-                            <td className="py-1.5 text-right text-gray-700">₹{(item.totalValue / item.totalQty).toFixed(0)}</td>
-                            <td className="py-1.5 text-right font-semibold text-gray-900">₹{item.totalValue.toLocaleString()}</td>
+                            <td className="py-1.5 text-right text-gray-700">Rs. {(item.totalValue / item.totalQty).toFixed(0)}</td>
+                            <td className="py-1.5 text-right font-semibold text-gray-900">Rs. {item.totalValue.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr>
                           <td colSpan={3} className="pt-1.5 text-right text-gray-500 font-medium">Subtotal</td>
-                          <td className="pt-1.5 text-right font-bold text-gray-900">₹{catTotal.toLocaleString()}</td>
+                          <td className="pt-1.5 text-right font-bold text-gray-900">Rs. {catTotal.toLocaleString()}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -520,14 +541,14 @@ export function SummaryPage() {
             <div className="mt-4 pt-3 border-t-2 border-gray-300 flex justify-between items-center">
               <div>
                 <div className="font-bold text-gray-900">Grand Total</div>
-                <div className="text-xs text-gray-400">{filteredOrders.length} orders · {totalQty} units</div>
+                <div className="text-xs text-gray-400">{filteredOrders.length} orders | {totalQty} units</div>
               </div>
-              <div className="text-2xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</div>
             </div>
           </div>
 
           {/* Action buttons */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-3 bg-white/95 backdrop-blur-sm pt-2 pb-1">
             <button onClick={handleDownload} className="btn-secondary flex-1 py-3">
               <Download className="w-4 h-4" /> Download
             </button>
@@ -540,3 +561,4 @@ export function SummaryPage() {
     </div>
   );
 }
+

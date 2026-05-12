@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Download, Share2 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -8,12 +8,14 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
 import type { Order } from '../../types';
+import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
 import { downloadInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 export function InvoicesPage() {
   const { user } = useAuthStore();
-  const { orders, distributorProfiles, shopkeeperProfiles } = useAppStore();
+  const { orders, distributorProfiles, shopkeeperProfiles, fetchShopkeeperProfileById } = useAppStore();
   const { show } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(
@@ -21,29 +23,64 @@ export function InvoicesPage() {
   );
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
+  const distributorType = toDistributorType(profile?.distributorType);
   const billableOrders = orders.filter(
     o => o.distributorId === profile?.id && (o.status === 'accepted' || o.status === 'fulfilled')
   );
+  const getShopkeeperForOrder = (order: Order) => {
+    return (
+      shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId || sp.userId === order.shopkeeperId) || null
+    );
+  };
+  const selectedShopkeeper = useMemo(
+    () => (selectedOrder ? getShopkeeperForOrder(selectedOrder) : null),
+    [selectedOrder, shopkeeperProfiles]
+  );
 
-  const handleDownload = (order: Order) => {
+  useEffect(() => {
+    const missingIds = Array.from(
+      new Set(
+        billableOrders
+          .map(order => order.shopkeeperId)
+          .filter(shopkeeperId => !shopkeeperProfiles.some(sp => sp.id === shopkeeperId || sp.userId === shopkeeperId))
+      )
+    );
+
+    if (missingIds.length === 0) return;
+    Promise.all(missingIds.map(shopkeeperId => fetchShopkeeperProfileById(shopkeeperId).catch(() => null))).catch(() => undefined);
+  }, [billableOrders, shopkeeperProfiles, fetchShopkeeperProfileById]);
+
+  const dairyInvoices = billableOrders.filter(
+    order => inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine) === 'dairy'
+  );
+  const iceCreamInvoices = billableOrders.filter(
+    order => inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine) === 'icecream'
+  );
+
+  const handleDownload = async (order: Order) => {
     if (!profile) {
       show('Distributor profile missing. Please complete profile first.', 'error');
       return;
     }
-    const shopkeeper = shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId);
-    const shopkeeperPhone = (shopkeeper as unknown as { phone?: string } | undefined)?.phone;
-    const shopkeeperEmail = (shopkeeper as unknown as { email?: string } | undefined)?.email;
-    downloadInvoicePdf({
-      order,
-      distributor: profile,
-      shopkeeper,
-      distributorPhone: user?.phone,
-      distributorEmail: user?.email,
-      shopkeeperPhone,
-      shopkeeperEmail,
-      language: invoiceLanguage,
-    });
-    show('Invoice PDF downloaded');
+
+    try {
+      const loadedShopkeeper = getShopkeeperForOrder(order) || await fetchShopkeeperProfileById(order.shopkeeperId);
+      const shopkeeperPhone = loadedShopkeeper?.phone;
+      const shopkeeperEmail = loadedShopkeeper?.email;
+      await downloadInvoicePdf({
+        order,
+        distributor: profile,
+        shopkeeper: loadedShopkeeper,
+        distributorPhone: profile.phone || user?.phone,
+        distributorEmail: profile.email || user?.email,
+        shopkeeperPhone,
+        shopkeeperEmail,
+        language: invoiceLanguage,
+      });
+      show('Invoice PDF downloaded');
+    } catch {
+      show('Invoice generate nahi hua. Please retry.', 'error');
+    }
   };
 
   const handleShare = (order: Order) => {
@@ -55,6 +92,39 @@ export function InvoicesPage() {
       show('Invoice copied to clipboard');
     }
   };
+
+  const renderInvoiceCard = (order: Order) => (
+    <div key={order.id} className="card p-4">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <FileText className="w-5 h-5 text-purple-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-gray-900 text-base leading-tight break-words">{order.shopName}</div>
+          <div className="text-xs text-gray-500 mt-1 leading-5">
+            {format(new Date(order.placedAt), 'dd MMM yyyy, h:mm a')} - {order.items.length} items
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            Section: {businessLineLabel(
+              inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine)
+            )}
+          </div>
+          <div className="text-lg font-bold text-gray-900 mt-1">Rs. {order.total.toLocaleString()}</div>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
+        <button onClick={() => setSelectedOrder(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
+          <FileText className="w-3.5 h-3.5" /> View
+        </button>
+        <button onClick={() => handleDownload(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
+          <Download className="w-3.5 h-3.5" /> PDF
+        </button>
+        <button onClick={() => handleShare(order)} className="btn-primary py-1.5 px-3 text-xs whitespace-nowrap">
+          <Share2 className="w-3.5 h-3.5" /> Share
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
@@ -86,45 +156,51 @@ export function InvoicesPage() {
           title="No invoices yet"
           description="Accepted orders will appear here"
         />
-      ) : (
-        <div className="space-y-3">
-          {billableOrders.map(order => (
-            <div key={order.id} className="card p-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-gray-900 text-base leading-tight break-words">{order.shopName}</div>
-                  <div className="text-xs text-gray-500 mt-1 leading-5">
-                    {format(new Date(order.placedAt), 'dd MMM yyyy, h:mm a')} - {order.items.length} items
-                  </div>
-                  <div className="text-lg font-bold text-gray-900 mt-1">Rs. {order.total.toLocaleString()}</div>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
-                <button onClick={() => setSelectedOrder(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
-                  <FileText className="w-3.5 h-3.5" /> View
-                </button>
-                <button onClick={() => handleDownload(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
-                  <Download className="w-3.5 h-3.5" /> PDF
-                </button>
-                <button onClick={() => handleShare(order)} className="btn-primary py-1.5 px-3 text-xs whitespace-nowrap">
-                  <Share2 className="w-3.5 h-3.5" /> Share
-                </button>
-              </div>
-            </div>
-          ))}
+      ) : distributorType === 'dual' ? (
+        <div className="space-y-5">
+          <section>
+            <h2 className="text-sm font-semibold text-gray-800 mb-2">Dairy Product Bills ({dairyInvoices.length})</h2>
+            {dairyInvoices.length === 0 ? (
+              <div className="text-xs text-gray-500">No dairy invoices yet.</div>
+            ) : (
+              <div className="space-y-3">{dairyInvoices.map(renderInvoiceCard)}</div>
+            )}
+          </section>
+          <section>
+            <h2 className="text-sm font-semibold text-gray-800 mb-2">Ice Cream Bills ({iceCreamInvoices.length})</h2>
+            {iceCreamInvoices.length === 0 ? (
+              <div className="text-xs text-gray-500">No ice cream invoices yet.</div>
+            ) : (
+              <div className="space-y-3">{iceCreamInvoices.map(renderInvoiceCard)}</div>
+            )}
+          </section>
         </div>
+      ) : (
+        <div className="space-y-3">{billableOrders.map(renderInvoiceCard)}</div>
       )}
 
       <Modal open={!!selectedOrder} onClose={() => setSelectedOrder(null)} title="Invoice Preview" size="lg">
         {selectedOrder && (
-          <div className="space-y-4">
+          <div className="relative space-y-4">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10">
+              <div className="w-56 h-56">
+                <BrandLogo className="w-full h-full" />
+              </div>
+            </div>
             <div className="flex justify-between items-start pb-4 border-b border-gray-100">
-              <div>
-                <div className="font-bold text-lg text-gray-900">{profile?.businessName}</div>
-                <div className="text-sm text-gray-500">Invoice</div>
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-xl border border-gray-200 bg-white p-1.5">
+                  <BrandLogo className="w-full h-full rounded-lg" />
+                </div>
+                <div>
+                  <div className="font-bold text-lg text-gray-900">{profile?.businessName}</div>
+                  <div className="text-sm text-gray-500">Invoice</div>
+                  <div className="text-xs text-gray-500">
+                    {businessLineLabel(
+                      inferBusinessLineFromCategory(String(selectedOrder.businessLine || selectedOrder.items?.[0]?.category || 'other'), selectedOrder.businessLine)
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-sm font-medium text-gray-900">#{selectedOrder.id.slice(-6).toUpperCase()}</div>
@@ -136,6 +212,9 @@ export function InvoicesPage() {
               <div className="text-xs text-gray-500 mb-1">Bill To</div>
               <div className="font-semibold text-gray-900 text-sm">{selectedOrder.shopName}</div>
               <div className="text-xs text-gray-500">{selectedOrder.shopkeeperName}</div>
+              <div className="text-xs text-gray-500 mt-1">{selectedShopkeeper?.address || selectedShopkeeper?.city || 'Address not provided'}</div>
+              <div className="text-xs text-gray-500">Phone: {selectedShopkeeper?.phone || 'Not provided'}</div>
+              <div className="text-xs text-gray-500">Email: {selectedShopkeeper?.email || 'Not provided'}</div>
             </div>
 
             <table className="w-full text-sm">
@@ -168,7 +247,7 @@ export function InvoicesPage() {
               </tfoot>
             </table>
 
-            <div className="flex gap-3 pt-2">
+            <div className="sticky bottom-0 z-10 flex gap-3 bg-white/95 backdrop-blur-sm pt-2 pb-1">
               <button onClick={() => handleDownload(selectedOrder)} className="btn-secondary flex-1">
                 <Download className="w-4 h-4" /> Download PDF
               </button>

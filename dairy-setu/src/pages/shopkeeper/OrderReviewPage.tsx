@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
+import { businessLineLabel, inferBusinessLineFromCategory } from '../../utils/businessLine';
 
 export function OrderReviewPage() {
   const { user } = useAuthStore();
@@ -24,12 +25,22 @@ export function OrderReviewPage() {
   const isLate = distributorProfile ? currentTime > distributorProfile.orderWindowCutoff : false;
 
   const total = cart.reduce((sum, c) => sum + c.product.price * c.quantity, 0);
+  const cartBusinessLine = cart[0]
+    ? inferBusinessLineFromCategory(String(cart[0].product.category || 'other'), cart[0].product.businessLine)
+    : 'dairy';
+  const hasMixedBusinessLines = cart.some(
+    item => inferBusinessLineFromCategory(String(item.product.category || 'other'), item.product.businessLine) !== cartBusinessLine
+  );
 
   const handleSubmit = () => {
     if (!activeConn || !user) return;
     if (cart.length === 0) { show('Add items to your order', 'error'); return; }
     if (hasMultipleDistributorsInCart) {
       show('Please place order for one distributor at a time', 'error');
+      return;
+    }
+    if (hasMixedBusinessLines) {
+      show('Aap ek baar me ya Dairy ya Ice Cream section ka order kar sakte ho.', 'error');
       return;
     }
 
@@ -39,7 +50,8 @@ export function OrderReviewPage() {
       activeConn.shopName,
       activeConn.distributorId,
       cart,
-      isLate
+      isLate,
+      cartBusinessLine
     );
     clearCart();
     show(isLate ? 'Late order submitted — awaiting approval' : 'Order placed successfully!');
@@ -81,6 +93,7 @@ export function OrderReviewPage() {
       <div className="card mb-4">
         <div className="px-5 py-3 border-b border-gray-100">
           <h2 className="font-semibold text-gray-900 text-sm">Order Items ({cart.length})</h2>
+          <div className="text-xs text-gray-500 mt-1">Section: {businessLineLabel(cartBusinessLine)}</div>
         </div>
         <div className="divide-y divide-gray-50">
           {cart.map(item => (

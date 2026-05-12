@@ -28,6 +28,7 @@ model DistributorProfile {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   userId            String   @unique @map("user_id") @db.ObjectId
   businessName      String   @map("business_name")
+  distributorType   String   @default("dairy") @map("distributor_type")
   connectionCode    String   @unique @map("connection_code")
   orderWindowStart  String?  @default("18:00") @map("order_window_start")
   orderWindowCutoff String?  @default("20:00") @map("order_window_cutoff")
@@ -111,6 +112,7 @@ model Product {
   name          String
   brand         String?
   category      String   @default("other")
+  businessLine  String   @default("dairy") @map("business_line")
   unit          String?
   price         Float
   available     Boolean? @default(true)
@@ -129,6 +131,7 @@ model Order {
   shopkeeperName    String?   @map("shopkeeper_name")
   shopName          String?   @map("shop_name")
   distributorId     String?   @map("distributor_id") @db.ObjectId
+  businessLine      String?   @default("dairy") @map("business_line")
   type              String?   @default("normal")
   status            String?   @default("pending")
   paymentStatus     String?   @default("unpaid") @map("payment_status")
@@ -153,6 +156,7 @@ model OrderItem {
   productName String? @map("product_name")
   brand       String?
   category    String?
+  businessLine String? @map("business_line")
   unit        String?
   unitPrice   Float?  @map("unit_price")
   quantity    Int?

@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { DistributorProfile, Order, ShopkeeperProfile } from '../types';
+import { addPdfLogoWatermark, getPdfBrandAssets } from './pdfBranding';
 
 interface InvoicePdfInput {
   order: Order;
@@ -19,7 +20,7 @@ function safeText(value: string | undefined, fallback: string) {
   return v.length > 0 ? v : fallback;
 }
 
-export function downloadInvoicePdf({
+export async function downloadInvoicePdf({
   order,
   distributor,
   shopkeeper,
@@ -29,6 +30,7 @@ export function downloadInvoicePdf({
   shopkeeperEmail,
   language = 'hinglish',
 }: InvoicePdfInput) {
+  const brandAssets = await getPdfBrandAssets();
   const i18n = {
     hinglish: {
       billedTo: 'Billed To',
@@ -111,21 +113,20 @@ export function downloadInvoicePdf({
   const dark = [28, 28, 28] as const;
   const brand = [22, 163, 74] as const;
 
+  if (brandAssets?.watermarkDataUrl) {
+    addPdfLogoWatermark(doc, brandAssets.watermarkDataUrl);
+  }
+
   doc.setDrawColor(...line);
   doc.rect(margin, margin, contentW, pageH - margin * 2);
-
-  doc.setTextColor(232, 232, 232);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.text('DAIRY WALLA', pageW - 5.7, pageH / 2, { angle: 90, align: 'center' });
 
   let y = margin + 3;
   const headerH = 26;
 
-  doc.setDrawColor(...line);
-  doc.roundedRect(margin + 2, y, contentW - 4, headerH, 1.5, 1.5);
   doc.setFillColor(249, 249, 249);
   doc.roundedRect(margin + 2, y, contentW - 4, headerH, 1.5, 1.5, 'F');
+  doc.setDrawColor(...line);
+  doc.roundedRect(margin + 2, y, contentW - 4, headerH, 1.5, 1.5);
 
   const leftX = margin + 6;
   const rightBoxW = 56;
@@ -153,19 +154,19 @@ export function downloadInvoicePdf({
   doc.setDrawColor(...line);
   doc.setFillColor(255, 255, 255);
   doc.roundedRect(rightX, y + 4, rightBoxW, 17, 1.5, 1.5, 'FD');
-  doc.setFillColor(...brand);
-  doc.circle(rightX + 6.5, y + 12.5, 3.9, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('DW', rightX + 6.5, y + 13.6, { align: 'center' });
+
+  if (brandAssets?.logoDataUrl) {
+    doc.addImage(brandAssets.logoDataUrl, 'PNG', rightX + 2.2, y + 5.2, 13.4, 13.4, undefined, 'FAST');
+  }
+
   doc.setTextColor(...dark);
   doc.setFontSize(9.8);
-  doc.text('Dairy Walla', rightX + 12, y + 11.1);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Dairy Walla', rightX + 17, y + 11.1);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.1);
   doc.setTextColor(...muted);
-  doc.text(i18n.smartTagline, rightX + 12, y + 15.2);
+  doc.text(i18n.smartTagline, rightX + 17, y + 15.2);
 
   y += headerH + 5;
 
@@ -201,7 +202,7 @@ export function downloadInvoicePdf({
   y += metaBoxH + 7.5;
 
   doc.setDrawColor(...line);
-  doc.roundedRect(margin + 2, y, contentW - 4, 12, 1.2, 1.2);
+  doc.roundedRect(margin + 2, y, contentW - 4, 15, 1.2, 1.2);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...dark);
@@ -211,6 +212,7 @@ export function downloadInvoicePdf({
   doc.setTextColor(...muted);
   doc.text(`${i18n.invoiceNo}: ${order.id.slice(-8).toUpperCase()}`, margin + contentW - 58, y + 5);
   doc.text(`${i18n.totalItems}: ${order.items.length}`, margin + contentW - 58, y + 9.4);
+  doc.text(`Payment: ${order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}`, margin + contentW - 58, y + 13.2);
 
   const rows = order.items.map((item, idx) => ([
     String(idx + 1),
@@ -223,7 +225,7 @@ export function downloadInvoicePdf({
   ]));
 
   autoTable(doc, {
-    startY: y + 15,
+    startY: y + 18,
     head: [i18n.headers],
     body: rows,
     margin: { left: margin + 2, right: margin + 2 },

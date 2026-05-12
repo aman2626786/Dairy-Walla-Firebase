@@ -59,7 +59,7 @@ export function DiscoverPage() {
   // Calculate distances and sort
   const distributorsWithDistance: DistributorWithDistance[] = distributorProfiles
     .map(dp => {
-      if (userLocation && dp.latitude && dp.longitude) {
+      if (userLocation && dp.latitude !== undefined && dp.latitude !== null && dp.longitude !== undefined && dp.longitude !== null) {
         const distance = calculateDistance(
           userLocation.lat,
           userLocation.lon,

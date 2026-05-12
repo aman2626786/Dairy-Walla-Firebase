@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA9Yu8uSBopX6TXX5eVSpMDbiaikEQ-8WI",
@@ -13,3 +13,8 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+
+// Persist session across refresh/restart until user explicitly logs out.
+void setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.error('Failed to enable persistent auth session', error);
+});

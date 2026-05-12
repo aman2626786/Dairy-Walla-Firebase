@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bell } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
+import { BrandLogo } from '../ui/BrandLogo';
 
 interface MobileHeaderProps {
   title: string;
@@ -30,8 +31,8 @@ export function MobileHeader({ title, subtitle, showBack, backTo }: MobileHeader
       )}
 
       {!showBack && (
-        <div className="w-7 h-7 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white font-bold text-xs">DW</span>
+        <div className="w-8 h-8 rounded-lg border border-gray-200 bg-white p-1 flex-shrink-0">
+          <BrandLogo className="w-full h-full rounded-md" />
         </div>
       )}
 

@@ -11,6 +11,7 @@ const typeConfig: Record<string, { emoji: string; color: string }> = {
   order_confirmed: { emoji: '✅', color: 'bg-green-100' },
   order_accepted: { emoji: '✅', color: 'bg-green-100' },
   order_rejected: { emoji: '❌', color: 'bg-red-100' },
+  payment_completed: { emoji: '🎉', color: 'bg-emerald-100' },
   new_connection: { emoji: '🔗', color: 'bg-purple-100' },
   connection_approved: { emoji: '✅', color: 'bg-green-100' },
   connection_rejected: { emoji: '❌', color: 'bg-red-100' },

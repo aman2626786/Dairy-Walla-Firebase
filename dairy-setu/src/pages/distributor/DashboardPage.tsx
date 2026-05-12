@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BarChartHorizontal, CheckCircle, ChevronRight, Clock, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle } from 'lucide-react';
+import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import type { Order } from '../../types';
 
 function OrderCard({ order, onAccept, onReject, showActions }: {
@@ -66,6 +66,69 @@ function OrderCard({ order, onAccept, onReject, showActions }: {
   );
 }
 
+interface DailyAnalyticsPoint {
+  key: string;
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+function formatCompactNumber(value: number) {
+  if (value >= 10000000) return `${(value / 10000000).toFixed(1)}Cr`;
+  if (value >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return `${Math.round(value)}`;
+}
+
+function percentChange(current: number, previous: number) {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+}
+
+function RevenueTrendChart({ data }: { data: DailyAnalyticsPoint[] }) {
+  const width = 360;
+  const height = 170;
+  const left = 16;
+  const right = width - 16;
+  const top = 18;
+  const bottom = height - 30;
+  const maxRevenue = Math.max(...data.map(point => point.revenue), 1);
+  const stepX = data.length > 1 ? (right - left) / (data.length - 1) : 0;
+
+  const points = data.map((point, index) => {
+    const x = left + index * stepX;
+    const y = bottom - (point.revenue / maxRevenue) * (bottom - top);
+    return { x, y, point };
+  });
+
+  const linePath = points
+    .map((pointData, index) => `${index === 0 ? 'M' : 'L'} ${pointData.x} ${pointData.y}`)
+    .join(' ');
+  const areaPath = `${linePath} L ${right} ${bottom} L ${left} ${bottom} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-44">
+      <defs>
+        <linearGradient id="revenue-area" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor="#16a34a" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#16a34a" stopOpacity="0.03" />
+        </linearGradient>
+      </defs>
+      <line x1={left} y1={bottom} x2={right} y2={bottom} stroke="#d1d5db" strokeWidth="1" />
+      <path d={areaPath} fill="url(#revenue-area)" />
+      <path d={linePath} fill="none" stroke="#16a34a" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      {points.map(pointData => (
+        <g key={pointData.point.key}>
+          <circle cx={pointData.x} cy={pointData.y} r="3.5" fill="#16a34a" />
+          <text x={pointData.x} y={height - 9} textAnchor="middle" fontSize="10" fill="#6b7280">
+            {pointData.point.label}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 export function DashboardPage() {
   const { user } = useAuthStore();
   const { orders, connections, distributorProfiles, shopkeeperProfiles, updateOrderStatus, addNotification, fetchShopkeeperProfileById } = useAppStore();
@@ -76,8 +139,12 @@ export function DashboardPage() {
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const today = new Date().toISOString().split('T')[0];
+  const myAllOrders = useMemo(
+    () => orders.filter(order => order.distributorId === profile?.id),
+    [orders, profile?.id]
+  );
 
-  const todayOrders = orders.filter(o => o.distributorId === profile?.id && o.deliveryDate?.startsWith(today));
+  const todayOrders = myAllOrders.filter(o => o.deliveryDate?.startsWith(today));
   const normalOrders = todayOrders.filter(o => o.type === 'normal');
   const lateOrders = todayOrders.filter(o => o.type === 'late' && o.status === 'pending');
   const activeConnections = connections.filter(c => c.distributorId === profile?.id && c.status === 'active');
@@ -86,6 +153,88 @@ export function DashboardPage() {
   const totalRevenue = todayOrders
     .filter(o => o.status === 'accepted' || o.status === 'fulfilled')
     .reduce((sum, o) => sum + o.total, 0);
+
+  const last7DaysAnalytics = useMemo<DailyAnalyticsPoint[]>(() => {
+    const points: DailyAnalyticsPoint[] = [];
+    const revenueMap = new Map<string, number>();
+    const orderMap = new Map<string, number>();
+
+    for (let index = 6; index >= 0; index -= 1) {
+      const date = subDays(new Date(), index);
+      const key = format(date, 'yyyy-MM-dd');
+      points.push({
+        key,
+        label: format(date, 'EEE'),
+        revenue: 0,
+        orders: 0,
+      });
+      revenueMap.set(key, 0);
+      orderMap.set(key, 0);
+    }
+
+    myAllOrders.forEach(order => {
+      const placedDate = new Date(order.placedAt);
+      if (Number.isNaN(placedDate.getTime())) return;
+      const key = format(placedDate, 'yyyy-MM-dd');
+      if (!revenueMap.has(key)) return;
+      orderMap.set(key, (orderMap.get(key) || 0) + 1);
+      if (order.status === 'accepted' || order.status === 'fulfilled') {
+        revenueMap.set(key, (revenueMap.get(key) || 0) + order.total);
+      }
+    });
+
+    return points.map(point => ({
+      ...point,
+      revenue: revenueMap.get(point.key) || 0,
+      orders: orderMap.get(point.key) || 0,
+    }));
+  }, [myAllOrders]);
+
+  const weeklyRevenue = useMemo(
+    () => last7DaysAnalytics.reduce((sum, point) => sum + point.revenue, 0),
+    [last7DaysAnalytics]
+  );
+  const weeklyOrders = useMemo(
+    () => last7DaysAnalytics.reduce((sum, point) => sum + point.orders, 0),
+    [last7DaysAnalytics]
+  );
+  const avgOrderValue = weeklyOrders > 0 ? weeklyRevenue / weeklyOrders : 0;
+  const todayAnalytics = last7DaysAnalytics[last7DaysAnalytics.length - 1] || { revenue: 0, orders: 0 };
+  const yesterdayAnalytics = last7DaysAnalytics[last7DaysAnalytics.length - 2] || { revenue: 0, orders: 0 };
+  const revenueGrowthPct = percentChange(todayAnalytics.revenue, yesterdayAnalytics.revenue);
+
+  const weeklyRevenueByLine = useMemo(() => {
+    const split = { dairy: 0, icecream: 0 };
+    const validKeys = new Set(last7DaysAnalytics.map(point => point.key));
+
+    myAllOrders.forEach(order => {
+      const placedDate = new Date(order.placedAt);
+      if (Number.isNaN(placedDate.getTime())) return;
+      const key = format(placedDate, 'yyyy-MM-dd');
+      if (!validKeys.has(key)) return;
+      if (!(order.status === 'accepted' || order.status === 'fulfilled')) return;
+
+      const lineHint = String(
+        order.businessLine ||
+        order.items?.[0]?.businessLine ||
+        order.items?.[0]?.category ||
+        ''
+      ).toLowerCase();
+      const isIcecream = lineHint.includes('ice');
+      if (isIcecream) {
+        split.icecream += order.total;
+      } else {
+        split.dairy += order.total;
+      }
+    });
+
+    return split;
+  }, [myAllOrders, last7DaysAnalytics]);
+
+  const totalWeeklySplitRevenue = weeklyRevenueByLine.dairy + weeklyRevenueByLine.icecream;
+  const dairyShare = totalWeeklySplitRevenue > 0 ? (weeklyRevenueByLine.dairy / totalWeeklySplitRevenue) * 100 : 0;
+  const icecreamShare = totalWeeklySplitRevenue > 0 ? (weeklyRevenueByLine.icecream / totalWeeklySplitRevenue) * 100 : 0;
+  const maxOrdersInWeek = Math.max(...last7DaysAnalytics.map(item => item.orders), 1);
 
   const shopkeepersWhoOrderedToday = useMemo(() => {
     const orderedShopkeeperIds = new Set<string>();
@@ -265,6 +414,84 @@ export function DashboardPage() {
             <div className="text-xs text-gray-400">{stat.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Growth analytics */}
+      <div className="grid xl:grid-cols-3 gap-4 mb-6">
+        <div className="card p-4 xl:col-span-2">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <LineChart className="w-5 h-5 text-emerald-600" />
+              <h2 className="font-semibold text-gray-900 text-sm">Revenue Trend (Last 7 Days)</h2>
+            </div>
+            <div className={`text-xs font-semibold ${revenueGrowthPct >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+              {revenueGrowthPct >= 0 ? '+' : ''}{revenueGrowthPct.toFixed(1)}% vs yesterday
+            </div>
+          </div>
+          <RevenueTrendChart data={last7DaysAnalytics} />
+          <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="text-[11px] text-gray-500">7d Revenue</div>
+              <div className="text-sm font-semibold text-gray-900">Rs. {formatCompactNumber(weeklyRevenue)}</div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="text-[11px] text-gray-500">7d Orders</div>
+              <div className="text-sm font-semibold text-gray-900">{weeklyOrders}</div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="text-[11px] text-gray-500">Avg Order Value</div>
+              <div className="text-sm font-semibold text-gray-900">Rs. {Math.round(avgOrderValue).toLocaleString()}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="w-5 h-5 text-indigo-600" />
+            <h2 className="font-semibold text-gray-900 text-sm">Business Mix (7d)</h2>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-600 font-medium">Dairy</span>
+                <span className="text-gray-900 font-semibold">{dairyShare.toFixed(0)}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full bg-emerald-500" style={{ width: `${dairyShare > 0 ? Math.max(6, dairyShare) : 0}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">Rs. {Math.round(weeklyRevenueByLine.dairy).toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-gray-600 font-medium">Ice Cream</span>
+                <span className="text-gray-900 font-semibold">{icecreamShare.toFixed(0)}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full bg-pink-500" style={{ width: `${icecreamShare > 0 ? Math.max(6, icecreamShare) : 0}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">Rs. {Math.round(weeklyRevenueByLine.icecream).toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="text-xs font-medium text-gray-700 mb-2">Order Volume by Day</div>
+            <div className="flex items-end gap-2 h-24">
+              {last7DaysAnalytics.map(point => {
+                const heightPct = (point.orders / maxOrdersInWeek) * 100;
+                return (
+                  <div key={point.key} className="flex-1 min-w-0 flex flex-col items-center justify-end gap-1">
+                    <div className="text-[10px] text-gray-400">{point.orders}</div>
+                    <div className="w-full rounded-md bg-indigo-100 flex items-end" style={{ height: '52px' }}>
+                      <div className="w-full rounded-md bg-indigo-500" style={{ height: `${Math.max(8, heightPct)}%` }} />
+                    </div>
+                    <div className="text-[10px] text-gray-500">{point.label.slice(0, 1)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Shopkeepers Not Ordered Today */}

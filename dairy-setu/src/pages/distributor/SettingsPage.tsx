@@ -6,6 +6,25 @@ import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hour = Math.floor(index / 2);
+  const minute = index % 2 === 0 ? '00' : '30';
+  const value = `${hour.toString().padStart(2, '0')}:${minute}`;
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const period = hour < 12 ? 'AM' : 'PM';
+  return { value, label: `${hour12}:${minute} ${period}` };
+});
+
+function formatTime12(value: string) {
+  const [h, m] = value.split(':');
+  const hour = Number(h);
+  const minute = m ?? '00';
+  if (Number.isNaN(hour)) return value;
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  const period = hour < 12 ? 'AM' : 'PM';
+  return `${hour12}:${minute} ${period}`;
+}
+
 export function SettingsPage() {
   const { user } = useAuthStore();
   const { distributorProfiles, updateDistributorSettings } = useAppStore();
@@ -71,11 +90,19 @@ export function SettingsPage() {
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className="label">Window Opens</label>
-            <input type="time" className="input" value={start} onChange={e => setStart(e.target.value)} />
+            <select className="input bg-white" value={start} onChange={e => setStart(e.target.value)}>
+              {TIME_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Cutoff Time</label>
-            <input type="time" className="input" value={cutoff} onChange={e => setCutoff(e.target.value)} />
+            <select className="input bg-white" value={cutoff} onChange={e => setCutoff(e.target.value)}>
+              {TIME_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -84,9 +111,9 @@ export function SettingsPage() {
           <div className="text-xs text-gray-500 mb-2">Preview</div>
           <div className="flex items-center gap-2 text-sm">
             <span className="badge-green">Normal orders</span>
-            <span className="text-gray-400 text-xs">{start} – {cutoff}</span>
+            <span className="text-gray-400 text-xs">{formatTime12(start)} - {formatTime12(cutoff)}</span>
             <span className="badge-yellow">Late orders</span>
-            <span className="text-gray-400 text-xs">after {cutoff}</span>
+            <span className="text-gray-400 text-xs">after {formatTime12(cutoff)}</span>
           </div>
         </div>
 
@@ -130,3 +157,4 @@ export function SettingsPage() {
     </div>
   );
 }
+

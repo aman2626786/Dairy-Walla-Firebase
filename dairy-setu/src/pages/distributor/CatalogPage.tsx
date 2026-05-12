@@ -1,22 +1,23 @@
-import { type ChangeEvent, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Image as ImageIcon, X } from 'lucide-react';
+﻿import { useMemo, useState } from 'react';
+import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import type { KnownProductCategory, Product, ProductCategory } from '../../types';
+import {
+  dairyCategoryOptions,
+  getAllowedBusinessLines,
+  getCategoryEmoji,
+  getProductQuantityText,
+  iceCreamCategoryOptions,
+  inferBusinessLineFromCategory,
+  toDistributorType,
+} from '../../utils/businessLine';
+import type { BusinessLine, KnownProductCategory, Product, ProductCategory } from '../../types';
 
 const categoryOrder: KnownProductCategory[] = ['milk', 'paneer', 'curd', 'butter', 'ghee', 'other'];
-const knownCategoryEmoji: Record<KnownProductCategory, string> = {
-  milk: '🥛',
-  paneer: '🧀',
-  curd: '🍶',
-  butter: '🧈',
-  ghee: '🫙',
-  other: '📦',
-};
 
 const popularBrands = ['Amul', 'Mother Dairy', 'Saras', 'Parag', 'Ananda', 'Sudha', 'Nandini', 'Nestle'];
 const manualCategoryValue = '__manual_category__';
@@ -26,27 +27,25 @@ interface ProductFormData {
   name: string;
   brand: string;
   category: ProductCategory;
-  unit: string;
+  businessLine: BusinessLine;
+  quantity: string;
   price: string;
   available: boolean;
-  imageUrl?: string;
 }
 
 const defaultForm: ProductFormData = {
   name: '',
   brand: popularBrands[0],
   category: 'milk',
-  unit: '',
+  businessLine: 'dairy',
+  quantity: '',
   price: '',
   available: true,
-  imageUrl: '',
 };
 
 const normalizeCategory = (value: string): ProductCategory =>
   (value.trim().toLowerCase().replace(/\s+/g, ' ') || 'other') as ProductCategory;
-
-const getCategoryEmoji = (category: string): string =>
-  knownCategoryEmoji[normalizeCategory(category) as KnownProductCategory] || '📦';
+const normalizeBrand = (value: string) => value.trim().toLowerCase();
 
 const formatCategoryLabel = (category: string): string =>
   category.replace(/\b\w/g, char => char.toUpperCase());
@@ -75,11 +74,25 @@ export function CatalogPage() {
   const [manualCategory, setManualCategory] = useState('');
   const [selectedBrandOption, setSelectedBrandOption] = useState<string>(popularBrands[0]);
   const [manualBrand, setManualBrand] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterBrand, setFilterBrand] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'hidden'>('all');
+  const [filterLine, setFilterLine] = useState<'all' | BusinessLine>('all');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
+  const distributorType = toDistributorType(profile?.distributorType);
+  const allowedBusinessLines = getAllowedBusinessLines(distributorType);
+  const defaultBusinessLine: BusinessLine = allowedBusinessLines[0] || 'dairy';
   const myProducts = useMemo(
-    () => products.filter(product => product.distributorId === profile?.id),
-    [products, profile?.id]
+    () =>
+      products
+        .filter(product => product.distributorId === profile?.id)
+        .map(product => ({
+          ...product,
+          businessLine: inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine),
+        }))
+        .filter(product => allowedBusinessLines.includes(product.businessLine as BusinessLine)),
+    [products, profile?.id, allowedBusinessLines]
   );
 
   const filterCategories = useMemo(
@@ -89,36 +102,127 @@ export function CatalogPage() {
     [myProducts]
   );
 
-  const filteredProducts =
-    filterCat === 'all'
-      ? myProducts
-      : myProducts.filter(product => normalizeCategory(String(product.category)) === filterCat);
+  const filterBrands = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          myProducts
+            .map(product => product.brand?.trim())
+            .filter((brand): brand is string => Boolean(brand))
+        )
+      ).sort((a, b) => a.localeCompare(b)),
+    [myProducts]
+  );
+
+  const filteredProducts = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return myProducts.filter(product => {
+      const category = normalizeCategory(String(product.category));
+      const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+      const matchCategory = filterCat === 'all' || category === filterCat;
+      const matchLine = filterLine === 'all' || filterLine === productLine;
+      const matchBrand = filterBrand === 'all' || product.brand.trim().toLowerCase() === filterBrand.toLowerCase();
+      const matchStatus =
+        filterStatus === 'all' ||
+        (filterStatus === 'available' && product.available) ||
+        (filterStatus === 'hidden' && !product.available);
+      const matchSearch =
+        normalizedQuery.length === 0 ||
+        product.name.toLowerCase().includes(normalizedQuery) ||
+        product.brand.toLowerCase().includes(normalizedQuery) ||
+        category.toLowerCase().includes(normalizedQuery) ||
+        getProductQuantityText(product.quantity, product.unit).toLowerCase().includes(normalizedQuery);
+      return matchCategory && matchLine && matchBrand && matchStatus && matchSearch;
+    });
+  }, [myProducts, searchQuery, filterCat, filterLine, filterBrand, filterStatus]);
+
+  const preferredBrand = useMemo(() => {
+    const companyBrand = String(profile?.company ?? '').trim();
+    if (companyBrand) return companyBrand;
+    const firstBrand = myProducts.find(product => product.brand?.trim())?.brand?.trim();
+    return firstBrand || '';
+  }, [profile?.company, myProducts]);
+
+  const groupedProducts = useMemo(() => {
+    if (!preferredBrand) {
+      return { main: filteredProducts, more: [] as Product[] };
+    }
+    const normalizedPreferred = normalizeBrand(preferredBrand);
+    const main = filteredProducts.filter(product => normalizeBrand(product.brand || '') === normalizedPreferred);
+    const more = filteredProducts.filter(product => normalizeBrand(product.brand || '') !== normalizedPreferred);
+    if (main.length === 0) {
+      return { main: filteredProducts, more: [] as Product[] };
+    }
+    return { main, more };
+  }, [filteredProducts, preferredBrand]);
+
+  const hasBrandSplit = groupedProducts.more.length > 0;
+
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    filterCat !== 'all' ||
+    filterBrand !== 'all' ||
+    filterStatus !== 'all' ||
+    filterLine !== 'all';
+
+  const mainSectionTitle = preferredBrand
+    ? `${preferredBrand} Main Products`
+    : 'Main Products';
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setFilterCat('all');
+    setFilterBrand('all');
+    setFilterStatus('all');
+    setFilterLine('all');
+  };
+
+  const categoryOptionsForForm =
+    form.businessLine === 'icecream' ? iceCreamCategoryOptions : dairyCategoryOptions;
+  const selectedCategoryForPreview = normalizeCategory(
+    selectedCategoryOption === manualCategoryValue ? manualCategory : String(form.category || 'other')
+  );
 
   const resetFormForAdd = () => {
+    const normalizedPreferredBrand = normalizeBrand(preferredBrand);
+    const matchedDefaultBrand =
+      popularBrands.find(brand => normalizeBrand(brand) === normalizedPreferredBrand) ||
+      popularBrands[0];
+    const useManualBrand = Boolean(preferredBrand) && normalizeBrand(matchedDefaultBrand) !== normalizedPreferredBrand;
+    const defaultBrandValue = useManualBrand ? preferredBrand : matchedDefaultBrand;
+
     setEditingProduct(null);
-    setForm(defaultForm);
-    setSelectedCategoryOption('milk');
+    setForm({
+      ...defaultForm,
+      businessLine: defaultBusinessLine,
+      category: defaultBusinessLine === 'icecream' ? 'ice cream' : 'milk',
+      brand: defaultBrandValue,
+    });
+    setSelectedCategoryOption(defaultBusinessLine === 'icecream' ? 'ice cream' : 'milk');
     setManualCategory('');
-    setSelectedBrandOption(popularBrands[0]);
-    setManualBrand('');
+    setSelectedBrandOption(useManualBrand ? manualBrandValue : matchedDefaultBrand);
+    setManualBrand(useManualBrand ? preferredBrand : '');
     setModalOpen(true);
   };
 
   const openEdit = (product: Product) => {
     const normalizedCategory = normalizeCategory(String(product.category));
+    const productLine = inferBusinessLineFromCategory(normalizedCategory, product.businessLine);
+    const categoryOptions = productLine === 'icecream' ? iceCreamCategoryOptions : dairyCategoryOptions;
     const matchedBrand =
       popularBrands.find(brand => brand.toLowerCase() === product.brand.trim().toLowerCase()) || null;
-    const categoryIsKnown = categoryOrder.includes(normalizedCategory as KnownProductCategory);
+    const categoryIsKnown = (categoryOptions as readonly string[]).includes(normalizedCategory);
+    const quantityText = getProductQuantityText(product.quantity, product.unit);
 
     setEditingProduct(product);
     setForm({
       name: product.name,
       brand: product.brand,
       category: normalizedCategory,
-      unit: product.unit,
+      businessLine: productLine,
+      quantity: quantityText === '-' ? '' : quantityText,
       price: String(product.price),
       available: product.available,
-      imageUrl: product.imageUrl || '',
     });
 
     setSelectedCategoryOption(categoryIsKnown ? normalizedCategory : manualCategoryValue);
@@ -128,33 +232,6 @@ export function CatalogPage() {
     setModalOpen(true);
   };
 
-  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      show('Image size should be less than 2MB', 'error');
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      show('Please upload an image file', 'error');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setForm(current => ({ ...current, imageUrl: reader.result as string }));
-      show('Image uploaded!');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeImage = () => {
-    setForm(current => ({ ...current, imageUrl: '' }));
-    show('Image removed');
-  };
-
   const handleCategoryOptionChange = (value: string) => {
     setSelectedCategoryOption(value);
     if (value === manualCategoryValue) {
@@ -162,6 +239,14 @@ export function CatalogPage() {
       return;
     }
     setForm(current => ({ ...current, category: normalizeCategory(value) }));
+  };
+
+  const handleBusinessLineChange = (line: BusinessLine) => {
+    const safeLine = allowedBusinessLines.includes(line) ? line : defaultBusinessLine;
+    const firstCategory = safeLine === 'icecream' ? 'ice cream' : 'milk';
+    setForm(current => ({ ...current, businessLine: safeLine, category: firstCategory }));
+    setSelectedCategoryOption(firstCategory);
+    setManualCategory('');
   };
 
   const handleBrandOptionChange = (value: string) => {
@@ -182,13 +267,14 @@ export function CatalogPage() {
     const resolvedCategorySource =
       selectedCategoryOption === manualCategoryValue ? manualCategory : selectedCategoryOption;
     const resolvedCategory = normalizeCategory(resolvedCategorySource);
+    const resolvedBusinessLine = inferBusinessLineFromCategory(resolvedCategory, form.businessLine);
     const resolvedBrand =
       selectedBrandOption === manualBrandValue ? manualBrand.trim() : selectedBrandOption.trim();
     const name = form.name.trim();
-    const unit = form.unit.trim();
+    const quantity = form.quantity.trim();
     const price = Number(form.price);
 
-    if (!name || !resolvedBrand || !unit || !form.price.trim()) {
+    if (!name || !resolvedBrand || !quantity || !form.price.trim()) {
       show('Please fill all required fields', 'error');
       return;
     }
@@ -204,16 +290,21 @@ export function CatalogPage() {
       show('Please enter a valid price', 'error');
       return;
     }
+    if (!allowedBusinessLines.includes(resolvedBusinessLine)) {
+      show('Selected product line is not allowed for your distributor type.', 'error');
+      return;
+    }
 
     const payload: Omit<Product, 'id'> = {
       distributorId: profile.id,
       name,
       brand: resolvedBrand,
       category: resolvedCategory,
-      unit,
+      businessLine: resolvedBusinessLine,
+      unit: quantity,
+      quantity,
       price,
       available: form.available,
-      imageUrl: form.imageUrl?.trim() || undefined,
     };
 
     const success = editingProduct
@@ -247,6 +338,128 @@ export function CatalogPage() {
     }
     show(product.available ? `${product.name} marked unavailable` : `${product.name} is now available`);
   };
+
+  const renderMobileCards = (items: Product[]) => (
+    <div className="space-y-3">
+      {items.map(product => (
+        <div key={product.id} className={`card p-4 ${!product.available ? 'opacity-60' : ''}`}>
+          <div className="flex items-start gap-3">
+            <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-gray-900 text-sm truncate">{product.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {product.brand} · {getProductQuantityText(product.quantity, product.unit)}
+                  </div>
+                  <div className="font-bold text-gray-900 mt-1">Rs {product.price}</div>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                    <Edit2 className="w-3.5 h-3.5 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => void handleDelete(product.id, product.name)}
+                    className="p-1.5 rounded-lg hover:bg-red-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="badge bg-gray-100 text-gray-600 text-xs">
+                  {formatCategoryLabel(String(product.category))}
+                </span>
+                <span className="badge bg-blue-50 text-blue-700 text-xs">
+                  {inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine) === 'icecream'
+                    ? 'Ice Cream'
+                    : 'Dairy'}
+                </span>
+                <button
+                  onClick={() => void toggleAvailability(product)}
+                  className={`badge cursor-pointer text-xs ${product.available ? 'badge-green' : 'badge-gray'}`}
+                >
+                  {product.available ? '● Available' : '○ Hidden'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderDesktopTable = (items: Product[]) => (
+    <div className="card overflow-hidden">
+      <table className="w-full">
+        <thead>
+          <tr className="bg-gray-50 border-b border-gray-100">
+            <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Product</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Brand</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
+            <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Quantity</th>
+            <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Price</th>
+            <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+            <th className="px-4 py-3" />
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {items.map(product => (
+            <tr
+              key={product.id}
+              className={`hover:bg-gray-50 transition-colors ${!product.available ? 'opacity-50' : ''}`}
+            >
+              <td className="px-5 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">{getCategoryEmoji(String(product.category))}</span>
+                  <span className="text-sm font-medium text-gray-900">{product.name}</span>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-600">{product.brand}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="badge bg-gray-100 text-gray-600">
+                    {formatCategoryLabel(String(product.category))}
+                  </span>
+                  <span className="badge bg-blue-50 text-blue-700">
+                    {inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine) === 'icecream'
+                      ? 'Ice Cream'
+                      : 'Dairy'}
+                  </span>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-sm text-gray-600">{getProductQuantityText(product.quantity, product.unit)}</td>
+              <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">Rs {product.price}</td>
+              <td className="px-4 py-3 text-center">
+                <button
+                  onClick={() => void toggleAvailability(product)}
+                  className={`badge ${product.available ? 'badge-green' : 'badge-gray'} cursor-pointer hover:opacity-80`}
+                >
+                  {product.available ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
+                  {product.available ? 'Available' : 'Hidden'}
+                </button>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-1 justify-end">
+                  <button onClick={() => openEdit(product)} className="btn-ghost p-1.5">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => void handleDelete(product.id, product.name)}
+                    className="btn-ghost p-1.5 hover:text-red-500"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
@@ -296,11 +509,79 @@ export function CatalogPage() {
         ))}
       </div>
 
+      <div className="card p-3 md:p-4 mb-5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            className="input pl-9"
+            placeholder="Search by product, brand, quantity, category..."
+            value={searchQuery}
+            onChange={event => setSearchQuery(event.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mt-3">
+          {distributorType === 'dual' ? (
+            <select
+              className="input"
+              value={filterLine}
+              onChange={event => setFilterLine(event.target.value as 'all' | BusinessLine)}
+            >
+              <option value="all">All Sections</option>
+              <option value="dairy">Dairy Products</option>
+              <option value="icecream">Ice Cream</option>
+            </select>
+          ) : (
+            <div className="input bg-gray-50 text-gray-500 flex items-center">
+              Section: {defaultBusinessLine === 'icecream' ? 'Ice Cream' : 'Dairy Products'}
+            </div>
+          )}
+
+          <select className="input" value={filterBrand} onChange={event => setFilterBrand(event.target.value)}>
+            <option value="all">All Brands</option>
+            {filterBrands.map(brand => (
+              <option key={brand} value={brand}>
+                {brand}
+              </option>
+            ))}
+          </select>
+
+          <select
+            className="input"
+            value={filterStatus}
+            onChange={event => setFilterStatus(event.target.value as 'all' | 'available' | 'hidden')}
+          >
+            <option value="all">All Status</option>
+            <option value="available">Available Only</option>
+            <option value="hidden">Hidden Only</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            className={`inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+              hasActiveFilters
+                ? 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                : 'border-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" /> Reset Filters
+          </button>
+        </div>
+        {preferredBrand && (
+          <div className="mt-2 text-xs text-gray-500">
+            Main Products are based on your primary brand: <span className="font-semibold text-gray-700">{preferredBrand}</span>.
+            Other brands appear in <span className="font-semibold text-gray-700">More Products</span>.
+          </div>
+        )}
+      </div>
+
       {filteredProducts.length === 0 ? (
         <EmptyState
           icon={<Package className="w-8 h-8" />}
-          title="No products yet"
-          description="Add your first product to get started"
+          title={hasActiveFilters ? 'No products match your filters' : 'No products yet'}
+          description={hasActiveFilters ? 'Try changing filters or search query.' : 'Add your first product to get started'}
           action={
             <button className="btn-primary" onClick={resetFormForAdd}>
               <Plus className="w-4 h-4" /> Add Product
@@ -309,171 +590,52 @@ export function CatalogPage() {
         />
       ) : (
         <>
-          <div className="md:hidden space-y-3">
-            {filteredProducts.map(product => (
-              <div key={product.id} className={`card p-4 ${!product.available ? 'opacity-60' : ''}`}>
-                <div className="flex items-start gap-3">
-                  {product.imageUrl ? (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-gray-900 text-sm truncate">{product.name}</div>
-                        <div className="text-xs text-gray-500">
-                          {product.brand} · {product.unit}
-                        </div>
-                        <div className="font-bold text-gray-900 mt-1">₹{product.price}</div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                          <Edit2 className="w-3.5 h-3.5 text-gray-500" />
-                        </button>
-                        <button
-                          onClick={() => void handleDelete(product.id, product.name)}
-                          className="p-1.5 rounded-lg hover:bg-red-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="badge bg-gray-100 text-gray-600 text-xs">
-                        {formatCategoryLabel(String(product.category))}
-                      </span>
-                      <button
-                        onClick={() => void toggleAvailability(product)}
-                        className={`badge cursor-pointer text-xs ${
-                          product.available ? 'badge-green' : 'badge-gray'
-                        }`}
-                      >
-                        {product.available ? '● Available' : '○ Hidden'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+          <div className="md:hidden space-y-4">
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-800">{mainSectionTitle}</h3>
+                <span className="text-xs text-gray-500">{groupedProducts.main.length} items</span>
               </div>
-            ))}
+              {renderMobileCards(groupedProducts.main)}
+            </section>
+
+            {hasBrandSplit && (
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800">More Products</h3>
+                  <span className="text-xs text-gray-500">{groupedProducts.more.length} items</span>
+                </div>
+                {renderMobileCards(groupedProducts.more)}
+              </section>
+            )}
           </div>
 
-          <div className="hidden md:block card overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Product
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Brand
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Category
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Unit
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Price
-                  </th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filteredProducts.map(product => (
-                  <tr
-                    key={product.id}
-                    className={`hover:bg-gray-50 transition-colors ${!product.available ? 'opacity-50' : ''}`}
-                  >
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        {product.imageUrl ? (
-                          <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded-lg object-cover" />
-                        ) : (
-                          <span className="text-lg">{getCategoryEmoji(String(product.category))}</span>
-                        )}
-                        <span className="text-sm font-medium text-gray-900">{product.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{product.brand}</td>
-                    <td className="px-4 py-3">
-                      <span className="badge bg-gray-100 text-gray-600">
-                        {formatCategoryLabel(String(product.category))}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{product.unit}</td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">₹{product.price}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => void toggleAvailability(product)}
-                        className={`badge ${
-                          product.available ? 'badge-green' : 'badge-gray'
-                        } cursor-pointer hover:opacity-80`}
-                      >
-                        {product.available ? <Eye className="w-3 h-3 mr-1" /> : <EyeOff className="w-3 h-3 mr-1" />}
-                        {product.available ? 'Available' : 'Hidden'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openEdit(product)} className="btn-ghost p-1.5">
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => void handleDelete(product.id, product.name)}
-                          className="btn-ghost p-1.5 hover:text-red-500"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="hidden md:block space-y-5">
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-800">{mainSectionTitle}</h3>
+                <span className="text-xs text-gray-500">{groupedProducts.main.length} items</span>
+              </div>
+              {renderDesktopTable(groupedProducts.main)}
+            </section>
+
+            {hasBrandSplit && (
+              <section>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-800">More Products</h3>
+                  <span className="text-xs text-gray-500">{groupedProducts.more.length} items</span>
+                </div>
+                {renderDesktopTable(groupedProducts.more)}
+              </section>
+            )}
           </div>
         </>
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingProduct ? 'Edit Product' : 'Add Product'}>
         <div className="space-y-4">
-          <div>
-            <label className="label flex items-center gap-1.5">
-              <ImageIcon className="w-3.5 h-3.5" />
-              Product Image (Optional)
-            </label>
-            {form.imageUrl ? (
-              <div className="relative inline-block">
-                <img
-                  src={form.imageUrl}
-                  alt="Product"
-                  className="w-32 h-32 rounded-xl object-cover border-2 border-gray-200"
-                />
-                <button
-                  onClick={removeImage}
-                  className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
-                <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
-                <span className="text-sm text-gray-500">Click to upload image</span>
-                <span className="text-xs text-gray-400 mt-1">Max 2MB</span>
-                <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-              </label>
-            )}
+          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+            Product image upload is disabled. Catalog icon will be auto-shown from product category.
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -486,6 +648,35 @@ export function CatalogPage() {
                 onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
               />
             </div>
+            {distributorType === 'dual' && (
+              <div className="col-span-2">
+                <label className="label">Section</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleBusinessLineChange('dairy')}
+                    className={`py-2 rounded-xl border text-sm font-medium ${
+                      form.businessLine === 'dairy'
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Dairy Products
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleBusinessLineChange('icecream')}
+                    className={`py-2 rounded-xl border text-sm font-medium ${
+                      form.businessLine === 'icecream'
+                        ? 'border-brand-500 bg-brand-50 text-brand-700'
+                        : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Ice Cream
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="label">Brand</label>
@@ -522,9 +713,9 @@ export function CatalogPage() {
                 value={selectedCategoryOption}
                 onChange={event => handleCategoryOptionChange(event.target.value)}
               >
-                {categoryOrder.map(category => (
+                {categoryOptionsForForm.map(category => (
                   <option key={category} value={category}>
-                    {knownCategoryEmoji[category]} {formatCategoryLabel(category)}
+                    {getCategoryEmoji(category)} {formatCategoryLabel(category)}
                   </option>
                 ))}
                 <option value={manualCategoryValue}>Manual (type your own)</option>
@@ -543,17 +734,31 @@ export function CatalogPage() {
               )}
             </div>
 
+            <div className="col-span-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+              <div className="text-xs text-gray-500 mb-1">Auto Category Visual (Generic, no brand logo)</div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white border border-gray-200 text-xl">
+                  {getCategoryEmoji(String(selectedCategoryForPreview))}
+                </span>
+                <span className="text-sm font-medium text-gray-700">
+                  {formatCategoryLabel(String(selectedCategoryForPreview))}
+                </span>
+              </div>
+            </div>
+
             <div>
-              <label className="label">Unit</label>
+              <label className="label">Quantity / Pack Size</label>
               <input
                 className="input"
-                placeholder="e.g. 500ml pouch"
-                value={form.unit}
-                onChange={event => setForm(current => ({ ...current, unit: event.target.value }))}
+                type="text"
+                placeholder="e.g. 500ml, 1, 1.5, half crate"
+                value={form.quantity}
+                onChange={event => setForm(current => ({ ...current, quantity: event.target.value }))}
               />
+              <p className="text-xs text-gray-500 mt-1">You can enter text, integer, or float values.</p>
             </div>
             <div>
-              <label className="label">Price (₹)</label>
+              <label className="label">Price (Rs)</label>
               <input
                 className="input"
                 type="number"
@@ -593,3 +798,6 @@ export function CatalogPage() {
     </div>
   );
 }
+
+
+

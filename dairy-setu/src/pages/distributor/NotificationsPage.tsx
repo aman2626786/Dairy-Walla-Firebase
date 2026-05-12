@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Bell, MessageSquareWarning, CheckCircle, XCircle, UserPlus } from 'lucide-react';
+import { Bell, MessageSquareWarning, CheckCircle, XCircle, UserPlus, PartyPopper } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { MobileHeader } from '../../components/layout/MobileHeader';
@@ -12,6 +12,7 @@ const notificationConfig: Record<string, { icon: ReactElement; color: string }> 
   order_reminder: { icon: <MessageSquareWarning className="w-5 h-5" />, color: 'text-yellow-600' },
   order_accepted: { icon: <CheckCircle className="w-5 h-5" />, color: 'text-green-600' },
   order_rejected: { icon: <XCircle className="w-5 h-5" />, color: 'text-red-600' },
+  payment_completed: { icon: <PartyPopper className="w-5 h-5" />, color: 'text-emerald-600' },
   connection_approved: { icon: <UserPlus className="w-5 h-5" />, color: 'text-blue-600' },
   default: { icon: <Bell className="w-5 h-5" />, color: 'text-gray-500' },
 };

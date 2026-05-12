@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, Lock } from 'lucide-react';
+import { Eye, EyeOff, Lock } from 'lucide-react';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 // Admin password — change this to something strong before deploying
 const ADMIN_PASSWORD = '*13579*admin';
@@ -38,8 +39,8 @@ export function AdminLoginPage() {
     <div style={{ minHeight: '100vh', backgroundColor: '#030712', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-red-600 shadow-lg mb-4">
-            <Shield className="w-7 h-7 text-white" />
+          <div className="inline-flex items-center justify-center w-24 h-24 rounded-2xl bg-white border border-gray-200 shadow-sm p-2 mb-4">
+            <BrandLogo className="w-full h-full rounded-xl" />
           </div>
           <h1 className="text-xl font-bold text-white">Admin Panel</h1>
           <p className="text-gray-400 text-sm mt-1">DairyWalla — Restricted Access</p>

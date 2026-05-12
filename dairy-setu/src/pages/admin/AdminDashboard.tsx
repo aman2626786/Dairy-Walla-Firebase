@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, Store, Truck, ShoppingCart, Link2, Package,
-  LogOut, Shield, TrendingUp, Clock, CheckCircle, XCircle,
+  LogOut, TrendingUp, Clock, CheckCircle, XCircle,
   ChevronDown, ChevronUp, Search
 } from 'lucide-react';
 import { useAppStore } from '../../store/appStore';
 import { clearAdminSession, isAdminAuthenticated } from './AdminLoginPage';
+import { BrandLogo } from '../../components/ui/BrandLogo';
 
 type Tab = 'overview' | 'users' | 'orders' | 'connections' | 'products';
 
@@ -68,8 +69,8 @@ export function AdminDashboard() {
       {/* Header */}
       <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center">
-            <Shield className="w-4 h-4 text-white" />
+          <div className="w-9 h-9 rounded-lg bg-white border border-gray-200 p-1.5">
+            <BrandLogo className="w-full h-full rounded-md" />
           </div>
           <div>
             <div className="font-bold text-sm">DairyWalla Admin</div>

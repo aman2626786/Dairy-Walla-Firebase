@@ -6,6 +6,7 @@ import {
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { hasUnreadForPage } from '../../utils/notificationRouting';
+import { BrandLogo } from '../ui/BrandLogo';
 
 export function Sidebar() {
   const { user, signOut } = useAuthStore();
@@ -43,8 +44,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">DW</span>
+          <div className="w-10 h-10 rounded-xl border border-gray-200 bg-white p-1 flex-shrink-0">
+            <BrandLogo className="w-full h-full rounded-lg" />
           </div>
           <div>
             <div className="font-bold text-gray-900 text-sm leading-tight">DairyWalla</div>
