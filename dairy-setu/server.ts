@@ -50,6 +50,13 @@ function initializeFirebaseAdmin() {
     return getFirebaseAdminAuth();
   }
 
+  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (serviceAccountBase64) {
+    const serviceAccount = JSON.parse(Buffer.from(serviceAccountBase64, 'base64').toString('utf8'));
+    initializeAdminApp({ credential: cert(serviceAccount) });
+    return getFirebaseAdminAuth();
+  }
+
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -65,7 +72,9 @@ function initializeFirebaseAdmin() {
     return null;
   }
 
-  throw new Error('Firebase Admin credentials are required in production.');
+  throw new Error(
+    'Firebase Admin credentials are required in production. Set FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_BASE64, or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY in Render environment variables.'
+  );
 }
 
 const adminAuth = initializeFirebaseAdmin();
