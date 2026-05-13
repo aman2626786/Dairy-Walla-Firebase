@@ -114,7 +114,7 @@ export function InvoicesPage() {
   };
 
   const handleShare = (order: Order) => {
-    const text = `Invoice from ${profile?.businessName}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: Rs. ${order.total.toLocaleString()}`;
+    const text = `Invoice from ${profile?.businessName}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: ₹${order.total.toLocaleString()}`;
     if (navigator.share) {
       navigator.share({ title: 'Invoice', text });
     } else {
@@ -142,7 +142,7 @@ export function InvoicesPage() {
               inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine)
             )}
           </div>
-          <div className="text-lg font-bold text-gray-900 mt-1">Rs. {order.total.toLocaleString()}</div>
+          <div className="text-lg font-bold text-gray-900 mt-1">₹{order.total.toLocaleString()}</div>
         </div>
       </div>
       <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
@@ -283,7 +283,7 @@ export function InvoicesPage() {
                     <td className="py-2 text-right text-gray-700">{item.quantity}</td>
                     <td className="py-2 text-right text-gray-700">{formatItemTotalQuantity(item.unit, item.quantity)}</td>
                     <td className="py-2 text-right text-green-600">{formatItemRate(item.unitPrice, item.unit)}</td>
-                    <td className="py-2 text-right font-semibold text-green-600">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                    <td className="py-2 text-right font-semibold text-green-600">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -294,7 +294,7 @@ export function InvoicesPage() {
                 </tr>
                 <tr className="border-t-2 border-gray-200">
                   <td colSpan={4} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
-                  <td className="pt-3 text-right font-bold text-xl text-brand-600">Rs. {selectedOrder.total.toLocaleString()}</td>
+                  <td className="pt-3 text-right font-bold text-xl text-brand-600">₹{selectedOrder.total.toLocaleString()}</td>
                 </tr>
               </tfoot>
             </table>

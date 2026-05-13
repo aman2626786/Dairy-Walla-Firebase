@@ -149,7 +149,7 @@ export function ShopkeeperProfilePage() {
   };
 
   const handleShare = (order: Order) => {
-    const text = `Invoice\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: Rs ${order.total.toLocaleString()}`;
+    const text = `Invoice\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: ₹${order.total.toLocaleString()}`;
     if (navigator.share) {
       navigator.share({ title: 'Invoice', text });
     } else {
@@ -283,7 +283,7 @@ export function ShopkeeperProfilePage() {
                     <div key={order.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
                       <div>
                         <div className="text-sm font-medium text-gray-900">Order #{order.id.slice(0, 8)}</div>
-                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · Rs {order.total.toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · ₹{order.total.toLocaleString()}</div>
                       </div>
                       <button
                         onClick={() => setSelectedInvoiceOrder(order)}
@@ -306,7 +306,7 @@ export function ShopkeeperProfilePage() {
                     <div key={order.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
                       <div>
                         <div className="text-sm font-medium text-gray-900">Order #{order.id.slice(0, 8)}</div>
-                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · Rs {order.total.toLocaleString()}</div>
+                        <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · ₹{order.total.toLocaleString()}</div>
                       </div>
                       <button
                         onClick={() => setSelectedInvoiceOrder(order)}
@@ -326,7 +326,7 @@ export function ShopkeeperProfilePage() {
               <div key={order.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
                 <div>
                   <div className="text-sm font-medium text-gray-900">Order #{order.id.slice(0, 8)}</div>
-                  <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · Rs {order.total.toLocaleString()}</div>
+                  <div className="text-xs text-gray-500">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')} · ₹{order.total.toLocaleString()}</div>
                 </div>
                 <button
                   onClick={() => setSelectedInvoiceOrder(order)}
@@ -364,7 +364,7 @@ export function ShopkeeperProfilePage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold text-gray-900">Rs {order.total.toLocaleString()}</div>
+                    <div className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</div>
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
                     {order.status !== 'rejected' && (
                       <div className="flex justify-end gap-2 mt-2">
@@ -438,7 +438,7 @@ export function ShopkeeperProfilePage() {
                     <td className="py-2 text-right text-gray-700">{item.quantity}</td>
                     <td className="py-2 text-right text-gray-700">{formatItemTotalQuantity(item.unit, item.quantity)}</td>
                     <td className="py-2 text-right text-green-600">{formatItemRate(item.unitPrice, item.unit)}</td>
-                    <td className="py-2 text-right font-semibold text-green-600">Rs {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                    <td className="py-2 text-right font-semibold text-green-600">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -449,7 +449,7 @@ export function ShopkeeperProfilePage() {
                 </tr>
                 <tr className="border-t-2 border-gray-200">
                   <td colSpan={4} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
-                  <td className="pt-3 text-right font-bold text-xl text-brand-600">Rs {selectedInvoiceOrder.total.toLocaleString()}</td>
+                  <td className="pt-3 text-right font-bold text-xl text-brand-600">₹{selectedInvoiceOrder.total.toLocaleString()}</td>
                 </tr>
               </tfoot>
             </table>

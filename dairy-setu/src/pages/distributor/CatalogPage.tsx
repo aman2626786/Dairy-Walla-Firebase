@@ -1,4 +1,4 @@
-﻿﻿import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -776,7 +776,7 @@ export function CatalogPage() {
               <p className="text-xs text-gray-500 mt-1">You can enter text, integer, or float values.</p>
             </div>
             <div>
-              <label className="label">Price (Rs)</label>
+              <label className="label">Price (₹)</label>
               <input
                 className="input"
                 type="number"

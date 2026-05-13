@@ -168,7 +168,7 @@ export function SummaryPage() {
       lines.push(`- ${CATEGORY_LABELS[cat].toUpperCase()}`);
       items.forEach(item => {
         lines.push(`  ${item.productName} (${item.brand})`);
-        lines.push(`  ${item.totalQty} ${item.unit} x Rs. ${(item.totalValue / item.totalQty).toFixed(0)} = Rs. ${item.totalValue.toLocaleString()}`);
+        lines.push(`  ${item.totalQty} ${item.unit} x ₹${(item.totalValue / item.totalQty).toFixed(0)} = ₹${item.totalValue.toLocaleString()}`);
       });
       lines.push('');
     });
@@ -176,7 +176,7 @@ export function SummaryPage() {
     lines.push('------------------------');
     lines.push(`  Total Orders : ${filteredOrders.length}`);
     lines.push(`  Total Qty    : ${totalQty} units`);
-    lines.push(`  Total Value  : Rs. ${totalValue.toLocaleString()}`);
+    lines.push(`  Total Value  : ₹${totalValue.toLocaleString()}`);
     lines.push('------------------------');
     lines.push(`  Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`);
 
@@ -212,14 +212,14 @@ export function SummaryPage() {
     doc.setFont('helvetica', 'normal');
     doc.text(`Order Summary Bill - ${label}`, 33, 17);
     doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`, 33, 22);
-    doc.text(`Total Orders: ${filteredOrders.length}  |  Total Value: Rs. ${totalValue.toLocaleString()}`, 33, 27);
+    doc.text(`Total Orders: ${filteredOrders.length}  |  Total Value: ₹${totalValue.toLocaleString()}`, 33, 27);
 
     y = 40;
 
     const stats = [
       { label: 'Total Orders', value: String(filteredOrders.length) },
       { label: 'Total Units', value: String(totalQty) },
-      { label: 'Total Value', value: `Rs. ${totalValue.toLocaleString()}` },
+      { label: 'Total Value', value: `₹${totalValue.toLocaleString()}` },
     ];
     const colW = (pageW - 30) / 3;
     stats.forEach((s, i) => {
@@ -272,14 +272,14 @@ export function SummaryPage() {
       doc.text(CATEGORY_LABELS[cat].replace(/[^\w\s]/g, '').trim(), 18, y + 5.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
-      doc.text(`${catQty} units  |  Rs. ${catTotal.toLocaleString()}`, pageW - 17, y + 5.5, { align: 'right' });
+      doc.text(`${catQty} units  |  ₹${catTotal.toLocaleString()}`, pageW - 17, y + 5.5, { align: 'right' });
 
       y += 10;
 
       autoTable(doc, {
         startY: y,
         margin: { left: 15, right: 15 },
-        head: [['Product', 'Brand', 'Unit', 'Qty', 'Rate (Rs.)', 'Amount (Rs.)']],
+        head: [['Product', 'Brand', 'Unit', 'Qty', 'Rate (₹)', 'Amount (₹)']],
         body: items.map(item => [
           item.productName,
           item.brand,
@@ -288,7 +288,7 @@ export function SummaryPage() {
           (item.totalValue / item.totalQty).toFixed(0),
           item.totalValue.toLocaleString(),
         ]),
-        foot: [['', '', '', catQty, '', `Rs. ${catTotal.toLocaleString()}`]],
+        foot: [['', '', '', catQty, '', `₹${catTotal.toLocaleString()}`]],
         headStyles: { fillColor: [22, 163, 74], textColor: 255, fontSize: 8, fontStyle: 'bold' },
         footStyles: { fillColor: [240, 253, 244], textColor: [22, 163, 74], fontSize: 8, fontStyle: 'bold' },
         bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
@@ -314,7 +314,7 @@ export function SummaryPage() {
     doc.setFontSize(11);
     doc.setTextColor(255, 255, 255);
     doc.text('GRAND TOTAL', 20, y + 8);
-    doc.text(`Rs. ${totalValue.toLocaleString()}`, pageW - 17, y + 8, { align: 'right' });
+    doc.text(`₹${totalValue.toLocaleString()}`, pageW - 17, y + 8, { align: 'right' });
 
     y = Math.min(y + 18, pageH - 8);
     doc.setFont('helvetica', 'normal');
@@ -338,7 +338,7 @@ export function SummaryPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
-      <MobileHeader title="Order Summary" subtitle={`${filteredOrders.length} orders | Rs. ${totalValue.toLocaleString()}`} />
+      <MobileHeader title="Order Summary" subtitle={`${filteredOrders.length} orders | ₹${totalValue.toLocaleString()}`} />
       <div className="hidden md:block mb-6">
         <h1 className="text-xl font-bold text-gray-900">Order Summary</h1>
         <p className="text-sm text-gray-500 mt-0.5">Aggregated demand with date filtering</p>
@@ -410,7 +410,7 @@ export function SummaryPage() {
               <div className="text-xs text-gray-500">Total Units</div>
             </div>
             <div className="card p-3 text-center">
-              <div className="text-xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</div>
+              <div className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
               <div className="text-xs text-gray-500">Value</div>
             </div>
           </div>
@@ -439,7 +439,7 @@ export function SummaryPage() {
                     <span className="font-semibold text-sm">{CATEGORY_LABELS[cat]}</span>
                     <div className="flex items-center gap-3 text-xs font-medium">
                       <span>{catQty} units</span>
-                      <span>Rs. {catTotal.toLocaleString()}</span>
+                      <span>₹{catTotal.toLocaleString()}</span>
                     </div>
                   </div>
 
@@ -453,7 +453,7 @@ export function SummaryPage() {
                         </div>
                         <div className="text-right ml-4">
                           <div className="text-sm font-bold text-gray-900">{item.totalQty} <span className="text-xs font-normal text-gray-400">units</span></div>
-                          <div className="text-xs text-brand-600 font-semibold">Rs. {item.totalValue.toLocaleString()}</div>
+                          <div className="text-xs text-brand-600 font-semibold">₹{item.totalValue.toLocaleString()}</div>
                         </div>
                       </div>
                     ))}
@@ -466,7 +466,7 @@ export function SummaryPage() {
           {/* Grand total */}
           <div className="card p-4 mt-3 flex items-center justify-between bg-brand-50 border-brand-200">
             <span className="font-bold text-gray-900">Grand Total</span>
-            <span className="text-xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</span>
+            <span className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</span>
           </div>
         </>
       )}
@@ -520,15 +520,15 @@ export function SummaryPage() {
                               <div className="text-gray-400">{item.brand}</div>
                             </td>
                             <td className="py-1.5 text-right text-gray-700">{item.totalQty} {item.unit}</td>
-                            <td className="py-1.5 text-right text-gray-700">Rs. {(item.totalValue / item.totalQty).toFixed(0)}</td>
-                            <td className="py-1.5 text-right font-semibold text-gray-900">Rs. {item.totalValue.toLocaleString()}</td>
+                            <td className="py-1.5 text-right text-gray-700">₹{(item.totalValue / item.totalQty).toFixed(0)}</td>
+                            <td className="py-1.5 text-right font-semibold text-gray-900">₹{item.totalValue.toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr>
                           <td colSpan={3} className="pt-1.5 text-right text-gray-500 font-medium">Subtotal</td>
-                          <td className="pt-1.5 text-right font-bold text-gray-900">Rs. {catTotal.toLocaleString()}</td>
+                          <td className="pt-1.5 text-right font-bold text-gray-900">₹{catTotal.toLocaleString()}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -543,7 +543,7 @@ export function SummaryPage() {
                 <div className="font-bold text-gray-900">Grand Total</div>
                 <div className="text-xs text-gray-400">{filteredOrders.length} orders | {totalQty} units</div>
               </div>
-              <div className="text-2xl font-bold text-brand-600">Rs. {totalValue.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
             </div>
           </div>
 

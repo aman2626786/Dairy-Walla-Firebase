@@ -484,7 +484,7 @@ export function DashboardPage() {
           <div className="grid grid-cols-3 gap-2 mt-2">
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-[11px] text-gray-500">7d Revenue</div>
-              <div className="text-sm font-semibold text-gray-900">Rs. {formatCompactNumber(weeklyRevenue)}</div>
+              <div className="text-sm font-semibold text-gray-900">₹{formatCompactNumber(weeklyRevenue)}</div>
             </div>
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-[11px] text-gray-500">7d Orders</div>
@@ -492,7 +492,7 @@ export function DashboardPage() {
             </div>
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
               <div className="text-[11px] text-gray-500">Avg Order Value</div>
-              <div className="text-sm font-semibold text-gray-900">Rs. {Math.round(avgOrderValue).toLocaleString()}</div>
+              <div className="text-sm font-semibold text-gray-900">₹{Math.round(avgOrderValue).toLocaleString()}</div>
             </div>
           </div>
         </div>
@@ -512,7 +512,7 @@ export function DashboardPage() {
               <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full bg-emerald-500" style={{ width: `${dairyShare > 0 ? Math.max(6, dairyShare) : 0}%` }} />
               </div>
-              <div className="text-[11px] text-gray-500 mt-1">Rs. {Math.round(weeklyRevenueByLine.dairy).toLocaleString()}</div>
+              <div className="text-[11px] text-gray-500 mt-1">₹{Math.round(weeklyRevenueByLine.dairy).toLocaleString()}</div>
             </div>
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
@@ -522,7 +522,7 @@ export function DashboardPage() {
               <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
                 <div className="h-full bg-pink-500" style={{ width: `${icecreamShare > 0 ? Math.max(6, icecreamShare) : 0}%` }} />
               </div>
-              <div className="text-[11px] text-gray-500 mt-1">Rs. {Math.round(weeklyRevenueByLine.icecream).toLocaleString()}</div>
+              <div className="text-[11px] text-gray-500 mt-1">₹{Math.round(weeklyRevenueByLine.icecream).toLocaleString()}</div>
             </div>
           </div>
 

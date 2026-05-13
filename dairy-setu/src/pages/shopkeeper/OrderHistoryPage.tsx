@@ -67,7 +67,7 @@ export function OrderHistoryPage() {
           <div className="flex-1">
             <div className="font-semibold text-brand-800 text-sm">Kal ka Order Repeat Karo</div>
             <div className="text-xs text-brand-600 mt-0.5">
-              {yesterdayOrder.items.length} items - Rs {yesterdayOrder.total.toLocaleString()}
+              {yesterdayOrder.items.length} items - ₹{yesterdayOrder.total.toLocaleString()}
             </div>
           </div>
           <ShoppingCart className="w-4 h-4 text-brand-600" />
@@ -104,7 +104,7 @@ export function OrderHistoryPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-gray-900">Rs {order.total.toLocaleString()}</div>
+                    <div className="font-bold text-gray-900">₹{order.total.toLocaleString()}</div>
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
                   </div>
                 </div>
@@ -112,7 +112,7 @@ export function OrderHistoryPage() {
                   {order.items.map(item => (
                     <div key={item.id} className="flex justify-between text-xs text-gray-600">
                       <span>{item.productName} <span className="text-gray-400">({item.brand})</span></span>
-                      <span>{item.quantity} x Rs {item.unitPrice}</span>
+                      <span>{item.quantity} x ₹{item.unitPrice}</span>
                     </div>
                   ))}
                 </div>

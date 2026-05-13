@@ -96,7 +96,7 @@ export function formatItemTotalQuantity(packSize: string | undefined | null, ord
 
 export function formatItemRate(unitPrice: number, packSize?: string | null) {
   const packText = formatPackSize(packSize);
-  const price = `Rs ${Number(unitPrice || 0).toLocaleString()}`;
+  const price = `₹${Number(unitPrice || 0).toLocaleString()}`;
   return packText === '-' ? price : `${price} / ${packText}`;
 }
 
@@ -123,9 +123,10 @@ export function formatOrderTotalQuantity(items: OrderItem[]) {
     }
   });
 
-  const totalParts = Array.from(totals.values()).map(total =>
-    formatBaseQuantity(total.value, total.family, total.unit)
-  );
+  const totalParts = Array.from(totals.values()).map(total => {
+    if (total.family === 'count') return `${formatNumber(total.value)} units`;
+    return formatBaseQuantity(total.value, total.family, total.unit);
+  });
 
   return [...totalParts, ...fallbackParts].filter(Boolean).join(' + ') || '0';
 }
@@ -133,5 +134,5 @@ export function formatOrderTotalQuantity(items: OrderItem[]) {
 export function formatInvoiceShareItem(item: OrderItem) {
   const totalQuantity = formatItemTotalQuantity(item.unit, item.quantity);
   const amount = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-  return `${item.productName} (${totalQuantity}) @ ${formatItemRate(item.unitPrice, item.unit)} = Rs ${amount.toLocaleString()}`;
+  return `${item.productName} (${totalQuantity}) @ ${formatItemRate(item.unitPrice, item.unit)} = ₹${amount.toLocaleString()}`;
 }

@@ -87,7 +87,7 @@ export function AdminAnalyticsPage() {
             <div>
               <div className="text-gray-600 text-sm font-medium">Total Revenue</div>
               <div className="text-3xl font-bold text-gray-900 mt-2">
-                Rs. {(stats.totalRevenue / 100000).toFixed(1)}L
+                ₹{(stats.totalRevenue / 100000).toFixed(1)}L
               </div>
             </div>
             <div className="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
@@ -120,7 +120,7 @@ export function AdminAnalyticsPage() {
             <div>
               <div className="text-gray-600 text-sm font-medium">Avg Order Value</div>
               <div className="text-3xl font-bold text-gray-900 mt-2">
-                Rs. {stats.averageOrderValue.toFixed(0)}
+                ₹{stats.averageOrderValue.toFixed(0)}
               </div>
             </div>
             <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">

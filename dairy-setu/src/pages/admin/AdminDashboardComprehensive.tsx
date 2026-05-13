@@ -207,10 +207,10 @@ export function AdminDashboardComprehensive() {
         />
         <StatCard
           label="Platform Revenue"
-          value={`Rs. ${((stats.totalRevenue || 0) / 100000).toFixed(1)}L`}
+          value={`₹${((stats.totalRevenue || 0) / 100000).toFixed(1)}L`}
           icon={IndianRupee}
           color="bg-emerald-50 text-emerald-600"
-          subValue={`Avg: Rs. ${averageOrderValue.toFixed(0)}`}
+          subValue={`Avg: ₹${averageOrderValue.toFixed(0)}`}
         />
       </div>
 
@@ -246,7 +246,7 @@ export function AdminDashboardComprehensive() {
         />
         <StatCard
           label="Avg Order Value"
-          value={`Rs. ${averageOrderValue.toFixed(0)}`}
+          value={`₹${averageOrderValue.toFixed(0)}`}
           icon={DollarSign}
           color="bg-cyan-50 text-cyan-600"
           subValue="Per order"
@@ -298,7 +298,7 @@ export function AdminDashboardComprehensive() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      {item.amount && <span className="text-xs font-semibold text-gray-900">Rs. {item.amount}</span>}
+                      {item.amount && <span className="text-xs font-semibold text-gray-900">₹{item.amount}</span>}
                       <span className="text-xs text-gray-500">{format(new Date(item.timestamp), 'MMM dd, hh:mm a')}</span>
                     </div>
                   </div>

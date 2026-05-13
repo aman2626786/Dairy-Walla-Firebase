@@ -358,7 +358,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-semibold text-gray-900 truncate">{product.name}</div>
                       <div className="text-xs text-gray-500 truncate">
-                        {product.brand} - {getProductQuantityText(product.quantity, product.unit)} - Rs {product.price.toLocaleString()}
+                        {product.brand} - {getProductQuantityText(product.quantity, product.unit)} - ₹{product.price.toLocaleString()}
                       </div>
                       {quantity > 0 && (
                         <div className="text-xs text-brand-700 mt-1">
@@ -401,14 +401,14 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
           </div>
           <div className="text-right">
             <div className="text-xs text-gray-500">{gstEnabled ? 'Grand Total' : 'Amount'}</div>
-            <div className="font-bold text-brand-700">Rs {grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            <div className="font-bold text-brand-700">₹{grandTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
             {gstEnabled && (
               <>
                 <div className="text-[11px] text-gray-500">
-                  CGST Rs {cgstAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  CGST ₹{cgstAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-[11px] text-gray-500">
-                  SGST Rs {sgstAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  SGST ₹{sgstAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                 </div>
               </>
             )}

@@ -280,7 +280,7 @@ async function notifyShopkeeperPaymentCompleted(
   const shortOrderId = order.id.slice(-6).toUpperCase();
   const distributorLabel = String(distributorBusinessName || 'your distributor').trim();
   const amount = Number(order.total ?? 0);
-  const amountLine = Number.isFinite(amount) && amount > 0 ? ` Amount: Rs ${amount.toLocaleString('en-IN')}.` : '';
+  const amountLine = Number.isFinite(amount) && amount > 0 ? ` Amount: ₹${amount.toLocaleString('en-IN')}.` : '';
 
   await prisma.notification.create({
     data: {

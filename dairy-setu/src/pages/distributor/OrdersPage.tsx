@@ -180,7 +180,7 @@ export function OrdersPage() {
                     {order.deliveryGroupName && ` - ${order.deliveryGroupName}`}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-gray-900">Rs {order.total.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
                     <span className="text-xs text-gray-500">{order.items.length} items</span>
                   </div>
                 </div>
@@ -243,7 +243,7 @@ export function OrdersPage() {
                     <tfoot>
                       <tr className="border-t border-gray-200">
                         <td colSpan={3} className="pt-2 text-right font-semibold text-gray-700">Total</td>
-                        <td className="pt-2 text-right font-bold text-gray-900">Rs {order.total.toLocaleString()}</td>
+                        <td className="pt-2 text-right font-bold text-gray-900">₹{order.total.toLocaleString()}</td>
                       </tr>
                     </tfoot>
                   </table>
