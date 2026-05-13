@@ -23,7 +23,11 @@ import { DistributorProfilePage } from './pages/shopkeeper/DistributorProfilePag
 import { NotificationsPage } from './pages/NotificationsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
-import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { AdminDashboardComprehensive } from './pages/admin/AdminDashboardComprehensive';
+import { AdminUsersPage } from './pages/admin/AdminUsersPage';
+import { AdminConnectionsPage } from './pages/admin/AdminConnectionsPage';
+import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+import { AdminLayout } from './components/layout/AdminLayout';
 import { ShareLinkHandler } from './pages/ShareLinkHandler';
 import { ToastContainer } from './components/ui/Toast';
 import { useAuthStore } from './store/authStore';
@@ -279,7 +283,10 @@ function AppWithAuth() {
       </Route>
 
       <Route path="/admin" element={<AdminLoginPage />} />
-      <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/admin/dashboard" element={<AdminLayout><AdminDashboardComprehensive /></AdminLayout>} />
+      <Route path="/admin/users" element={<AdminLayout><AdminUsersPage /></AdminLayout>} />
+      <Route path="/admin/connections" element={<AdminLayout><AdminConnectionsPage /></AdminLayout>} />
+      <Route path="/admin/analytics" element={<AdminLayout><AdminAnalyticsPage /></AdminLayout>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

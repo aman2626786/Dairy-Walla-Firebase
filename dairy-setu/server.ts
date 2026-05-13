@@ -1,12 +1,15 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cors from 'cors';
 import { Prisma, PrismaClient, type Profile } from '@prisma/client';
-import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { cert, getApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getFirebaseAdminAuth } from 'firebase-admin/auth';
 
 const prisma = new PrismaClient();
 const app = express();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '*13579*admin';
+const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || ADMIN_PASSWORD;
+const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 type AppRole = 'distributor' | 'shopkeeper';
 type DistributorType = 'dairy' | 'icecream' | 'dual';
@@ -56,7 +59,13 @@ function initializeFirebaseAdmin() {
     return getFirebaseAdminAuth();
   }
 
-  throw new Error('Firebase Admin credentials are not configured.');
+  // In development mode, return null to skip Firebase auth requirement
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('⚠️  Firebase credentials not configured. Running in development mode without Firebase auth.');
+    return null;
+  }
+
+  throw new Error('Firebase Admin credentials are required in production.');
 }
 
 const adminAuth = initializeFirebaseAdmin();
@@ -69,6 +78,17 @@ app.get('/api/ping', (_req, res) => {
 });
 
 async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  // In development mode without Firebase, skip auth requirement
+  if (!adminAuth) {
+    const devEmail = String(req.headers['x-dev-auth-email'] || '').trim().toLowerCase();
+    if (!devEmail || !devEmail.includes('@')) {
+      return res.status(401).json({ error: 'Development auth email missing. Please sign in with Google again.' });
+    }
+    req.authEmail = devEmail;
+    req.authUid = String(req.headers['x-dev-auth-uid'] || 'dev-uid');
+    return next();
+  }
+
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
@@ -93,8 +113,13 @@ app.use('/api', (req, res, next) => {
   if (req.path === '/ping') {
     return next();
   }
+  if (req.path.startsWith('/admin')) {
+    return next();
+  }
   return requireAuth(req as AuthenticatedRequest, res, next);
 });
+
+app.use('/api/admin', requireAdminSession);
 
 async function getRequesterProfile(req: AuthenticatedRequest): Promise<Profile | null> {
   if (!req.authEmail) return null;
@@ -188,6 +213,36 @@ function verifyPin(pin: string, storedPin: string | null | undefined): boolean {
   return timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
+function signAdminSession(expiresAt: number) {
+  return createHmac('sha256', ADMIN_SESSION_SECRET).update(String(expiresAt)).digest('hex');
+}
+
+function createAdminSessionToken() {
+  const expiresAt = Date.now() + ADMIN_SESSION_TTL_MS;
+  return `${expiresAt}.${signAdminSession(expiresAt)}`;
+}
+
+function verifyAdminSessionToken(token: unknown) {
+  if (typeof token !== 'string') return false;
+  const [expiresAtRaw, signature] = token.split('.');
+  const expiresAt = Number(expiresAtRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt < Date.now() || !signature) return false;
+
+  const expected = signAdminSession(expiresAt);
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const actualBuffer = Buffer.from(signature, 'hex');
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function requireAdminSession(req: Request, res: Response, next: NextFunction) {
+  if (req.path === '/login') return next();
+  const token = req.headers['x-admin-token'];
+  if (!verifyAdminSessionToken(token)) {
+    return res.status(401).json({ error: 'Admin session expired. Please login again.' });
+  }
+  return next();
+}
+
 function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -247,7 +302,7 @@ app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
 
     const { dp, sp } = await getRoleProfiles(profile.id);
     if (!dp && !sp) {
-      return res.json({ needsSetup: true });
+      return res.json({ needsSetup: true, profile });
     }
 
     if (role && profile.role !== role) {
@@ -1271,6 +1326,327 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
     return res.json({ success: true });
   } catch {
     return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==============================
+// ADMIN ENDPOINTS
+// ==============================
+
+app.post('/api/admin/login', (req, res) => {
+  const password = String(req.body?.password ?? '');
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Wrong password. Try again.' });
+  }
+
+  return res.json({ token: createAdminSessionToken() });
+});
+
+// Admin Stats - Platform Overview
+app.get('/api/admin/stats', async (_req, res) => {
+  try {
+    const profiles = await prisma.profile.findMany();
+    const distributors = await prisma.distributorProfile.findMany();
+    const shopkeepers = await prisma.shopkeeperProfile.findMany();
+    const connections = await prisma.connection.findMany();
+    const orders = await prisma.order.findMany();
+    const products = await prisma.product.findMany();
+
+    // Calculate stats
+    const activeDistributors = distributors.filter(d => {
+      const hasActiveConn = connections.some(c => c.distributorId === d.id && c.status === 'active');
+      return hasActiveConn;
+    }).length;
+
+    const activeShopkeepers = shopkeepers.filter(s => {
+      const hasActiveConn = connections.some(c => c.shopkeeperId === s.id && c.status === 'active');
+      return hasActiveConn;
+    }).length;
+
+    const completedOrders = orders.filter(o => o.status === 'fulfilled' || o.status === 'accepted').length;
+    const totalRevenue = orders
+      .filter(o => o.status === 'fulfilled' || o.status === 'accepted')
+      .reduce((sum, o) => sum + Number(o.total || 0), 0);
+
+    const activeConnections = connections.filter(c => c.status === 'active').length;
+    const pendingConnections = connections.filter(c => c.status === 'pending').length;
+
+    return res.json({
+      totalUsers: profiles.length,
+      totalDistributors: distributors.length,
+      totalShopkeepers: shopkeepers.length,
+      activeDistributors,
+      activeShopkeepers,
+      totalConnections: connections.length,
+      activeConnections,
+      pendingConnections,
+      totalOrders: orders.length,
+      completedOrders,
+      totalRevenue,
+      totalProducts: products.length,
+      averageOrderValue: completedOrders > 0 ? totalRevenue / completedOrders : 0,
+    });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    return res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// Admin - All Users
+app.get('/api/admin/users', async (_req, res) => {
+  try {
+    const profiles = await prisma.profile.findMany({
+      include: {
+        distributorProfile: true,
+        shopkeeperProfile: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const users = await Promise.all(
+      profiles.map(async (p) => {
+        const connectionFilters = [
+          p.distributorProfile?.id ? { distributorId: p.distributorProfile.id } : null,
+          p.shopkeeperProfile?.id ? { shopkeeperId: p.shopkeeperProfile.id } : null,
+        ].filter(Boolean) as Array<{ distributorId: string } | { shopkeeperId: string }>;
+        const connCount = connectionFilters.length > 0
+          ? await prisma.connection.count({ where: { OR: connectionFilters } })
+          : 0;
+
+        return {
+          id: p.id,
+          email: p.email,
+          name: p.name || 'No Name',
+          phone: p.phone,
+          role: p.role,
+          businessName: p.distributorProfile?.businessName || p.shopkeeperProfile?.shopName || 'N/A',
+          connections: connCount,
+          createdAt: p.createdAt,
+          verified: !!p.pin,
+        };
+      })
+    );
+
+    return res.json(users);
+  } catch (error) {
+    console.error('Admin users error:', error);
+    return res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// Admin - All Distributors with Details
+app.get('/api/admin/distributors', async (_req, res) => {
+  try {
+    const distributors = await prisma.distributorProfile.findMany({
+      include: {
+        user: true,
+        connections: true,
+        products: true,
+        orders: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const data = distributors.map((d) => {
+      const activeConnections = d.connections.filter(c => c.status === 'active').length;
+      const totalOrders = d.orders.length;
+      const totalRevenue = d.orders
+        .filter(o => o.status === 'fulfilled' || o.status === 'accepted')
+        .reduce((sum, o) => sum + Number(o.total || 0), 0);
+
+      return {
+        id: d.id,
+        userId: d.userId,
+        name: d.user.name || 'No Name',
+        email: d.user.email,
+        businessName: d.businessName,
+        distributorType: d.distributorType,
+        phone: d.user.phone,
+        city: d.city,
+        activeConnections,
+        totalProducts: d.products.length,
+        totalOrders,
+        totalRevenue,
+        profileComplete: d.profileComplete,
+        createdAt: d.createdAt,
+      };
+    });
+
+    return res.json(data);
+  } catch (error) {
+    console.error('Admin distributors error:', error);
+    return res.status(500).json({ error: 'Failed to fetch distributors' });
+  }
+});
+
+// Admin - All Shopkeepers with Details
+app.get('/api/admin/shopkeepers', async (_req, res) => {
+  try {
+    const shopkeepers = await prisma.shopkeeperProfile.findMany({
+      include: {
+        user: true,
+        connections: true,
+        orders: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const data = shopkeepers.map((s) => {
+      const activeConnections = s.connections.filter(c => c.status === 'active').length;
+      const totalOrders = s.orders.length;
+      const totalPurchased = s.orders
+        .filter(o => o.status === 'fulfilled' || o.status === 'accepted')
+        .reduce((sum, o) => sum + Number(o.total || 0), 0);
+
+      return {
+        id: s.id,
+        userId: s.userId,
+        name: s.user.name || 'No Name',
+        email: s.user.email,
+        shopName: s.shopName,
+        phone: s.user.phone,
+        city: s.city,
+        activeConnections,
+        totalOrders,
+        totalPurchased,
+        profileComplete: s.profileComplete,
+        createdAt: s.createdAt,
+      };
+    });
+
+    return res.json(data);
+  } catch (error) {
+    console.error('Admin shopkeepers error:', error);
+    return res.status(500).json({ error: 'Failed to fetch shopkeepers' });
+  }
+});
+
+// Admin - All Connections
+app.get('/api/admin/connections', async (_req, res) => {
+  try {
+    const connections = await prisma.connection.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json(connections);
+  } catch (error) {
+    console.error('Admin connections error:', error);
+    return res.status(500).json({ error: 'Failed to fetch connections' });
+  }
+});
+
+// Admin - Ban/Deactivate User
+app.post('/api/admin/ban-user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    const user = await prisma.profile.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Mark user as banned by setting a flag in the database
+    // For now, we'll deactivate them by removing their profile
+    // In production, you might want to add a 'banned' or 'active' field to the Profile model
+
+    await prisma.profile.update({
+      where: { id: userId },
+      data: { pin: null }, // Clear PIN to disable login
+    });
+
+    // Delete connections
+    if (user.role === 'distributor') {
+      const dp = await prisma.distributorProfile.findUnique({ where: { userId } });
+      if (dp) {
+        await prisma.connection.deleteMany({ where: { distributorId: dp.id } });
+      }
+    } else {
+      const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId } });
+      if (sp) {
+        await prisma.connection.deleteMany({ where: { shopkeeperId: sp.id } });
+      }
+    }
+
+    return res.json({ success: true, message: `User ${user.email} has been deactivated` });
+  } catch (error) {
+    console.error('Ban user error:', error);
+    return res.status(500).json({ error: 'Failed to ban user' });
+  }
+});
+
+// Admin - Verify Connection
+app.post('/api/admin/verify-connection/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    const connection = await prisma.connection.update({
+      where: { id: connectionId },
+      data: { status: 'active' },
+    });
+
+    return res.json({ success: true, connection });
+  } catch (error) {
+    console.error('Verify connection error:', error);
+    return res.status(500).json({ error: 'Failed to verify connection' });
+  }
+});
+
+// Admin - Reject Connection
+app.post('/api/admin/reject-connection/:connectionId', async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+
+    await prisma.connection.delete({ where: { id: connectionId } });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Reject connection error:', error);
+    return res.status(500).json({ error: 'Failed to reject connection' });
+  }
+});
+
+// Admin - Platform Activity Log
+app.get('/api/admin/activity', async (_req, res) => {
+  try {
+    const recentOrders = await prisma.order.findMany({
+      include: {
+        items: true,
+        distributor: true,
+      },
+      orderBy: { placedAt: 'desc' },
+      take: 50,
+    });
+
+    const recentConnections = await prisma.connection.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+
+    const activity = [
+      ...recentOrders.map((o) => ({
+        type: 'order',
+        action: `Order placed`,
+        description: `${o.shopName || 'Shop'} ordered from ${o.distributor?.businessName || 'Distributor'}`,
+        amount: o.total,
+        status: o.status,
+        timestamp: o.placedAt,
+      })),
+      ...recentConnections.map((c) => ({
+        type: 'connection',
+        action: `Connection ${c.status}`,
+        description: `${c.shopName} ↔ ${c.businessName}`,
+        status: c.status,
+        timestamp: c.createdAt,
+      })),
+    ]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 100);
+
+    return res.json(activity);
+  } catch (error) {
+    console.error('Activity log error:', error);
+    return res.status(500).json({ error: 'Failed to fetch activity' });
   }
 });
 

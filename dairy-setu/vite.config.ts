@@ -6,6 +6,9 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
   },
   preview: {
     host: true,

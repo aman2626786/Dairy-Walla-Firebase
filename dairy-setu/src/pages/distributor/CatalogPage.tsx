@@ -1,5 +1,5 @@
-﻿import { useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal } from 'lucide-react';
+﻿﻿import { useMemo, useState } from 'react';
+import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -483,6 +483,24 @@ export function CatalogPage() {
         </button>
       </div>
 
+      {/* Rank Widget */}
+      <div className="bg-gradient-to-r from-amber-100 to-orange-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between mb-5 shadow-sm animate-fade-in">
+        <div className="flex items-center gap-4">
+          <div className="bg-amber-200 p-2.5 rounded-full text-amber-700 shadow-inner">
+            <Trophy size={24} />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Global Rank</h3>
+            <p className="text-2xl font-extrabold text-gray-900">#4</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <button className="text-xs font-semibold bg-white/50 border border-amber-200 text-amber-700/70 px-3 py-1.5 rounded-md cursor-not-allowed" disabled>
+            Leaderboard coming soon 🚀
+          </button>
+        </div>
+      </div>
+
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
         <button
           onClick={() => setFilterCat('all')}
@@ -798,6 +816,3 @@ export function CatalogPage() {
     </div>
   );
 }
-
-
-

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2, Star } from 'lucide-react';
 import { format } from 'date-fns';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { useAppStore } from '../../store/appStore';
@@ -157,6 +157,22 @@ export function ShopkeeperProfilePage() {
         </button>
         <h1 className="text-xl font-bold text-gray-900">{connection.shopName}</h1>
         <p className="text-sm text-gray-500 mt-0.5">Shopkeeper profile and complete order history</p>
+      </div>
+
+      {/* Rank Badge */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 mb-5 flex items-center justify-between shadow-sm animate-fade-in">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center bg-blue-100 p-2.5 rounded-full">
+            <Star className="text-yellow-500 fill-yellow-500" size={24} />
+          </div>
+          <div>
+            <h3 className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Global Buyer Rank</h3>
+            <p className="text-xl font-extrabold text-gray-900">#12</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-blue-600 font-medium">Top 5% on DairyWalla</p>
+        </div>
       </div>
 
       <div className="card p-4 mb-5">

@@ -129,7 +129,15 @@ export function ShopCatalogPage() {
         return;
       }
       const businessLine = cartItems[0] ? inferBusinessLineFromCategory(String(cartItems[0].product.category || 'other'), cartItems[0].product.businessLine) : 'dairy';
-      await placeOrder(shopProfile.id, shopProfile.ownerName, shopProfile.shopName, distributorId, cartItems, isLate, businessLine);
+      await placeOrder(
+        shopProfile.id,
+        shopProfile.ownerName || shopProfile.shopName,
+        shopProfile.shopName,
+        distributorId,
+        cartItems,
+        isLate,
+        businessLine
+      );
       show('Order placed automatically!', 'success');
       navigate('/shop/history');
     } catch (e) {

@@ -89,7 +89,6 @@ export const translations: Record<string, Record<AppLanguage, string>> = {
   'How it works': { hinglish: 'How it works', english: 'How it works', hindi: 'यह कैसे काम करता है' },
   'Login': { hinglish: 'Login', english: 'Login', hindi: 'लॉगिन' },
   'Sign Up': { hinglish: 'Sign Up', english: 'Sign Up', hindi: 'साइन अप' },
-  'Dashboard': { hinglish: 'Dashboard', english: 'Dashboard', hindi: 'डैशबोर्ड' },
 };
 
 export function useTranslation() {

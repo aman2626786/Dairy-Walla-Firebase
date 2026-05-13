@@ -1,9 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Store, Package, Clock, LineChart, FileText, 
-  Smartphone, Users, ArrowRight, ShieldCheck, 
-  MessageSquareWarning, CheckCircle, Zap, TrendingUp, BellRing,
-  Play, Check, Globe, Share2, ClipboardList, Receipt
+import {
+  Store, Clock, FileText,
+  ArrowRight,
+  CheckCircle, Zap, TrendingUp,
+  Play, Check, Globe, Share2, ClipboardList
 } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
 import { useAuthStore } from '../store/authStore';

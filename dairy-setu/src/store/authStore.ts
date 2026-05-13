@@ -102,7 +102,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  signIn: async (email, role) => {
+  signIn: async (email, _role) => {
     set({ loading: true });
     try {
       const firebaseEmail = firebaseAuth.currentUser?.email;
@@ -111,7 +111,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return { error: 'Session mismatch. Kripya Google se dubara login karein.' };
       }
 
-      const res = await apiClient.post('/auth/me', { role });
+      const res = await apiClient.post('/auth/me', {});
       if (res.data.needsSetup) {
         useAppStore.getState().resetState();
         set({ user: null, isAuthenticated: false, loading: false });

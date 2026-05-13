@@ -105,6 +105,8 @@ export function LoginPage() {
         } catch {
           // non-critical
         }
+      } else if (loginResult.error) {
+        show(loginResult.error, "error");
       }
     } catch (err: any) {
       console.error("Google Login Error:", err);
