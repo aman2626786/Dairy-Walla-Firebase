@@ -28,8 +28,22 @@ function safeText(value: string | undefined, fallback: string) {
   return v.length > 0 ? v : fallback;
 }
 
-function getInvoiceFileName(order: Order) {
-  return `invoice-${order.id.slice(-8)}.pdf`;
+function sanitizeFileNamePart(value: string, fallback: string) {
+  const cleaned = value
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return cleaned || fallback;
+}
+
+function getInvoiceFileName({ order, shopkeeper }: InvoicePdfInput) {
+  const billedName = order.shopName || shopkeeper?.shopName || order.shopkeeperName || shopkeeper?.ownerName || 'shopkeeper';
+  const placedAt = new Date(order.placedAt);
+  const billDate = Number.isNaN(placedAt.getTime()) ? format(new Date(), 'yyyy-MM-dd') : format(placedAt, 'yyyy-MM-dd');
+  const billId = order.id ? order.id.slice(-8).toUpperCase() : 'BILL';
+
+  return `${sanitizeFileNamePart(billedName, 'shopkeeper')}-${billDate}-${billId}.pdf`;
 }
 
 function formatMoney(value: number) {
@@ -415,7 +429,7 @@ export async function createInvoicePdf({
 
 export async function downloadInvoicePdf(input: InvoicePdfInput) {
   const doc = await createInvoicePdf(input);
-  doc.save(getInvoiceFileName(input.order));
+  doc.save(getInvoiceFileName(input));
 }
 
 export async function printInvoicePdf(input: InvoicePdfInput, printWindow?: Window | null) {

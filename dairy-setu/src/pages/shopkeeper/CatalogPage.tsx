@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, Clock, AlertTriangle, Plus, Minus, Search, Repeat } from 'lucide-react';
+import { ShoppingCart, Clock, AlertTriangle, Plus, Minus, Search, Repeat, ArrowLeft, ChevronRight, Store, Package } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -95,6 +95,7 @@ export function ShopCatalogPage() {
   const [loadingDistributor, setLoadingDistributor] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState<ProductCategory | 'all'>('all');
+  const [selectedDistributorId, setSelectedDistributorId] = useState<string | null>(null);
 
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
 
@@ -157,8 +158,6 @@ export function ShopCatalogPage() {
       businessLine: inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine),
     }));
 
-  const categories = [...new Set(availableProducts.map(p => normalizeCategory(String(p.category))))] as ProductCategory[];
-
   const uniqueConnections = useMemo(() => {
     const byDistributor = new Map<string, typeof activeConnections[number]>();
     activeConnections.forEach(conn => {
@@ -198,17 +197,32 @@ export function ShopCatalogPage() {
     };
   });
 
-  const filteredCount = groupedByDistributor.reduce((sum, group) => sum + group.items.length, 0);
-  const hasAnyProducts = groupedByDistributor.some(group => group.items.length > 0);
-  const visibleGroups = hasAnyProducts
-    ? groupedByDistributor.filter(group => group.items.length > 0)
-    : groupedByDistributor;
   const lockedDistributorId = cart[0]?.product.distributorId || null;
   const lockedBusinessLine = cart[0]
     ? inferBusinessLineFromCategory(String(cart[0].product.category || 'other'), cart[0].product.businessLine)
     : null;
   const cartTotal = cart.reduce((sum, c) => sum + c.product.price * c.quantity, 0);
   const cartCount = cart.reduce((sum, c) => sum + c.quantity, 0);
+  const selectedGroup = selectedDistributorId
+    ? groupedByDistributor.find(group => group.conn.distributorId === selectedDistributorId)
+    : null;
+  const visibleGroups = selectedGroup ? [selectedGroup] : [];
+  const filteredCount = selectedGroup?.items.length ?? 0;
+  const selectedDistributorProducts = selectedDistributorId
+    ? availableProducts.filter(product => product.distributorId === selectedDistributorId)
+    : [];
+  const categoryProducts = selectedDistributorId ? selectedDistributorProducts : availableProducts;
+  const categories = [...new Set(categoryProducts.map(p => normalizeCategory(String(p.category))))] as ProductCategory[];
+
+  useEffect(() => {
+    if (lockedDistributorId && selectedDistributorId !== lockedDistributorId) {
+      setSelectedDistributorId(lockedDistributorId);
+      return;
+    }
+    if (selectedDistributorId && !activeConnections.some(conn => conn.distributorId === selectedDistributorId)) {
+      setSelectedDistributorId(null);
+    }
+  }, [activeConnections, lockedDistributorId, selectedDistributorId]);
 
   if (activeConnections.length === 0) {
     return (
@@ -233,6 +247,91 @@ export function ShopCatalogPage() {
       <div className="hidden md:block mb-4">
         <h1 className="text-xl font-bold text-gray-900">{t('Order Now')}</h1>
         <p className="text-sm text-gray-500">{shopProfile?.shopName || 'Connected distributors'}</p>
+      </div>
+
+      {!selectedGroup ? (
+        <div className="space-y-3 mb-24">
+          <div className="text-sm text-gray-600">
+            Distributor select karein. Phir sirf usi distributor ke products dikhenge.
+          </div>
+          {groupedByDistributor.map(group => {
+            const totalProducts = availableProducts.filter(product => product.distributorId === group.conn.distributorId).length;
+            const lastOrder = orders.find(order => order.distributorId === group.conn.distributorId && order.status !== 'rejected');
+            return (
+              <button
+                key={group.conn.id}
+                type="button"
+                onClick={() => {
+                  setSelectedDistributorId(group.conn.distributorId);
+                  setSearch('');
+                  setFilterCat('all');
+                }}
+                className="w-full card p-4 text-left hover:border-brand-200 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center flex-shrink-0">
+                    <Store className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-gray-900 truncate">{group.conn.businessName}</div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {group.distributorProfile?.company || businessLineLabel(group.distributorType === 'icecream' ? 'icecream' : 'dairy')}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-gray-50 border border-gray-100 px-2 py-1 text-gray-600">
+                        <Package className="w-3 h-3" /> {totalProducts} products
+                      </span>
+                      {group.distributorProfile && (
+                        <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${
+                          group.isLate
+                            ? 'bg-yellow-50 text-yellow-700 border border-yellow-100'
+                            : group.isBeforeWindow
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                              : 'bg-green-50 text-green-700 border border-green-100'
+                        }`}>
+                          <Clock className="w-3 h-3" />
+                          {group.isLate
+                            ? `Closed ${group.distributorProfile.orderWindowCutoff}`
+                            : group.isBeforeWindow
+                              ? `Opens ${group.distributorProfile.orderWindowStart}`
+                              : `Open till ${group.distributorProfile.orderWindowCutoff}`}
+                        </span>
+                      )}
+                      {lastOrder && (
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-brand-50 border border-brand-100 px-2 py-1 text-brand-700">
+                          <Repeat className="w-3 h-3" /> Last order available
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            if (cart.length > 0) {
+              show('Pehle current cart ka order place karein ya cart clear karein.', 'info');
+              return;
+            }
+            setSelectedDistributorId(null);
+            setSearch('');
+            setFilterCat('all');
+          }}
+          className="btn-secondary p-2"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="min-w-0">
+          <div className="font-bold text-gray-900 truncate">{selectedGroup.conn.businessName}</div>
+          <div className="text-xs text-gray-500">{selectedDistributorProducts.length} products available</div>
+        </div>
       </div>
 
       <div className="relative mb-4">
@@ -446,6 +545,8 @@ export function ShopCatalogPage() {
             </section>
           ))}
         </div>
+      )}
+        </>
       )}
 
       {cart.length > 0 && (

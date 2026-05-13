@@ -544,8 +544,56 @@ app.patch('/api/auth/user/:id', async (req: AuthenticatedRequest, res) => {
     if (!requester) return res.status(404).json({ error: 'Profile not found' });
     if (requester.id !== req.params.id) return res.status(403).json({ error: 'Forbidden' });
 
-    await prisma.profile.update({ where: { id: req.params.id }, data: req.body });
-    return res.json({ success: true });
+    const updates: Prisma.ProfileUpdateInput = {};
+
+    if (typeof req.body?.name === 'string') {
+      const name = req.body.name.trim();
+      if (!name) return res.status(400).json({ error: 'Name is required.' });
+      updates.name = name;
+    }
+
+    if (req.body?.phone !== undefined) {
+      const cleanedPhone = normalizePhone(req.body.phone);
+      if (cleanedPhone.length !== 10) {
+        return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+      }
+      const phoneConflict = await prisma.profile.findFirst({
+        where: {
+          phone: cleanedPhone,
+          id: { not: requester.id },
+        },
+      });
+      if (phoneConflict) {
+        return res.status(409).json({ error: 'This phone number is already linked to another account.' });
+      }
+      updates.phone = cleanedPhone;
+    }
+
+    if (req.body?.pin !== undefined) {
+      const pin = String(req.body.pin || '');
+      if (!/^\d{6}$/.test(pin)) {
+        return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
+      }
+      updates.pin = hashPin(pin);
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid profile fields to update.' });
+    }
+
+    const updated = await prisma.profile.update({ where: { id: req.params.id }, data: updates });
+
+    if (typeof updates.phone === 'string' && requester.role === 'shopkeeper') {
+      const shopkeeperProfile = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+      if (shopkeeperProfile) {
+        await prisma.connection.updateMany({
+          where: { shopkeeperId: shopkeeperProfile.id },
+          data: { shopkeeperPhone: updates.phone },
+        });
+      }
+    }
+
+    return res.json({ success: true, profile: updated });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Server error' });

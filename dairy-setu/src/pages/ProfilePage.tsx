@@ -60,10 +60,14 @@ export function ProfilePage() {
     setEditValue(field.value || '');
   };
 
-  const saveEdit = (key: string) => {
+  const saveEdit = async (key: string) => {
     const val = editValue.trim();
-    if (!val && ['name', 'businessName', 'shopName', 'city'].includes(key)) {
+    if (!val && ['name', 'businessName', 'shopName', 'city', 'phone'].includes(key)) {
       show('Ye field empty nahi ho sakta', 'error');
+      return;
+    }
+    if (key === 'phone' && !/^\d{10}$/.test(val)) {
+      show('Phone number 10 digit ka hona chahiye', 'error');
       return;
     }
     if (key === 'pin' && val.length !== 6) {
@@ -71,16 +75,24 @@ export function ProfilePage() {
       return;
     }
 
-    if (key === 'name') {
-      updateUser({ name: val });
-    } else if (key === 'pin') {
-      updateUser({ pin: val } as any);
-    } else if (isDistributor && distProfile) {
-      updateDistributorSettings(distProfile.id, { [key]: val });
-      if (key === 'ownerName') updateUser({ name: val });
-    } else if (!isDistributor && shopProfile) {
-      updateShopkeeperProfile(shopProfile.id, { [key]: val });
-      if (key === 'ownerName') updateUser({ name: val });
+    try {
+      if (key === 'name') {
+        await updateUser({ name: val });
+      } else if (key === 'phone') {
+        await updateUser({ phone: val });
+      } else if (key === 'pin') {
+        await updateUser({ pin: val } as any);
+      } else if (isDistributor && distProfile) {
+        await updateDistributorSettings(distProfile.id, { [key]: val });
+        if (key === 'ownerName') await updateUser({ name: val });
+      } else if (!isDistributor && shopProfile) {
+        await updateShopkeeperProfile(shopProfile.id, { [key]: val });
+        if (key === 'ownerName') await updateUser({ name: val });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Update nahi ho paya';
+      show(message, 'error');
+      return;
     }
 
     setEditingField(null);
@@ -156,6 +168,7 @@ export function ProfilePage() {
   const distributorFields: EditField[] = [
     { key: 'ownerName', label: 'Owner Name', value: distProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
     { key: 'businessName', label: 'Business Name', value: distProfile?.businessName || '', placeholder: 'Dairy ka naam' },
+    { key: 'phone', label: 'Mobile Number', value: user?.phone || '', placeholder: '10 digit mobile number' },
     { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'company', label: 'Company / Brand', value: distProfile?.company || '', type: 'select', options: COMPANIES },
     { key: 'city', label: 'City', value: distProfile?.city || '', placeholder: 'e.g. Ajmer' },
@@ -167,6 +180,7 @@ export function ProfilePage() {
   const shopkeeperFields: EditField[] = [
     { key: 'ownerName', label: 'Owner Name', value: shopProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
     { key: 'shopName', label: 'Shop Name', value: shopProfile?.shopName || '', placeholder: 'Shop ka naam' },
+    { key: 'phone', label: 'Mobile Number', value: user?.phone || '', placeholder: '10 digit mobile number' },
     { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'city', label: 'City', value: shopProfile?.city || '', placeholder: 'e.g. Ajmer' },
     { key: 'address', label: 'Address', value: shopProfile?.address || '', placeholder: 'Shop address' },
@@ -179,6 +193,7 @@ export function ProfilePage() {
   const fieldIcons: Record<string, React.ReactElement> = {
     ownerName: <User className="w-3.5 h-3.5" />,
     businessName: <Building2 className="w-3.5 h-3.5" />,
+    phone: <Phone className="w-3.5 h-3.5" />,
     pin: <Shield className="w-3.5 h-3.5" />,
     shopName: <Store className="w-3.5 h-3.5" />,
     company: <Tag className="w-3.5 h-3.5" />,
@@ -211,9 +226,6 @@ export function ProfilePage() {
           </div>
           <div className="text-xs text-gray-400 mt-1 flex items-center gap-1">
             <Phone className="w-3 h-3" /> +91 {user?.phone}
-            <span className="badge-green text-xs ml-1 flex items-center gap-0.5">
-              <Shield className="w-2.5 h-2.5" /> Verified
-            </span>
           </div>
         </div>
       </div>
@@ -251,13 +263,21 @@ export function ProfilePage() {
                   </select>
                 ) : (
                   <input
-                type={field.key === 'pin' ? 'password' : 'text'}
-                maxLength={field.key === 'pin' ? 6 : undefined}
-                inputMode={field.key === 'pin' ? 'numeric' : undefined}
+                    type={field.key === 'pin' ? 'password' : 'text'}
+                    maxLength={field.key === 'pin' ? 6 : field.key === 'phone' ? 10 : undefined}
+                    inputMode={field.key === 'pin' || field.key === 'phone' ? 'numeric' : undefined}
                     className="input flex-1"
-                value={field.key === 'pin' && editValue === '******' ? '' : editValue}
+                    value={field.key === 'pin' && editValue === '******' ? '' : editValue}
                     placeholder={field.placeholder}
-                onChange={e => setEditValue(field.key === 'pin' ? e.target.value.replace(/\D/g, '').slice(0, 6) : e.target.value)}
+                    onChange={e => {
+                      if (field.key === 'pin') {
+                        setEditValue(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      } else if (field.key === 'phone') {
+                        setEditValue(e.target.value.replace(/\D/g, '').slice(0, 10));
+                      } else {
+                        setEditValue(e.target.value);
+                      }
+                    }}
                     onKeyDown={e => e.key === 'Enter' && saveEdit(field.key)}
                     autoFocus
                   />
@@ -278,18 +298,6 @@ export function ProfilePage() {
         ))}
 
         {/* Phone — read only */}
-        <div className="p-4">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-            <Phone className="w-3.5 h-3.5" /> Mobile Number
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-gray-900">+91 {user?.phone}</div>
-            <span className="badge-green text-xs flex items-center gap-1">
-              <Shield className="w-3 h-3" /> Verified
-            </span>
-          </div>
-        </div>
-
         {/* Location — editable */}
         <div className="p-4">
           <div className="flex items-center justify-between mb-1">

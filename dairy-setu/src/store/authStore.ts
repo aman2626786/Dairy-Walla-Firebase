@@ -202,8 +202,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       await apiClient.patch(`/auth/user/${user.id}`, updates);
+      if (updates.phone) {
+        useAppStore.setState(state => ({
+          distributorProfiles: state.distributorProfiles.map(profile =>
+            profile.userId === user.id ? { ...profile, phone: updates.phone } : profile
+          ),
+          shopkeeperProfiles: state.shopkeeperProfiles.map(profile =>
+            profile.userId === user.id ? { ...profile, phone: updates.phone } : profile
+          ),
+        }));
+      }
     } catch (e) {
       console.error('Failed to update user in DB', e);
+      set({ user });
+      const message = axios.isAxiosError(e) ? String(e.response?.data?.error || e.message || '').trim() : '';
+      throw new Error(message || 'Profile update nahi ho paya');
     }
   },
 }));
