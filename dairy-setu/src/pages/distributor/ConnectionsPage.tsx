@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, Users, Phone } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CheckCircle, XCircle, Clock, Users, Phone, FileText, PlusCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -7,6 +7,7 @@ import { useToast } from '../../components/ui/Toast';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
+import { ManualBillModal } from './ManualBillModal';
 
 export function ConnectionsPage() {
   const { user } = useAuthStore();
@@ -20,6 +21,16 @@ export function ConnectionsPage() {
   } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
+  const [manualBillOpen, setManualBillOpen] = useState(false);
+  const [manualBillShopkeeper, setManualBillShopkeeper] = useState<{
+    shopkeeperId?: string | null;
+    shopName?: string;
+    shopkeeperName?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    city?: string;
+  } | null>(null);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const myConnections = connections.filter(c => c.distributorId === profile?.id);
@@ -67,13 +78,49 @@ export function ConnectionsPage() {
     show(`${shopName} rejected`, 'error');
   };
 
+  const openManualBillForConnection = (conn: typeof active[number]) => {
+    const shopkeeper = shopkeeperProfiles.find(sp => sp.id === conn.shopkeeperId);
+    setManualBillShopkeeper({
+      shopkeeperId: conn.shopkeeperId,
+      shopName: conn.shopName,
+      shopkeeperName: conn.shopkeeperName,
+      phone: shopkeeper?.phone || conn.shopkeeperPhone,
+      email: shopkeeper?.email,
+      address: shopkeeper?.address,
+      city: shopkeeper?.city,
+    });
+    setManualBillOpen(true);
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <MobileHeader title="Shopkeepers" subtitle={`${active.length} active · ${pending.length} pending`} />
 
-      <div className="hidden md:block mb-6">
+      <div className="hidden md:flex items-start justify-between gap-3 mb-6">
+        <div>
         <h1 className="text-xl font-bold text-gray-900">Shopkeepers</h1>
         <p className="text-sm text-gray-500 mt-0.5">{active.length} active · {pending.length} pending</p>
+        </div>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            setManualBillShopkeeper(null);
+            setManualBillOpen(true);
+          }}
+        >
+          <PlusCircle className="w-4 h-4" /> Create Bill
+        </button>
+      </div>
+      <div className="md:hidden mb-4">
+        <button
+          className="btn-primary w-full justify-center"
+          onClick={() => {
+            setManualBillShopkeeper(null);
+            setManualBillOpen(true);
+          }}
+        >
+          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+        </button>
       </div>
 
       <div className="card p-4 mb-6 flex items-center gap-4">
@@ -173,6 +220,12 @@ export function ConnectionsPage() {
                   >
                     View
                   </button>
+                  <button
+                    className="btn-primary py-1.5 px-3 text-xs"
+                    onClick={() => openManualBillForConnection(conn)}
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Bill
+                  </button>
                   {phone && (
                     <a href={`tel:${tel}`} className="btn-secondary py-1.5 px-3 text-xs inline-flex items-center gap-1">
                       <Phone className="w-3.5 h-3.5" /> Call
@@ -184,6 +237,12 @@ export function ConnectionsPage() {
           </div>
         )}
       </div>
+      <ManualBillModal
+        open={manualBillOpen}
+        onClose={() => setManualBillOpen(false)}
+        distributor={profile}
+        initialShopkeeper={manualBillShopkeeper}
+      />
     </div>
   );
 }

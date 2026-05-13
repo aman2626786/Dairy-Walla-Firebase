@@ -27,29 +27,29 @@ export function LandingPage() {
       
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-brand-600 shadow-lg shadow-brand-200 flex items-center justify-center">
-                <BrandLogo className="w-6 h-6" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16 sm:h-20">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 sm:w-9 h-8 sm:h-9 rounded-lg sm:rounded-xl bg-brand-600 shadow-lg shadow-brand-200 flex items-center justify-center flex-shrink-0">
+                <BrandLogo className="w-5 sm:w-6 h-5 sm:h-6" />
               </div>
-              <span className="text-xl font-bold text-slate-900 tracking-tight">DairyWalla</span>
+              <span className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">DairyWalla</span>
             </div>
             
-            <div className="flex items-center gap-4 sm:gap-6">
-              <div className="hidden lg:flex items-center gap-6 mr-4">
-                <a href="#features" className="text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">Features</a>
-                <a href="#dashboard" className="text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">Dashboard</a>
-                <a href="#how-it-works" className="text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">How it works</a>
+            <div className="flex items-center gap-2 sm:gap-4 md:gap-6">
+              <div className="hidden lg:flex items-center gap-4 md:gap-6 mr-2 md:mr-4">
+                <a href="#features" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">Features</a>
+                <a href="#dashboard" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">Dashboard</a>
+                <a href="#how-it-works" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">How it works</a>
               </div>
 
               {/* Language Selector */}
-              <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-full px-3 py-1.5">
-                <Globe className="w-3.5 h-3.5 text-slate-400" />
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100 border border-slate-200 rounded-full px-2 sm:px-3 py-1">
+                <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400" />
                 <select 
                   value={language} 
                   onChange={(e) => setLanguage(e.target.value as AppLanguage)}
-                  className="bg-transparent text-[13px] font-bold text-slate-700 focus:outline-none cursor-pointer pr-1"
+                  className="bg-transparent text-[11px] sm:text-[13px] font-bold text-slate-700 focus:outline-none cursor-pointer pr-0.5"
                 >
                   <option value="hinglish">Hinglish</option>
                   <option value="english">English</option>
@@ -58,15 +58,15 @@ export function LandingPage() {
               </div>
 
               {isAuthenticated ? (
-                <button onClick={handleCTA} className="bg-slate-900 text-white text-sm font-bold px-5 py-2.5 rounded-full hover:bg-slate-800 transition-all">
+                <button onClick={handleCTA} className="bg-slate-900 text-white text-xs sm:text-sm font-bold px-3 sm:px-5 py-2 rounded-full hover:bg-slate-800 transition-all whitespace-nowrap">
                   Dashboard
                 </button>
               ) : (
-                <div className="flex items-center gap-3">
-                  <Link to="/login" className="text-sm font-bold text-slate-700 hover:text-brand-600 transition-colors hidden sm:block">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Link to="/login" className="text-xs sm:text-sm font-bold text-slate-700 hover:text-brand-600 transition-colors hidden sm:block">
                     {t('Login')}
                   </Link>
-                  <Link to="/signup" className="bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold px-6 py-2.5 rounded-full shadow-md shadow-brand-100 transition-all">
+                  <Link to="/signup" className="bg-brand-600 hover:bg-brand-700 text-white text-xs sm:text-sm font-bold px-3 sm:px-6 py-2 rounded-full shadow-md shadow-brand-100 transition-all whitespace-nowrap">
                     {t('Sign Up')}
                   </Link>
                 </div>
@@ -77,7 +77,7 @@ export function LandingPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+      <section className="relative pt-20 pb-12 sm:pt-32 sm:pb-20 lg:pt-48 lg:pb-32 overflow-hidden px-4 sm:px-0">
         <div className="absolute top-20 right-0 w-[600px] h-[600px] bg-brand-50 rounded-full blur-3xl opacity-60 -z-10 translate-x-1/2"></div>
         <div className="absolute top-40 left-0 w-[400px] h-[400px] bg-blue-50 rounded-full blur-3xl opacity-40 -z-10 -translate-x-1/2"></div>
         
@@ -87,23 +87,23 @@ export function LandingPage() {
             The Complete Dairy Business Operating System
           </div>
           
-          <h1 className="text-5xl md:text-7xl font-bold text-slate-900 leading-[1.1] mb-8 max-w-4xl mx-auto">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-slate-900 leading-[1.1] mb-6 sm:mb-8 max-w-4xl mx-auto">
             Ab Dairy Business <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-emerald-500">
               Hoga 100x Zyada Fast.
             </span>
           </h1>
           
-          <p className="text-lg md:text-xl text-slate-500 leading-relaxed mb-12 max-w-3xl mx-auto font-medium">
+          <p className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-500 leading-relaxed mb-8 sm:mb-12 max-w-3xl mx-auto font-medium">
             Everything you need to manage your dairy distribution in one place. From smart ordering to auto-invoicing, DairyWalla takes care of the hard work so you can grow.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
-            <button onClick={handleCTA} className="w-full sm:w-auto bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 px-12 rounded-2xl shadow-xl shadow-brand-200 flex items-center justify-center gap-3 text-lg transition-all hover:-translate-y-1">
-              Start Free Trial <ArrowRight className="w-5 h-5" />
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-16 sm:mb-20 px-2 sm:px-0">
+            <button onClick={handleCTA} className="w-full sm:w-auto bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 sm:py-4 px-6 sm:px-12 rounded-2xl shadow-xl shadow-brand-200 flex items-center justify-center gap-2 sm:gap-3 text-sm sm:text-base lg:text-lg transition-all hover:-translate-y-1">
+              Start Free Trial <ArrowRight className="w-4 sm:w-5 h-4 sm:h-5" />
             </button>
-            <a href="#how-it-works" className="w-full sm:w-auto bg-white border border-slate-200 hover:border-brand-300 text-slate-700 font-bold py-4 px-12 rounded-2xl transition-all flex items-center justify-center gap-2 text-lg">
-              Watch Features <Play className="w-4 h-4 fill-slate-700" />
+            <a href="#how-it-works" className="w-full sm:w-auto bg-white border border-slate-200 hover:border-brand-300 text-slate-700 font-bold py-3 sm:py-4 px-6 sm:px-12 rounded-2xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base lg:text-lg">
+              Watch Features <Play className="w-3 sm:w-4 h-3 sm:h-4 fill-slate-700" />
             </a>
           </div>
 
@@ -132,51 +132,51 @@ export function LandingPage() {
       </section>
 
       {/* Feature Showoff - Bento Grid Style */}
-      <section className="py-24 bg-slate-50 border-y border-slate-100" id="features">
+      <section className="py-12 sm:py-24 bg-slate-50 border-y border-slate-100 px-4 sm:px-0" id="features">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-6">Powerful Tools, One App.</h2>
-            <p className="text-lg text-slate-500 font-medium max-w-2xl mx-auto italic">"Pehle ka kaam ghanton me hota tha, ab DairyWalla se minutes me hoga."</p>
+          <div className="text-center mb-12 sm:mb-16 px-2 sm:px-0">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-4 sm:mb-6">Powerful Tools, One App.</h2>
+            <p className="text-sm sm:text-base md:text-lg text-slate-500 font-medium max-w-2xl mx-auto italic">"Pehle ka kaam ghanton me hota tha, ab DairyWalla se minutes me hoga."</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 auto-rows-[220px]">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-6 auto-rows-auto md:auto-rows-[220px]">
             {/* 1. Smart Re-Ordering (4 cols) */}
-            <div className="md:col-span-4 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group overflow-hidden relative">
+            <div className="md:col-span-4 bg-white p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group overflow-hidden relative">
                <div className="absolute -bottom-10 -right-10 w-32 h-32 bg-brand-50 rounded-full group-hover:scale-150 transition-transform"></div>
                <div className="relative z-10 h-full flex flex-col">
-                  <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-6"><Zap className="w-6 h-6" /></div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2">Smart Cart System</h3>
-                  <p className="text-slate-500 text-sm font-medium leading-relaxed">Shopkeepers can repeat yesterday's order in exactly one click. No typing needed.</p>
+                  <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4 sm:mb-6"><Zap className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">Smart Cart System</h3>
+                  <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">Shopkeepers can repeat yesterday's order in exactly one click. No typing needed.</p>
                </div>
             </div>
 
             {/* 2. Auto Summaries (8 cols) */}
-            <div className="md:col-span-8 bg-slate-900 p-8 rounded-[2rem] shadow-xl hover:shadow-2xl transition-all group overflow-hidden relative">
+            <div className="md:col-span-8 bg-slate-900 p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] shadow-xl hover:shadow-2xl transition-all group overflow-hidden relative">
                <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-               <div className="relative z-10 flex flex-col md:flex-row h-full items-center gap-8">
+               <div className="relative z-10 flex flex-col md:flex-row h-full items-center gap-6 sm:gap-8">
                   <div className="flex-1">
-                     <div className="w-12 h-12 rounded-2xl bg-white/10 text-white flex items-center justify-center mb-6"><ClipboardList className="w-6 h-6" /></div>
-                     <h3 className="text-2xl font-bold text-white mb-3">Instant Product Summary</h3>
-                     <p className="text-slate-400 text-sm font-medium leading-relaxed">System calculates total Milk, Paneer, Curd demand across all shops. Get your load ready in seconds.</p>
+                     <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-white/10 text-white flex items-center justify-center mb-4 sm:mb-6"><ClipboardList className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+                     <h3 className="text-lg sm:text-2xl font-bold text-white mb-2 sm:mb-3">Instant Product Summary</h3>
+                     <p className="text-slate-400 text-xs sm:text-sm font-medium leading-relaxed">System calculates total Milk, Paneer, Curd demand across all shops. Get your load ready in seconds.</p>
                   </div>
-                  <div className="w-full md:w-64 bg-white/5 rounded-2xl p-4 border border-white/10 hidden sm:block">
-                     <div className="text-xs text-brand-400 font-bold mb-3 uppercase tracking-widest">Today's Demand</div>
-                     <div className="space-y-3">
-                        <div className="flex justify-between items-center"><span className="text-slate-300 text-sm">Amul Milk (500ml)</span><span className="text-white font-bold">420 Pkts</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-300 text-sm">Fresh Paneer (1kg)</span><span className="text-white font-bold">25 Kg</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-300 text-sm">Curd Cups (200g)</span><span className="text-white font-bold">180 Units</span></div>
+                  <div className="w-full md:w-64 bg-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-white/10 hidden sm:block">
+                     <div className="text-[10px] sm:text-xs text-brand-400 font-bold mb-2 sm:mb-3 uppercase tracking-widest">Today's Demand</div>
+                     <div className="space-y-2 sm:space-y-3">
+                        <div className="flex justify-between items-center"><span className="text-slate-300 text-xs sm:text-sm">Amul Milk (500ml)</span><span className="text-white font-bold text-xs sm:text-sm">420 Pkts</span></div>
+                        <div className="flex justify-between items-center"><span className="text-slate-300 text-xs sm:text-sm">Fresh Paneer (1kg)</span><span className="text-white font-bold text-xs sm:text-sm">25 Kg</span></div>
+                        <div className="flex justify-between items-center"><span className="text-slate-300 text-xs sm:text-sm">Curd Cups (200g)</span><span className="text-white font-bold text-xs sm:text-sm">180 Units</span></div>
                      </div>
                   </div>
                </div>
             </div>
 
             {/* 3. Normal vs Late Orders (7 cols) */}
-            <div className="md:col-span-7 bg-gradient-to-br from-amber-50 to-orange-50 p-8 rounded-[2rem] border border-amber-100 hover:shadow-lg transition-all group">
-               <div className="flex items-center gap-6 h-full">
+            <div className="md:col-span-7 bg-gradient-to-br from-amber-50 to-orange-50 p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-amber-100 hover:shadow-lg transition-all group">
+               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 h-full">
                   <div className="flex-1">
-                     <div className="w-12 h-12 rounded-2xl bg-white text-amber-600 shadow-sm flex items-center justify-center mb-6"><Clock className="w-6 h-6" /></div>
-                     <h3 className="text-xl font-bold text-slate-900 mb-2">Smart Cutoff Windows</h3>
-                     <p className="text-slate-600 text-sm font-medium leading-relaxed">Define your ordering time. Late orders are flagged for your approval, keeping your inventory stable.</p>
+                     <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-white text-amber-600 shadow-sm flex items-center justify-center mb-4 sm:mb-6"><Clock className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+                     <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">Smart Cutoff Windows</h3>
+                     <p className="text-slate-600 text-xs sm:text-sm font-medium leading-relaxed">Define your ordering time. Late orders are flagged for your approval, keeping your inventory stable.</p>
                   </div>
                   <div className="hidden sm:block">
                      <div className="flex flex-col gap-2">
@@ -188,43 +188,43 @@ export function LandingPage() {
             </div>
 
             {/* 4. Multi-Language (5 cols) */}
-            <div className="md:col-span-5 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group overflow-hidden relative">
+            <div className="md:col-span-5 bg-white p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group overflow-hidden relative">
                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 to-blue-500"></div>
-               <div className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform"><Globe className="w-6 h-6" /></div>
-               <h3 className="text-xl font-bold text-slate-900 mb-2">Multi-Language App</h3>
-               <p className="text-slate-500 text-sm font-medium leading-relaxed">Full support for English, Hindi, and Hinglish. Language change is instant across the whole app.</p>
-               <div className="flex gap-2 mt-4">
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">Hindi</span>
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">Hinglish</span>
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">English</span>
+               <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-slate-50 text-slate-600 flex items-center justify-center mb-4 sm:mb-6 group-hover:scale-110 transition-transform"><Globe className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+               <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">Multi-Language App</h3>
+               <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">Full support for English, Hindi, and Hinglish. Language change is instant across the whole app.</p>
+               <div className="flex gap-2 mt-3 sm:mt-4 flex-wrap">
+                  <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">Hindi</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">Hinglish</span>
+                  <span className="text-[9px] sm:text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">English</span>
                </div>
             </div>
 
             {/* 5. Invoice Generation (6 cols) */}
-            <div className="md:col-span-6 bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-[2rem] border border-blue-100 hover:shadow-lg transition-all group">
-                <div className="w-12 h-12 rounded-2xl bg-white text-blue-600 shadow-sm flex items-center justify-center mb-6"><FileText className="w-6 h-6" /></div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">One-Tap Professional Bills</h3>
-                <p className="text-slate-600 text-sm font-medium leading-relaxed">Generate professional invoices for any order. Share directly to WhatsApp or download as PDF in seconds.</p>
+            <div className="md:col-span-6 bg-gradient-to-br from-blue-50 to-indigo-50 p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-blue-100 hover:shadow-lg transition-all group">
+                <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-white text-blue-600 shadow-sm flex items-center justify-center mb-4 sm:mb-6"><FileText className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">One-Tap Professional Bills</h3>
+                <p className="text-slate-600 text-xs sm:text-sm font-medium leading-relaxed">Generate professional invoices for any order. Share directly to WhatsApp or download as PDF in seconds.</p>
             </div>
 
             {/* 6. Profile Sharing (6 cols) */}
-            <div className="md:col-span-6 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group relative overflow-hidden">
+            <div className="md:col-span-6 bg-white p-5 sm:p-8 rounded-2xl sm:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg transition-all group relative overflow-hidden">
                <div className="absolute -right-6 -bottom-6 w-32 h-32 bg-slate-50 rounded-full opacity-50"></div>
-               <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-6"><Share2 className="w-6 h-6" /></div>
-               <h3 className="text-xl font-bold text-slate-900 mb-2">Share & Grow</h3>
-               <p className="text-slate-500 text-sm font-medium leading-relaxed">Distributors get a unique sharing link. Shopkeepers can connect simply by tapping the link on WhatsApp.</p>
+               <div className="w-10 sm:w-12 h-10 sm:h-12 rounded-xl sm:rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mb-4 sm:mb-6"><Share2 className="w-5 sm:w-6 h-5 sm:h-6" /></div>
+               <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">Share & Grow</h3>
+               <p className="text-slate-500 text-xs sm:text-sm font-medium leading-relaxed">Distributors get a unique sharing link. Shopkeepers can connect simply by tapping the link on WhatsApp.</p>
             </div>
           </div>
         </div>
       </section>
 
       {/* Interactive Feature: Order Window Visualizer */}
-      <section className="py-24 bg-white" id="dashboard">
+      <section className="py-12 sm:py-24 bg-white px-4 sm:px-0" id="dashboard">
          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div className="grid lg:grid-cols-2 gap-8 sm:gap-16 items-center">
                <div>
                   <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold mb-6 tracking-wider uppercase">Real-Time Management</div>
-                  <h2 className="text-3xl md:text-5xl font-bold text-slate-900 mb-8 leading-tight">Control Your Business From One Screen.</h2>
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-6 sm:mb-8 leading-tight">Control Your Business From One Screen.</h2>
                   <div className="space-y-6">
                      {[
                        { icon: CheckCircle, title: 'Live Order Popups', desc: 'Naya order aate hi turant alert milega.' },
@@ -274,12 +274,12 @@ export function LandingPage() {
       </section>
 
       {/* How It Works - Visual Timeline */}
-      <section className="py-24 bg-slate-900 relative overflow-hidden" id="how-it-works">
+      <section className="py-12 sm:py-24 bg-slate-900 relative overflow-hidden px-4 sm:px-0" id="how-it-works">
          <div className="absolute top-0 left-0 w-full h-full bg-brand-600/5 -z-10"></div>
          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 className="text-3xl md:text-5xl font-bold text-white text-center mb-20 tracking-tight">How It Works.</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-16 sm:mb-20 tracking-tight">How It Works.</h2>
             
-            <div className="grid md:grid-cols-3 gap-12 relative">
+            <div className="grid md:grid-cols-3 gap-6 sm:gap-12 relative">
                <div className="hidden md:block absolute top-12 left-0 w-full h-0.5 bg-white/10 -z-10"></div>
                {[
                  { step: 1, title: 'Profile Setup', desc: 'Signup karein, role aur language select karein.' },
@@ -300,12 +300,12 @@ export function LandingPage() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-32 bg-white text-center px-4 relative overflow-hidden">
+      <section className="py-16 sm:py-32 bg-white text-center px-4 sm:px-0 relative overflow-hidden">
          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-50 rounded-full blur-3xl opacity-40 -z-10 translate-x-1/2"></div>
-         <h2 className="text-4xl md:text-6xl font-bold text-slate-900 mb-8 tracking-tight">Ready to boost your business?</h2>
-         <p className="text-slate-500 text-lg md:text-xl font-medium mb-12 max-w-2xl mx-auto italic">Join hundreds of local distributors and shops saving hours every single day.</p>
-         <button onClick={handleCTA} className="bg-brand-600 hover:bg-brand-700 text-white font-bold py-5 px-16 rounded-2xl shadow-2xl shadow-brand-200 transition-all hover:-translate-y-1 text-xl flex items-center justify-center gap-4 mx-auto">
-            Get Started For Free <ArrowRight className="w-6 h-6" />
+         <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-bold text-slate-900 mb-6 sm:mb-8 tracking-tight px-2 sm:px-0">Ready to boost your business?</h2>
+         <p className="text-slate-500 text-sm sm:text-base md:text-lg lg:text-xl font-medium mb-8 sm:mb-12 max-w-2xl mx-auto italic px-2 sm:px-0">Join hundreds of local distributors and shops saving hours every single day.</p>
+         <button onClick={handleCTA} className="bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 sm:py-4 lg:py-5 px-8 sm:px-12 lg:px-16 rounded-2xl shadow-2xl shadow-brand-200 transition-all hover:-translate-y-1 text-sm sm:text-base lg:text-xl flex items-center justify-center gap-3 mx-auto">
+            Get Started For Free <ArrowRight className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" />
          </button>
       </section>
 

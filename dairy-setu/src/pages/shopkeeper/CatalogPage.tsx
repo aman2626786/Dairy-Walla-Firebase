@@ -34,11 +34,11 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
 
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-gray-900 text-sm truncate mb-0.5">{product.name}</div>
+          <div className="font-semibold text-gray-900 text-sm mb-0.5 leading-tight">{product.name}</div>
           <div className="text-xs text-gray-500">{product.brand} - {getProductQuantityText(product.quantity, product.unit)}</div>
         </div>
         <div className="text-right flex-shrink-0">
-          <div className="font-bold text-gray-900">Rs {product.price}</div>
+          <div className="font-bold text-green-600">₹{product.price}</div>
         </div>
       </div>
 
@@ -78,8 +78,8 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
         )}
       </div>
       {quantity > 0 && (
-        <div className="mt-2 text-xs text-brand-600 font-medium text-center">
-          Subtotal: Rs {(product.price * quantity).toLocaleString()}
+        <div className="mt-2 text-xs text-green-600 font-medium text-center">
+          Subtotal: ₹{(product.price * quantity).toLocaleString()}
         </div>
       )}
     </div>
@@ -327,7 +327,7 @@ export function ShopCatalogPage() {
                         </div>
                       </div>
                       <p className="text-xs text-brand-800 mb-3 font-medium">
-                        {t('Aaj bhi kal wala order laga du?')} ({lastOrder.items.length} {t('Items')}, {t('Total')}: Rs {lastOrder.total})
+                        {t('Aaj bhi kal wala order laga du?')} ({lastOrder.items.length} {t('Items')}, {t('Total')}: ₹{lastOrder.total})
                       </p>
                       <div className="flex gap-2">
                         <button 
@@ -459,7 +459,7 @@ export function ShopCatalogPage() {
               <span>{cartCount} {t('Items')}</span>
             </div>
             <span>{t('Review Order')} {'->'}</span>
-            <span className="font-bold">Rs {cartTotal.toLocaleString()}</span>
+            <span className="font-bold text-green-600">₹{cartTotal.toLocaleString()}</span>
           </button>
         </div>
       )}

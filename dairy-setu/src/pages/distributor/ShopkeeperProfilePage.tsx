@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2, Star } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2, Star, PlusCircle, Printer, Download, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { useAppStore } from '../../store/appStore';
@@ -9,8 +9,10 @@ import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import type { Order, PaymentStatus } from '../../types';
 import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
-import { downloadInvoicePdf } from '../../utils/invoicePdf';
+import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
+import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize } from '../../utils/orderQuantity';
+import { ManualBillModal } from './ManualBillModal';
 
 export function ShopkeeperProfilePage() {
   const { shopkeeperId } = useParams();
@@ -23,6 +25,7 @@ export function ShopkeeperProfilePage() {
   const [fromTime, setFromTime] = useState('');
   const [toTime, setToTime] = useState('');
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
+  const [manualBillOpen, setManualBillOpen] = useState(false);
   const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(
     () => getInvoiceLanguage()
   );
@@ -120,8 +123,33 @@ export function ShopkeeperProfilePage() {
     }
   };
 
+  const handlePrint = async (order: Order) => {
+    const distributor = distributorProfiles.find(dp => dp.userId === user?.id);
+    if (!distributor) {
+      show('Distributor profile missing. Please complete profile first.', 'error');
+      return;
+    }
+    const printWindow = window.open('', '_blank');
+    try {
+      await printInvoicePdf({
+        order,
+        distributor,
+        shopkeeper,
+        distributorPhone: distributor.phone || user?.phone,
+        distributorEmail: distributor.email || user?.email,
+        shopkeeperPhone: shopkeeper?.phone || connection?.shopkeeperPhone,
+        shopkeeperEmail: shopkeeper?.email,
+        language: invoiceLanguage,
+      }, printWindow);
+      show('Print bill opened');
+    } catch {
+      printWindow?.close();
+      show('Print open nahi hua. Please retry.', 'error');
+    }
+  };
+
   const handleShare = (order: Order) => {
-    const text = `Invoice\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\n\nItems:\n${order.items.map(i => `${i.productName} x${i.quantity} = Rs ${i.quantity * i.unitPrice}`).join('\n')}\n\nTotal: Rs ${order.total.toLocaleString()}`;
+    const text = `Invoice\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: Rs ${order.total.toLocaleString()}`;
     if (navigator.share) {
       navigator.share({ title: 'Invoice', text });
     } else {
@@ -219,7 +247,12 @@ export function ShopkeeperProfilePage() {
       </div>
 
       <div className="card p-4 mb-5">
-        <h2 className="font-semibold text-gray-900 text-sm mb-3">Generate Bill (Separate)</h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="font-semibold text-gray-900 text-sm">Generate Bill (Separate)</h2>
+          <button className="btn-primary py-1.5 px-3 text-xs" onClick={() => setManualBillOpen(true)}>
+            <PlusCircle className="w-3.5 h-3.5" /> Create Bill
+          </button>
+        </div>
         <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-xs text-gray-600">Bill language</p>
           <select
@@ -390,6 +423,7 @@ export function ShopkeeperProfilePage() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 text-xs font-semibold text-gray-500">Product</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Qty</th>
+                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Total Qty</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Rate</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Amount</th>
                 </tr>
@@ -399,29 +433,55 @@ export function ShopkeeperProfilePage() {
                   <tr key={item.id}>
                     <td className="py-2">
                       <div className="font-medium text-gray-900">{item.productName}</div>
-                      <div className="text-xs text-gray-400">{item.brand} · {item.unit}</div>
+                      <div className="text-xs text-gray-400">{item.brand} - {formatPackSize(item.unit)}</div>
                     </td>
                     <td className="py-2 text-right text-gray-700">{item.quantity}</td>
-                    <td className="py-2 text-right text-gray-700">Rs {item.unitPrice}</td>
-                    <td className="py-2 text-right font-semibold text-gray-900">Rs {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                    <td className="py-2 text-right text-gray-700">{formatItemTotalQuantity(item.unit, item.quantity)}</td>
+                    <td className="py-2 text-right text-green-600">{formatItemRate(item.unitPrice, item.unit)}</td>
+                    <td className="py-2 text-right font-semibold text-green-600">Rs {(item.quantity * item.unitPrice).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
+                <tr className="border-t border-gray-100">
+                  <td colSpan={4} className="pt-3 text-right font-semibold text-gray-700">Total Qty</td>
+                  <td className="pt-3 text-right font-semibold text-gray-900">{formatOrderTotalQuantity(selectedInvoiceOrder.items)}</td>
+                </tr>
                 <tr className="border-t-2 border-gray-200">
-                  <td colSpan={3} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
+                  <td colSpan={4} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
                   <td className="pt-3 text-right font-bold text-xl text-brand-600">Rs {selectedInvoiceOrder.total.toLocaleString()}</td>
                 </tr>
               </tfoot>
             </table>
 
             <div className="sticky bottom-0 z-10 flex gap-3 bg-white/95 backdrop-blur-sm pt-2 pb-1">
-              <button onClick={() => handleDownload(selectedInvoiceOrder)} className="btn-secondary flex-1">Download PDF</button>
-              <button onClick={() => handleShare(selectedInvoiceOrder)} className="btn-primary flex-1">Share Invoice</button>
+              <button onClick={() => handleDownload(selectedInvoiceOrder)} className="btn-secondary flex-1">
+                <Download className="w-4 h-4" /> PDF
+              </button>
+              <button onClick={() => handlePrint(selectedInvoiceOrder)} className="btn-secondary flex-1">
+                <Printer className="w-4 h-4" /> Print
+              </button>
+              <button onClick={() => handleShare(selectedInvoiceOrder)} className="btn-primary flex-1">
+                <Share2 className="w-4 h-4" /> Share
+              </button>
             </div>
           </div>
         )}
       </Modal>
+      <ManualBillModal
+        open={manualBillOpen}
+        onClose={() => setManualBillOpen(false)}
+        distributor={distributorProfile}
+        initialShopkeeper={{
+          shopkeeperId,
+          shopName: connection.shopName,
+          shopkeeperName: connection.shopkeeperName,
+          phone: shopkeeper?.phone || connection.shopkeeperPhone,
+          email: shopkeeper?.email,
+          address: shopkeeper?.address,
+          city: shopkeeper?.city,
+        }}
+      />
     </div>
   );
 }

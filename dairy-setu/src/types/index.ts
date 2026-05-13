@@ -114,7 +114,7 @@ export interface OrderItem {
 
 export interface Order {
   id: string;
-  shopkeeperId: string;
+  shopkeeperId?: string | null;
   shopkeeperName: string;
   shopName: string;
   distributorId: string;

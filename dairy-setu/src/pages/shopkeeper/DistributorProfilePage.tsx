@@ -236,10 +236,10 @@ export function DistributorProfilePage() {
                           <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
                           <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
                         </div>
-                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
+                        <div className="font-bold text-green-600 flex-shrink-0">₹{product.price}</div>
                       </div>
                     ))}
                   </div>
@@ -257,10 +257,10 @@ export function DistributorProfilePage() {
                           <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
                           <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
                         </div>
-                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
+                        <div className="font-bold text-green-600 flex-shrink-0">₹{product.price}</div>
                       </div>
                     ))}
                   </div>
@@ -283,10 +283,10 @@ export function DistributorProfilePage() {
                           <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900 text-sm truncate">{product.name}</div>
+                          <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
                           <div className="text-xs text-gray-500">{product.brand} · {getProductQuantityText(product.quantity, product.unit)}</div>
                         </div>
-                        <div className="font-bold text-gray-900 flex-shrink-0">â‚¹{product.price}</div>
+                        <div className="font-bold text-green-600 flex-shrink-0">₹{product.price}</div>
                       </div>
                     ))}
                   </div>
@@ -297,11 +297,11 @@ export function DistributorProfilePage() {
         </div>
 
         <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-          <p className="text-xs text-blue-700 font-medium mb-1">ðŸ’¡ Next Steps</p>
+          <p className="text-xs text-blue-700 font-medium mb-1">💡 Next Steps</p>
           <ul className="text-xs text-blue-600 space-y-1">
-            <li>â€¢ Send connection request to start ordering</li>
-            <li>â€¢ Wait for distributor approval</li>
-            <li>â€¢ Once approved, you can place daily orders</li>
+            <li>• Send connection request to start ordering</li>
+            <li>• Wait for distributor approval</li>
+            <li>• Once approved, you can place daily orders</li>
           </ul>
         </div>
       </div>

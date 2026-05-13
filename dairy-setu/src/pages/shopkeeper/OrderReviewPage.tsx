@@ -103,8 +103,8 @@ export function OrderReviewPage() {
                 <div className="text-xs text-gray-500">{item.product.brand} · {item.product.unit}</div>
               </div>
               <div className="text-right">
-                <div className="text-sm font-semibold text-gray-900">{item.quantity} × ₹{item.product.price}</div>
-                <div className="text-xs text-brand-600 font-medium">₹{(item.product.price * item.quantity).toLocaleString()}</div>
+                <div className="text-sm font-semibold text-green-600">{item.quantity} × ₹{item.product.price}</div>
+                <div className="text-xs text-green-600 font-medium">₹{(item.product.price * item.quantity).toLocaleString()}</div>
               </div>
             </div>
           ))}

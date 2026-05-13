@@ -350,11 +350,11 @@ export function CatalogPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-gray-900 text-sm truncate">{product.name}</div>
+                  <div className="font-semibold text-gray-900 text-sm leading-tight">{product.name}</div>
                   <div className="text-xs text-gray-500">
                     {product.brand} · {getProductQuantityText(product.quantity, product.unit)}
                   </div>
-                  <div className="font-bold text-gray-900 mt-1">Rs {product.price}</div>
+                  <div className="font-bold text-green-600 mt-1">₹{product.price}</div>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg hover:bg-gray-100">
@@ -431,7 +431,7 @@ export function CatalogPage() {
                 </div>
               </td>
               <td className="px-4 py-3 text-sm text-gray-600">{getProductQuantityText(product.quantity, product.unit)}</td>
-              <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">Rs {product.price}</td>
+              <td className="px-4 py-3 text-right text-sm font-semibold text-green-600">₹{product.price}</td>
               <td className="px-4 py-3 text-center">
                 <button
                   onClick={() => void toggleAvailability(product)}

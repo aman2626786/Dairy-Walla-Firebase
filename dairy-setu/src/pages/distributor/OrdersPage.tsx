@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle, XCircle, Package } from 'lucide-react';
+import { CheckCircle, XCircle, Package, PlusCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -7,6 +7,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
 import type { Order, OrderStatus, PaymentStatus } from '../../types';
+import { ManualBillModal } from './ManualBillModal';
 
 const statusColors: Record<OrderStatus, string> = {
   pending: 'badge-yellow',
@@ -40,6 +41,7 @@ export function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
   const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [manualBillOpen, setManualBillOpen] = useState(false);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const myOrders = orders.filter(o => o.distributorId === profile?.id);
@@ -53,25 +55,29 @@ export function OrdersPage() {
 
   const handleAccept = (order: Order) => {
     updateOrderStatus(order.id, 'accepted');
-    addNotification({
-      userId: order.shopkeeperId,
-      type: 'order_accepted',
-      message: 'Your late order has been accepted',
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
+    if (order.shopkeeperId) {
+      addNotification({
+        userId: order.shopkeeperId,
+        type: 'order_accepted',
+        message: 'Your late order has been accepted',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
     show(`Order from ${order.shopName} accepted`);
   };
 
   const handleReject = (order: Order) => {
     updateOrderStatus(order.id, 'rejected');
-    addNotification({
-      userId: order.shopkeeperId,
-      type: 'order_rejected',
-      message: 'Your late order was not accepted',
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
+    if (order.shopkeeperId) {
+      addNotification({
+        userId: order.shopkeeperId,
+        type: 'order_rejected',
+        message: 'Your late order was not accepted',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
     show('Order rejected', 'error');
   };
 
@@ -91,9 +97,19 @@ export function OrdersPage() {
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
       <MobileHeader title="All Orders" subtitle={`${myOrders.length} total orders`} />
-      <div className="hidden md:block mb-6">
-        <h1 className="text-xl font-bold text-gray-900">All Orders</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} total orders</p>
+      <div className="hidden md:flex items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">All Orders</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} total orders</p>
+        </div>
+        <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
+          <PlusCircle className="w-4 h-4" /> Create Bill
+        </button>
+      </div>
+      <div className="md:hidden mb-4">
+        <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
+          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-2 mb-5">
@@ -219,8 +235,8 @@ export function OrdersPage() {
                         <tr key={item.id}>
                           <td className="py-1.5 text-gray-700">{item.productName} <span className="text-gray-400">({item.brand})</span></td>
                           <td className="py-1.5 text-right text-gray-700">{item.quantity} {item.unit}</td>
-                          <td className="py-1.5 text-right text-gray-700">Rs {item.unitPrice}</td>
-                          <td className="py-1.5 text-right font-semibold text-gray-900">Rs {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                          <td className="py-1.5 text-right text-green-600">₹{item.unitPrice}</td>
+                          <td className="py-1.5 text-right font-semibold text-green-600">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -237,6 +253,11 @@ export function OrdersPage() {
           ))}
         </div>
       )}
+      <ManualBillModal
+        open={manualBillOpen}
+        onClose={() => setManualBillOpen(false)}
+        distributor={profile}
+      />
     </div>
   );
 }

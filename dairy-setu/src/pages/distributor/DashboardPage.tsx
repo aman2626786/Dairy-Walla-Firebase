@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle, Share2, Trophy } from 'lucide-react';
+import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle, Share2, Trophy, PlusCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format, subDays } from 'date-fns';
 import type { Order } from '../../types';
+import { ManualBillModal } from './ManualBillModal';
 
 function OrderCard({ order, onAccept, onReject, showActions }: {
   order: Order;
@@ -135,6 +136,7 @@ export function DashboardPage() {
   const { show } = useToast();
   const navigate = useNavigate();
   const [remindAllLoading, setRemindAllLoading] = useState(false);
+  const [manualBillOpen, setManualBillOpen] = useState(false);
   // const [remindWhatsappLoading, setRemindWhatsappLoading] = useState(false);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -238,7 +240,9 @@ export function DashboardPage() {
 
   const shopkeepersWhoOrderedToday = useMemo(() => {
     const orderedShopkeeperIds = new Set<string>();
-    todayOrders.forEach(order => orderedShopkeeperIds.add(order.shopkeeperId));
+    todayOrders.forEach(order => {
+      if (order.shopkeeperId) orderedShopkeeperIds.add(order.shopkeeperId);
+    });
     return orderedShopkeeperIds;
   }, [todayOrders]);
 
@@ -403,18 +407,28 @@ export function DashboardPage() {
           {profile?.businessName} · Order window: {profile?.orderWindowStart} – {profile?.orderWindowCutoff}
         </p>
           </div>
-          <button className="btn-secondary text-sm py-2 px-4 flex items-center gap-2" onClick={() => {
-            const link = `${window.location.origin}/d/${profile?.connectionCode}`;
-            if (navigator.share) {
-              navigator.share({ title: 'Connect with me', text: `Connect with ${profile?.businessName} on DairyWalla:`, url: link }).catch(() => {});
-            } else {
-              navigator.clipboard.writeText(link);
-              show('Share link copied to clipboard!');
-            }
-          }}>
-            <Share2 className="w-4 h-4 text-brand-600" /> Share Profile Link
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="btn-primary text-sm py-2 px-4 flex items-center gap-2" onClick={() => setManualBillOpen(true)}>
+              <PlusCircle className="w-4 h-4" /> Create Bill
+            </button>
+            <button className="btn-secondary text-sm py-2 px-4 flex items-center gap-2" onClick={() => {
+              const link = `${window.location.origin}/d/${profile?.connectionCode}`;
+              if (navigator.share) {
+                navigator.share({ title: 'Connect with me', text: `Connect with ${profile?.businessName} on DairyWalla:`, url: link }).catch(() => {});
+              } else {
+                navigator.clipboard.writeText(link);
+                show('Share link copied to clipboard!');
+              }
+            }}>
+              <Share2 className="w-4 h-4 text-brand-600" /> Share Profile Link
+            </button>
+          </div>
         </div>
+      </div>
+      <div className="md:hidden mb-4">
+        <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
+          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+        </button>
       </div>
 
       {/* Rank Widget */}
@@ -619,7 +633,7 @@ export function DashboardPage() {
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="font-mono text-xs text-gray-400 w-4 text-center">{index + 1}.</span>
                   <div className="min-w-0">
-                    <div className="font-medium text-gray-800 truncate">{product.name}</div>
+                    <div className="font-medium text-gray-800 leading-tight">{product.name}</div>
                     <div className="text-xs text-gray-500">{product.brand}</div>
                   </div>
                 </div>
@@ -699,6 +713,11 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+      <ManualBillModal
+        open={manualBillOpen}
+        onClose={() => setManualBillOpen(false)}
+        distributor={profile}
+      />
     </div>
   );
 }

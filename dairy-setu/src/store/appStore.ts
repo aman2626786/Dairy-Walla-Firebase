@@ -9,6 +9,19 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
+interface ManualBillInput {
+  distributorId: string;
+  shopkeeperId?: string | null;
+  shopkeeperName: string;
+  shopName: string;
+  items: Array<{ productId: string; quantity: number }>;
+  gstEnabled?: boolean;
+  gstPercent?: number;
+  cgstPercent?: number;
+  sgstPercent?: number;
+  gstNumber?: string;
+}
+
 interface AppState {
   connections: Connection[];
   products: Product[];
@@ -52,6 +65,7 @@ interface AppState {
 
   // Order actions
   placeOrder: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorId: string, items: CartItem[], isLate: boolean, businessLine: BusinessLine) => Promise<Order>;
+  createManualBill: (input: ManualBillInput) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   updateOrderPaymentStatus: (orderId: string, paymentStatus: PaymentStatus) => Promise<void>;
 
@@ -312,6 +326,36 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return data.order;
     } catch (e) { console.error(e); throw new Error('Order place karne mein error'); }
+  },
+
+  createManualBill: async (input) => {
+    try {
+      const { data } = await apiClient.post(`${API_URL}/orders/manual-bill`, input);
+      const parsedOrder = {
+        ...data.order,
+        total: Number(data.order.total),
+        businessLine: inferBusinessLineFromCategory(String(data.order.businessLine || data.order.items?.[0]?.category || 'other'), data.order.businessLine),
+        paymentStatus: data.order.paymentStatus === 'paid' ? 'paid' : 'unpaid',
+        items: data.order.items.map((i: any) => ({
+          ...i,
+          category: String(i.category || 'other').toLowerCase(),
+          businessLine: inferBusinessLineFromCategory(String(i.category || 'other'), i.businessLine),
+          unitPrice: Number(i.unitPrice),
+        })),
+      };
+      set(state => ({ orders: [parsedOrder, ...state.orders] }));
+      return parsedOrder;
+    } catch (e) {
+      console.error(e);
+      if (axios.isAxiosError(e)) {
+        if (e.response?.status === 404) {
+          throw new Error('Manual bill API nahi mila. Backend server restart karein.');
+        }
+        const message = String(e.response?.data?.error || e.message || '').trim();
+        throw new Error(message || 'Manual bill create nahi hua');
+      }
+      throw new Error('Manual bill create nahi hua');
+    }
   },
 
   updateOrderStatus: async (orderId, status) => {

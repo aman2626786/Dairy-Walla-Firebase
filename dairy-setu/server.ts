@@ -1078,6 +1078,150 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
+app.post('/api/orders/manual-bill', async (req, res) => {
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can create manual bills.' });
+    }
+
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp) return res.status(403).json({ error: 'Distributor profile missing.' });
+
+    const distributorId = String(req.body?.distributorId ?? '').trim();
+    if (ownDp.id !== distributorId) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const shopName = String(req.body?.shopName ?? '').trim();
+    const shopkeeperName = String(req.body?.shopkeeperName ?? '').trim();
+    const shopkeeperIdRaw = String(req.body?.shopkeeperId ?? '').trim();
+    const shopkeeperId = shopkeeperIdRaw || null;
+
+    if (!shopName || !shopkeeperName) {
+      return res.status(400).json({ error: 'Shop name and shopkeeper name are required.' });
+    }
+
+    if (shopkeeperId) {
+      const connection = await prisma.connection.findFirst({
+        where: {
+          distributorId,
+          shopkeeperId,
+          status: 'active',
+        },
+      });
+      if (!connection) {
+        return res.status(403).json({ error: 'Selected shopkeeper is not connected with this distributor.' });
+      }
+    }
+
+    const distributorType = normalizeDistributorType(ownDp.distributorType);
+    const allowedLines = getAllowedBusinessLines(distributorType);
+    const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const gstEnabled = Boolean(req.body?.gstEnabled);
+    const fallbackGstPercent = Number(req.body?.gstPercent ?? 0);
+    const cgstPercent = gstEnabled ? Math.max(0, Number(req.body?.cgstPercent ?? fallbackGstPercent / 2)) : 0;
+    const sgstPercent = gstEnabled ? Math.max(0, Number(req.body?.sgstPercent ?? fallbackGstPercent / 2)) : 0;
+    const gstPercent = cgstPercent + sgstPercent;
+
+    if (
+      gstEnabled &&
+      (!Number.isFinite(cgstPercent) ||
+        !Number.isFinite(sgstPercent) ||
+        cgstPercent < 0 ||
+        sgstPercent < 0 ||
+        gstPercent > 100)
+    ) {
+      return res.status(400).json({ error: 'CGST and SGST total must be between 0 and 100.' });
+    }
+
+    if (rawItems.length === 0) {
+      return res.status(400).json({ error: 'Bill must have at least one item.' });
+    }
+
+    const requestedItems = rawItems
+      .map((item: any) => ({
+        productId: String(item?.productId ?? item?.product?.id ?? '').trim(),
+        quantity: Number(item?.quantity ?? 0),
+      }))
+      .filter(item => item.productId.length > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
+
+    if (requestedItems.length === 0) {
+      return res.status(400).json({ error: 'Bill has invalid items.' });
+    }
+
+    const productIds = Array.from(new Set(requestedItems.map(item => item.productId)));
+    const products = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        distributorId,
+        available: true,
+      },
+    });
+    if (products.length !== productIds.length) {
+      return res.status(400).json({ error: 'Some selected products are invalid or unavailable.' });
+    }
+
+    const productById = new Map(products.map(product => [product.id, product]));
+    const lineSet = new Set<BusinessLine>();
+    const orderItemsPayload = requestedItems.map(item => {
+      const product = productById.get(item.productId);
+      if (!product) throw new Error('INVALID_PRODUCT');
+      const businessLine = inferBusinessLine(product.category, product.businessLine);
+      lineSet.add(businessLine);
+      return {
+        productId: product.id,
+        productName: product.name,
+        brand: product.brand,
+        category: product.category,
+        businessLine,
+        unit: product.unit,
+        unitPrice: product.price,
+        quantity: item.quantity,
+      };
+    });
+
+    if (lineSet.size > 1) {
+      return res.status(400).json({ error: 'Bill must contain only one section at a time (Dairy or Ice Cream).' });
+    }
+
+    const orderLine = orderItemsPayload[0]?.businessLine || inferBusinessLine('other');
+    if (!allowedLines.includes(orderLine)) {
+      return res.status(400).json({ error: `This distributor accepts only ${allowedLines.join(' / ')} bills.` });
+    }
+
+    const subtotal = orderItemsPayload.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0);
+    const total = subtotal + (gstPercent > 0 ? subtotal * (gstPercent / 100) : 0);
+    const today = new Date().toISOString().split('T')[0];
+
+    const order = await prisma.order.create({
+      data: {
+        shopkeeperId,
+        shopkeeperName,
+        shopName,
+        distributorId,
+        businessLine: orderLine,
+        type: 'normal',
+        status: 'accepted',
+        paymentStatus: 'unpaid',
+        source: 'web',
+        deliveryDate: new Date(today),
+        total,
+        items: {
+          create: orderItemsPayload,
+        },
+      },
+      include: { items: true },
+    });
+
+    return res.json({ order });
+  } catch (error) {
+    console.error('Manual bill create error:', error);
+    return res.status(500).json({ error: 'Manual bill create failed' });
+  }
+});
+
 app.patch('/api/orders/:id', async (req, res) => {
   try {
     const requester = await requireRequesterProfile(req, res);

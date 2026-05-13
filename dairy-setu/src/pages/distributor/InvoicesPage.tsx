@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FileText, Download, Share2 } from 'lucide-react';
+import { FileText, Download, Share2, PlusCircle, Printer } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -9,15 +9,18 @@ import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
 import type { Order } from '../../types';
 import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
-import { downloadInvoicePdf } from '../../utils/invoicePdf';
+import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize } from '../../utils/orderQuantity';
+import { ManualBillModal } from './ManualBillModal';
 
 export function InvoicesPage() {
   const { user } = useAuthStore();
   const { orders, distributorProfiles, shopkeeperProfiles, fetchShopkeeperProfileById } = useAppStore();
   const { show } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [manualBillOpen, setManualBillOpen] = useState(false);
   const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(
     () => getInvoiceLanguage()
   );
@@ -42,6 +45,7 @@ export function InvoicesPage() {
       new Set(
         billableOrders
           .map(order => order.shopkeeperId)
+          .filter((shopkeeperId): shopkeeperId is string => Boolean(shopkeeperId))
           .filter(shopkeeperId => !shopkeeperProfiles.some(sp => sp.id === shopkeeperId || sp.userId === shopkeeperId))
       )
     );
@@ -64,7 +68,7 @@ export function InvoicesPage() {
     }
 
     try {
-      const loadedShopkeeper = getShopkeeperForOrder(order) || await fetchShopkeeperProfileById(order.shopkeeperId);
+      const loadedShopkeeper = getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null);
       const shopkeeperPhone = loadedShopkeeper?.phone;
       const shopkeeperEmail = loadedShopkeeper?.email;
       await downloadInvoicePdf({
@@ -83,8 +87,34 @@ export function InvoicesPage() {
     }
   };
 
+  const handlePrint = async (order: Order) => {
+    if (!profile) {
+      show('Distributor profile missing. Please complete profile first.', 'error');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    try {
+      const loadedShopkeeper = getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null);
+      await printInvoicePdf({
+        order,
+        distributor: profile,
+        shopkeeper: loadedShopkeeper,
+        distributorPhone: profile.phone || user?.phone,
+        distributorEmail: profile.email || user?.email,
+        shopkeeperPhone: loadedShopkeeper?.phone,
+        shopkeeperEmail: loadedShopkeeper?.email,
+        language: invoiceLanguage,
+      }, printWindow);
+      show('Print bill opened');
+    } catch {
+      printWindow?.close();
+      show('Print open nahi hua. Please retry.', 'error');
+    }
+  };
+
   const handleShare = (order: Order) => {
-    const text = `Invoice from ${profile?.businessName}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\n\nItems:\n${order.items.map(i => `${i.productName} x${i.quantity} = Rs. ${i.quantity * i.unitPrice}`).join('\n')}\n\nTotal: Rs. ${order.total.toLocaleString()}`;
+    const text = `Invoice from ${profile?.businessName}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: Rs. ${order.total.toLocaleString()}`;
     if (navigator.share) {
       navigator.share({ title: 'Invoice', text });
     } else {
@@ -105,6 +135,9 @@ export function InvoicesPage() {
             {format(new Date(order.placedAt), 'dd MMM yyyy, h:mm a')} - {order.items.length} items
           </div>
           <div className="text-xs text-gray-500 mt-0.5">
+            Total qty: {formatOrderTotalQuantity(order.items)}
+          </div>
+          <div className="text-xs text-gray-500 mt-0.5">
             Section: {businessLineLabel(
               inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine)
             )}
@@ -119,6 +152,9 @@ export function InvoicesPage() {
         <button onClick={() => handleDownload(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
           <Download className="w-3.5 h-3.5" /> PDF
         </button>
+        <button onClick={() => handlePrint(order)} className="btn-secondary py-1.5 px-3 text-xs whitespace-nowrap">
+          <Printer className="w-3.5 h-3.5" /> Print
+        </button>
         <button onClick={() => handleShare(order)} className="btn-primary py-1.5 px-3 text-xs whitespace-nowrap">
           <Share2 className="w-3.5 h-3.5" /> Share
         </button>
@@ -129,9 +165,19 @@ export function InvoicesPage() {
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <MobileHeader title="Invoices" subtitle={`${billableOrders.length} invoices`} />
-      <div className="hidden md:block mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Invoices</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{billableOrders.length} invoices</p>
+      <div className="hidden md:flex items-start justify-between gap-3 mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Invoices</h1>
+          <p className="text-sm text-gray-500 mt-0.5">{billableOrders.length} invoices</p>
+        </div>
+        <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
+          <PlusCircle className="w-4 h-4" /> Create Bill
+        </button>
+      </div>
+      <div className="md:hidden mb-4">
+        <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
+          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+        </button>
       </div>
       <div className="card p-3 mb-4 flex items-center justify-between gap-3">
         <p className="text-sm text-gray-700">Bill language</p>
@@ -222,6 +268,7 @@ export function InvoicesPage() {
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-2 text-xs font-semibold text-gray-500">Product</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Qty</th>
+                  <th className="text-right py-2 text-xs font-semibold text-gray-500">Total Qty</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Rate</th>
                   <th className="text-right py-2 text-xs font-semibold text-gray-500">Amount</th>
                 </tr>
@@ -231,17 +278,22 @@ export function InvoicesPage() {
                   <tr key={item.id}>
                     <td className="py-2">
                       <div className="font-medium text-gray-900">{item.productName}</div>
-                      <div className="text-xs text-gray-400">{item.brand} - {item.unit}</div>
+                      <div className="text-xs text-gray-400">{item.brand} - {formatPackSize(item.unit)}</div>
                     </td>
                     <td className="py-2 text-right text-gray-700">{item.quantity}</td>
-                    <td className="py-2 text-right text-gray-700">Rs. {item.unitPrice}</td>
-                    <td className="py-2 text-right font-semibold text-gray-900">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</td>
+                    <td className="py-2 text-right text-gray-700">{formatItemTotalQuantity(item.unit, item.quantity)}</td>
+                    <td className="py-2 text-right text-green-600">{formatItemRate(item.unitPrice, item.unit)}</td>
+                    <td className="py-2 text-right font-semibold text-green-600">Rs. {(item.quantity * item.unitPrice).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
+                <tr className="border-t border-gray-100">
+                  <td colSpan={4} className="pt-3 text-right font-semibold text-gray-700">Total Qty</td>
+                  <td className="pt-3 text-right font-semibold text-gray-900">{formatOrderTotalQuantity(selectedOrder.items)}</td>
+                </tr>
                 <tr className="border-t-2 border-gray-200">
-                  <td colSpan={3} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
+                  <td colSpan={4} className="pt-3 text-right font-bold text-gray-900">Total Amount</td>
                   <td className="pt-3 text-right font-bold text-xl text-brand-600">Rs. {selectedOrder.total.toLocaleString()}</td>
                 </tr>
               </tfoot>
@@ -251,6 +303,9 @@ export function InvoicesPage() {
               <button onClick={() => handleDownload(selectedOrder)} className="btn-secondary flex-1">
                 <Download className="w-4 h-4" /> Download PDF
               </button>
+              <button onClick={() => handlePrint(selectedOrder)} className="btn-secondary flex-1">
+                <Printer className="w-4 h-4" /> Print
+              </button>
               <button onClick={() => handleShare(selectedOrder)} className="btn-primary flex-1">
                 <Share2 className="w-4 h-4" /> Share via WhatsApp
               </button>
@@ -258,6 +313,11 @@ export function InvoicesPage() {
           </div>
         )}
       </Modal>
+      <ManualBillModal
+        open={manualBillOpen}
+        onClose={() => setManualBillOpen(false)}
+        distributor={profile}
+      />
     </div>
   );
 }
