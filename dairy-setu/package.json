@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --configLoader native",
     "start:api": "tsx server.ts",
     "build:api": "prisma generate && prisma db push",
     "build": "tsc -b && vite build",

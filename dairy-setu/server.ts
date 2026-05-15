@@ -829,16 +829,6 @@ app.get('/api/products/:distributorId', async (req, res) => {
     } else if (requester.role === 'shopkeeper') {
       const ownShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
       if (!ownShopkeeper) return res.status(403).json({ error: 'Forbidden' });
-      const activeConnection = await prisma.connection.findFirst({
-        where: {
-          shopkeeperId: ownShopkeeper.id,
-          distributorId,
-          status: 'active',
-        },
-      });
-      if (!activeConnection) {
-        return res.status(403).json({ error: 'Only connected shopkeepers can view products.' });
-      }
     } else {
       return res.status(403).json({ error: 'Forbidden' });
     }
