@@ -4,8 +4,14 @@ import { Prisma, PrismaClient, type Profile } from '@prisma/client';
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { cert, getApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getFirebaseAdminAuth } from 'firebase-admin/auth';
+import {
+  PushTokenRegistrationError,
+  createPushNotificationService,
+  registerPushToken,
+} from './services/pushNotifications.ts';
 
 const prisma = new PrismaClient();
+const pushNotifications = createPushNotificationService(prisma);
 const app = express();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '*13579*admin';
 const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || ADMIN_PASSWORD;
@@ -271,53 +277,12 @@ function generateConnectionCode() {
   return `${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
 }
 
-async function sendExpoPushToUser(
-  userId: string | null | undefined,
-  title: string,
-  body: string,
-  data: Record<string, unknown> = {},
-) {
-  if (!userId) return;
-
-  try {
-    const tokens = await prisma.pushToken.findMany({
-      where: { userId, enabled: true },
-      select: { id: true, token: true },
-    });
-    const validTokens = tokens.filter(item => /^Expo(nent)?PushToken\[.+\]$/.test(item.token));
-    if (validTokens.length === 0) return;
-
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Accept-encoding': 'gzip, deflate',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(validTokens.map(item => ({
-        to: item.token,
-        sound: 'default',
-        title,
-        body,
-        data,
-        priority: 'high',
-        channelId: 'dairywalla-updates',
-      }))),
-    });
-    const result = await response.json().catch(() => null);
-    const tickets = Array.isArray(result?.data) ? result.data : [];
-    await Promise.all(tickets.map((ticket: any, index: number) => {
-      if (ticket?.status === 'error' && ticket?.details?.error === 'DeviceNotRegistered') {
-        return prisma.pushToken.update({
-          where: { id: validTokens[index].id },
-          data: { enabled: false },
-        }).catch(() => undefined);
-      }
-      return Promise.resolve();
-    }));
-  } catch (error) {
-    console.error('Expo push send failed:', error);
-  }
+function getOrderStatusNotification(status: string | null | undefined) {
+  if (status === 'accepted') return { type: 'order_accepted', title: 'Order accepted' };
+  if (status === 'rejected') return { type: 'order_rejected', title: 'Order rejected' };
+  if (status === 'fulfilled') return { type: 'order_fulfilled', title: 'Order fulfilled' };
+  if (status === 'completed') return { type: 'order_completed', title: 'Order completed' };
+  return { type: 'order_updated', title: 'Order updated' };
 }
 
 async function createNotificationAndPush({
@@ -343,7 +308,15 @@ async function createNotificationAndPush({
       createdAt: new Date(),
     },
   });
-  await sendExpoPushToUser(userId, title, message, { type, notificationId: notification.id, ...data });
+  void pushNotifications.sendToUser(
+    userId,
+    {
+      title,
+      body: message,
+      data: { type, notificationId: notification.id, ...data },
+    },
+    { eventType: type },
+  );
   return notification;
 }
 
@@ -362,14 +335,12 @@ async function notifyShopkeeperPaymentCompleted(
   const amount = Number(order.total ?? 0);
   const amountLine = Number.isFinite(amount) && amount > 0 ? ` Amount: ₹${amount.toLocaleString('en-IN')}.` : '';
 
-  await prisma.notification.create({
-    data: {
-      userId: shopkeeper.userId,
-      type: 'payment_completed',
-      message: `🎉 Payment complete! ${distributorLabel} marked order #${shortOrderId} for ${shopLabel} as completed.${amountLine}`,
-      read: false,
-      createdAt: new Date(),
-    },
+  await createNotificationAndPush({
+    userId: shopkeeper.userId,
+    type: 'payment_completed',
+    title: 'Payment marked paid',
+    message: `Payment complete! ${distributorLabel} marked order #${shortOrderId} for ${shopLabel} as completed.${amountLine}`,
+    data: { orderId: order.id, role: 'shopkeeper' },
   });
 }
 
@@ -1395,11 +1366,12 @@ app.patch('/api/orders/:id', async (req, res) => {
           ? await prisma.distributorProfile.findUnique({ where: { id: updated.distributorId } })
           : null;
         const shortOrderId = updated.id.slice(-6).toUpperCase();
+        const statusNotification = getOrderStatusNotification(updated.status);
         if (shopkeeper?.userId) {
           await createNotificationAndPush({
             userId: shopkeeper.userId,
-            type: updated.status === 'accepted' ? 'order_accepted' : updated.status === 'rejected' ? 'order_rejected' : 'order_updated',
-            title: updated.status === 'accepted' ? 'Order accepted' : updated.status === 'rejected' ? 'Order rejected' : 'Order updated',
+            type: statusNotification.type,
+            title: statusNotification.title,
             message: `${distributor?.businessName || 'Distributor'} marked order #${shortOrderId} as ${updated.status}.`,
             data: { orderId: updated.id, status: updated.status, role: 'shopkeeper' },
           });
@@ -1415,17 +1387,6 @@ app.patch('/api/orders/:id', async (req, res) => {
         : null;
       try {
         await notifyShopkeeperPaymentCompleted(updated, distributor?.businessName);
-        const shopkeeper = updated.shopkeeperId
-          ? await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } })
-          : null;
-        if (shopkeeper?.userId) {
-          await sendExpoPushToUser(
-            shopkeeper.userId,
-            'Payment marked paid',
-            `${distributor?.businessName || 'Distributor'} marked your payment as paid.`,
-            { type: 'payment_completed', orderId: updated.id, role: 'shopkeeper' },
-          );
-        }
       } catch (notificationError) {
         console.error('Payment-complete notification failed:', notificationError);
       }
@@ -1467,17 +1428,6 @@ app.patch('/api/orders/:id/payment-status', async (req, res) => {
     if (order.paymentStatus !== 'paid' && updated.paymentStatus === 'paid') {
       try {
         await notifyShopkeeperPaymentCompleted(updated, ownDp.businessName);
-        const shopkeeper = updated.shopkeeperId
-          ? await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } })
-          : null;
-        if (shopkeeper?.userId) {
-          await sendExpoPushToUser(
-            shopkeeper.userId,
-            'Payment marked paid',
-            `${ownDp.businessName} marked your payment as paid.`,
-            { type: 'payment_completed', orderId: updated.id, role: 'shopkeeper' },
-          );
-        }
       } catch (notificationError) {
         console.error('Payment-complete notification failed:', notificationError);
       }
@@ -1551,24 +1501,18 @@ app.post('/api/auth/push-token', async (req, res) => {
     const requester = await requireRequesterProfile(req, res);
     if (!requester) return;
 
-    const token = String(req.body?.token ?? '').trim();
-    const platform = String(req.body?.platform ?? '').trim() || null;
-    if (!/^Expo(nent)?PushToken\[.+\]$/.test(token)) {
-      return res.status(400).json({ error: 'Invalid Expo push token.' });
-    }
-
-    const existing = await prisma.pushToken.findUnique({ where: { token } });
-    const saved = existing
-      ? await prisma.pushToken.update({
-          where: { token },
-          data: { userId: requester.id, platform, enabled: true },
-        })
-      : await prisma.pushToken.create({
-          data: { userId: requester.id, token, platform, enabled: true },
-        });
-
-    return res.json({ success: true, token: saved.token });
+    const { saved, updated } = await registerPushToken(prisma, requester.id, req.body);
+    console.log('[push] token registered', {
+      userId: requester.id,
+      platform: saved.platform,
+      channelId: saved.channelId,
+      updated,
+    });
+    return res.json({ success: true, token: saved.token, userId: saved.userId });
   } catch (error) {
+    if (error instanceof PushTokenRegistrationError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error('Push token sync failed:', error);
     return res.status(500).json({ error: 'Push token sync failed' });
   }
@@ -1590,11 +1534,14 @@ app.get('/api/notifications/:userId', async (req, res) => {
 app.post('/api/notifications', async (req, res) => {
   try {
     const notification = await prisma.notification.create({ data: req.body });
-    await sendExpoPushToUser(
+    void pushNotifications.sendToUser(
       notification.userId,
-      'DairyWalla Update',
-      notification.message || 'Aapke account me naya update hai.',
-      { type: notification.type, notificationId: notification.id },
+      {
+        title: 'DairyWalla Update',
+        body: notification.message || 'Aapke account me naya update hai.',
+        data: { type: notification.type, notificationId: notification.id },
+      },
+      { eventType: notification.type || 'manual_notification' },
     );
     return res.json(notification);
   } catch {

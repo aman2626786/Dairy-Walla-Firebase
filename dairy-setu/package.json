@@ -9,6 +9,7 @@
     "build:api": "prisma generate && prisma db push",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:push": "node --import tsx --test services/pushNotifications.test.ts",
     "preview": "vite preview"
   },
   "dependencies": {
