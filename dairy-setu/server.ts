@@ -14,6 +14,10 @@ const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 type AppRole = 'distributor' | 'shopkeeper';
 type DistributorType = 'dairy' | 'icecream' | 'dual';
 type BusinessLine = 'dairy' | 'icecream';
+type RequestedLineItem = {
+  productId: string;
+  quantity: number;
+};
 
 interface AuthenticatedRequest extends Request {
   authEmail?: string;
@@ -265,6 +269,82 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 
 function generateConnectionCode() {
   return `${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+}
+
+async function sendExpoPushToUser(
+  userId: string | null | undefined,
+  title: string,
+  body: string,
+  data: Record<string, unknown> = {},
+) {
+  if (!userId) return;
+
+  try {
+    const tokens = await prisma.pushToken.findMany({
+      where: { userId, enabled: true },
+      select: { id: true, token: true },
+    });
+    const validTokens = tokens.filter(item => /^Expo(nent)?PushToken\[.+\]$/.test(item.token));
+    if (validTokens.length === 0) return;
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(validTokens.map(item => ({
+        to: item.token,
+        sound: 'default',
+        title,
+        body,
+        data,
+        priority: 'high',
+        channelId: 'dairywalla-updates',
+      }))),
+    });
+    const result = await response.json().catch(() => null);
+    const tickets = Array.isArray(result?.data) ? result.data : [];
+    await Promise.all(tickets.map((ticket: any, index: number) => {
+      if (ticket?.status === 'error' && ticket?.details?.error === 'DeviceNotRegistered') {
+        return prisma.pushToken.update({
+          where: { id: validTokens[index].id },
+          data: { enabled: false },
+        }).catch(() => undefined);
+      }
+      return Promise.resolve();
+    }));
+  } catch (error) {
+    console.error('Expo push send failed:', error);
+  }
+}
+
+async function createNotificationAndPush({
+  userId,
+  type,
+  title = 'DairyWalla Update',
+  message,
+  data = {},
+}: {
+  userId: string | null | undefined;
+  type: string;
+  title?: string;
+  message: string;
+  data?: Record<string, unknown>;
+}) {
+  if (!userId) return null;
+  const notification = await prisma.notification.create({
+    data: {
+      userId,
+      type,
+      message,
+      read: false,
+      createdAt: new Date(),
+    },
+  });
+  await sendExpoPushToUser(userId, title, message, { type, notificationId: notification.id, ...data });
+  return notification;
 }
 
 async function notifyShopkeeperPaymentCompleted(
@@ -1110,6 +1190,28 @@ app.post('/api/orders', async (req, res) => {
     });
 
     const dp = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+    const shortOrderId = order.id.slice(-6).toUpperCase();
+    const orderMessage = `${shopName} placed ${isLate ? 'a late order' : 'an order'} #${shortOrderId} worth Rs. ${Number(total || 0).toLocaleString('en-IN')}.`;
+    try {
+      await createNotificationAndPush({
+        userId: dp?.userId,
+        type: isLate ? 'late_order' : 'order_placed',
+        title: isLate ? 'Late order received' : 'New order received',
+        message: orderMessage,
+        data: { orderId: order.id, role: 'distributor' },
+      });
+      await createNotificationAndPush({
+        userId: requester.id,
+        type: order.status === 'accepted' ? 'order_accepted' : 'order_pending',
+        title: order.status === 'accepted' ? 'Order accepted' : 'Order placed',
+        message: order.status === 'accepted'
+          ? `Your order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} and accepted.`
+          : `Your late order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} for approval.`,
+        data: { orderId: order.id, role: 'shopkeeper' },
+      });
+    } catch (notificationError) {
+      console.error('Order notification failed:', notificationError);
+    }
     return res.json({ order, distributorUserId: dp?.userId });
   } catch {
     return res.status(500).json({ error: 'Server error' });
@@ -1178,12 +1280,12 @@ app.post('/api/orders/manual-bill', async (req, res) => {
       return res.status(400).json({ error: 'Bill must have at least one item.' });
     }
 
-    const requestedItems = rawItems
+    const requestedItems: RequestedLineItem[] = rawItems
       .map((item: any) => ({
         productId: String(item?.productId ?? item?.product?.id ?? '').trim(),
         quantity: Number(item?.quantity ?? 0),
       }))
-      .filter(item => item.productId.length > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
+      .filter((item: RequestedLineItem) => item.productId.length > 0 && Number.isFinite(item.quantity) && item.quantity > 0);
 
     if (requestedItems.length === 0) {
       return res.status(400).json({ error: 'Bill has invalid items.' });
@@ -1286,12 +1388,44 @@ app.patch('/api/orders/:id', async (req, res) => {
 
     const updated = await prisma.order.update({ where: { id: req.params.id }, data: req.body });
 
+    if (order.status !== updated.status && updated.shopkeeperId) {
+      try {
+        const shopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } });
+        const distributor = updated.distributorId
+          ? await prisma.distributorProfile.findUnique({ where: { id: updated.distributorId } })
+          : null;
+        const shortOrderId = updated.id.slice(-6).toUpperCase();
+        if (shopkeeper?.userId) {
+          await createNotificationAndPush({
+            userId: shopkeeper.userId,
+            type: updated.status === 'accepted' ? 'order_accepted' : updated.status === 'rejected' ? 'order_rejected' : 'order_updated',
+            title: updated.status === 'accepted' ? 'Order accepted' : updated.status === 'rejected' ? 'Order rejected' : 'Order updated',
+            message: `${distributor?.businessName || 'Distributor'} marked order #${shortOrderId} as ${updated.status}.`,
+            data: { orderId: updated.id, status: updated.status, role: 'shopkeeper' },
+          });
+        }
+      } catch (notificationError) {
+        console.error('Order status notification failed:', notificationError);
+      }
+    }
+
     if (order.paymentStatus !== 'paid' && updated.paymentStatus === 'paid') {
       const distributor = order.distributorId
         ? await prisma.distributorProfile.findUnique({ where: { id: order.distributorId } })
         : null;
       try {
         await notifyShopkeeperPaymentCompleted(updated, distributor?.businessName);
+        const shopkeeper = updated.shopkeeperId
+          ? await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } })
+          : null;
+        if (shopkeeper?.userId) {
+          await sendExpoPushToUser(
+            shopkeeper.userId,
+            'Payment marked paid',
+            `${distributor?.businessName || 'Distributor'} marked your payment as paid.`,
+            { type: 'payment_completed', orderId: updated.id, role: 'shopkeeper' },
+          );
+        }
       } catch (notificationError) {
         console.error('Payment-complete notification failed:', notificationError);
       }
@@ -1333,6 +1467,17 @@ app.patch('/api/orders/:id/payment-status', async (req, res) => {
     if (order.paymentStatus !== 'paid' && updated.paymentStatus === 'paid') {
       try {
         await notifyShopkeeperPaymentCompleted(updated, ownDp.businessName);
+        const shopkeeper = updated.shopkeeperId
+          ? await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } })
+          : null;
+        if (shopkeeper?.userId) {
+          await sendExpoPushToUser(
+            shopkeeper.userId,
+            'Payment marked paid',
+            `${ownDp.businessName} marked your payment as paid.`,
+            { type: 'payment_completed', orderId: updated.id, role: 'shopkeeper' },
+          );
+        }
       } catch (notificationError) {
         console.error('Payment-complete notification failed:', notificationError);
       }
@@ -1401,6 +1546,34 @@ app.delete('/api/delivery-groups/:id', async (req, res) => {
 });
 
 // Notifications
+app.post('/api/auth/push-token', async (req, res) => {
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+
+    const token = String(req.body?.token ?? '').trim();
+    const platform = String(req.body?.platform ?? '').trim() || null;
+    if (!/^Expo(nent)?PushToken\[.+\]$/.test(token)) {
+      return res.status(400).json({ error: 'Invalid Expo push token.' });
+    }
+
+    const existing = await prisma.pushToken.findUnique({ where: { token } });
+    const saved = existing
+      ? await prisma.pushToken.update({
+          where: { token },
+          data: { userId: requester.id, platform, enabled: true },
+        })
+      : await prisma.pushToken.create({
+          data: { userId: requester.id, token, platform, enabled: true },
+        });
+
+    return res.json({ success: true, token: saved.token });
+  } catch (error) {
+    console.error('Push token sync failed:', error);
+    return res.status(500).json({ error: 'Push token sync failed' });
+  }
+});
+
 app.get('/api/notifications/:userId', async (req, res) => {
   try {
     const requester = await requireRequesterProfile(req, res);
@@ -1416,7 +1589,14 @@ app.get('/api/notifications/:userId', async (req, res) => {
 });
 app.post('/api/notifications', async (req, res) => {
   try {
-    return res.json(await prisma.notification.create({ data: req.body }));
+    const notification = await prisma.notification.create({ data: req.body });
+    await sendExpoPushToUser(
+      notification.userId,
+      'DairyWalla Update',
+      notification.message || 'Aapke account me naya update hai.',
+      { type: notification.type, notificationId: notification.id },
+    );
+    return res.json(notification);
   } catch {
     return res.status(500).json({ error: 'Server error' });
   }

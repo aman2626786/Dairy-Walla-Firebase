@@ -20,6 +20,7 @@ model Profile {
   shopkeeperProfile  ShopkeeperProfile?
   notifications      Notification[]
   userRoles          UserRole[]
+  pushTokens         PushToken[]
 
   @@map("profiles")
 }
@@ -190,6 +191,20 @@ model Notification {
   user Profile? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model PushToken {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @map("user_id") @db.ObjectId
+  token     String   @unique
+  platform  String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_tokens")
 }
 
 model UserRole {
