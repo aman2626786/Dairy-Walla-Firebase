@@ -990,7 +990,24 @@ app.patch('/api/profiles/distributor/:id', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const updated = await prisma.distributorProfile.update({ where: { id: req.params.id }, data: req.body });
+    // Filter incoming payload to avoid mass-assignment/relation validation issues in Prisma
+    const updateData: Prisma.DistributorProfileUpdateInput = {};
+    if (req.body.businessName !== undefined) updateData.businessName = String(req.body.businessName).trim();
+    if (req.body.distributorType !== undefined) updateData.distributorType = String(req.body.distributorType).trim();
+    if (req.body.orderWindowStart !== undefined) updateData.orderWindowStart = String(req.body.orderWindowStart).trim();
+    if (req.body.orderWindowCutoff !== undefined) updateData.orderWindowCutoff = String(req.body.orderWindowCutoff).trim();
+    if (req.body.ownerName !== undefined) updateData.ownerName = req.body.ownerName ? String(req.body.ownerName).trim() : null;
+    if (req.body.company !== undefined) updateData.company = req.body.company ? String(req.body.company).trim() : null;
+    if (req.body.address !== undefined) updateData.address = req.body.address ? String(req.body.address).trim() : null;
+    if (req.body.city !== undefined) updateData.city = req.body.city ? String(req.body.city).trim() : null;
+    if (req.body.deliveryAreas !== undefined) updateData.deliveryAreas = req.body.deliveryAreas ? String(req.body.deliveryAreas).trim() : null;
+    if (req.body.gst !== undefined) updateData.gst = req.body.gst ? String(req.body.gst).trim().toUpperCase() : null;
+    if (req.body.locationName !== undefined) updateData.locationName = req.body.locationName ? String(req.body.locationName).trim() : null;
+    if (req.body.latitude !== undefined) updateData.latitude = parseOptionalNumber(req.body.latitude);
+    if (req.body.longitude !== undefined) updateData.longitude = parseOptionalNumber(req.body.longitude);
+    if (req.body.profileComplete !== undefined) updateData.profileComplete = Boolean(req.body.profileComplete);
+
+    const updated = await prisma.distributorProfile.update({ where: { id: req.params.id }, data: updateData });
     return res.json(updated);
   } catch {
     return res.status(500).json({ error: 'Server error' });
@@ -1010,7 +1027,19 @@ app.patch('/api/profiles/shopkeeper/:id', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const updated = await prisma.shopkeeperProfile.update({ where: { id: req.params.id }, data: req.body });
+    // Filter incoming payload to avoid mass-assignment/relation validation issues in Prisma
+    const updateData: Prisma.ShopkeeperProfileUpdateInput = {};
+    if (req.body.shopName !== undefined) updateData.shopName = String(req.body.shopName).trim();
+    if (req.body.ownerName !== undefined) updateData.ownerName = req.body.ownerName ? String(req.body.ownerName).trim() : null;
+    if (req.body.address !== undefined) updateData.address = req.body.address ? String(req.body.address).trim() : null;
+    if (req.body.city !== undefined) updateData.city = req.body.city ? String(req.body.city).trim() : null;
+    if (req.body.deliveryTiming !== undefined) updateData.deliveryTiming = req.body.deliveryTiming ? String(req.body.deliveryTiming).trim() : null;
+    if (req.body.locationName !== undefined) updateData.locationName = req.body.locationName ? String(req.body.locationName).trim() : null;
+    if (req.body.latitude !== undefined) updateData.latitude = parseOptionalNumber(req.body.latitude);
+    if (req.body.longitude !== undefined) updateData.longitude = parseOptionalNumber(req.body.longitude);
+    if (req.body.profileComplete !== undefined) updateData.profileComplete = Boolean(req.body.profileComplete);
+
+    const updated = await prisma.shopkeeperProfile.update({ where: { id: req.params.id }, data: updateData });
     return res.json(updated);
   } catch {
     return res.status(500).json({ error: 'Server error' });
@@ -1102,7 +1131,16 @@ app.patch('/api/connections/:id', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    return res.json(await prisma.connection.update({ where: { id: req.params.id }, data: req.body }));
+    // Filter incoming payload properties to only allow updating valid database fields
+    const updateData: Prisma.ConnectionUpdateInput = {};
+    if (req.body.status !== undefined) updateData.status = String(req.body.status).trim();
+    if (req.body.autoOrderEnabled !== undefined) updateData.autoOrderEnabled = Boolean(req.body.autoOrderEnabled);
+    if (req.body.deliveryGroupId !== undefined) updateData.deliveryGroupId = req.body.deliveryGroupId ? String(req.body.deliveryGroupId).trim() : null;
+    if (req.body.deliveryGroupName !== undefined) updateData.deliveryGroupName = req.body.deliveryGroupName ? String(req.body.deliveryGroupName).trim() : null;
+    if (req.body.shopkeeperPhone !== undefined) updateData.shopkeeperPhone = req.body.shopkeeperPhone ? String(req.body.shopkeeperPhone).trim() : null;
+
+    const updated = await prisma.connection.update({ where: { id: req.params.id }, data: updateData });
+    return res.json(updated);
   } catch {
     return res.status(500).json({ error: 'Server error' });
   }
@@ -1602,7 +1640,13 @@ app.patch('/api/orders/:id', async (req, res) => {
       return res.status(409).json({ error: 'Payment already marked as paid. Reverting to unpaid is not allowed.' });
     }
 
-    const updated = await prisma.order.update({ where: { id: req.params.id }, data: req.body });
+    // Filter incoming payload properties to only allow updating valid database fields
+    const updateData: Prisma.OrderUpdateInput = {};
+    if (req.body.status !== undefined) updateData.status = String(req.body.status).trim();
+    if (req.body.paymentStatus !== undefined) updateData.paymentStatus = String(req.body.paymentStatus).trim();
+    if (req.body.deliveryGroupName !== undefined) updateData.deliveryGroupName = req.body.deliveryGroupName ? String(req.body.deliveryGroupName).trim() : null;
+
+    const updated = await prisma.order.update({ where: { id: req.params.id }, data: updateData });
 
     if (order.status !== updated.status && updated.shopkeeperId) {
       try {
@@ -1684,34 +1728,7 @@ app.patch('/api/orders/:id/payment-status', async (req, res) => {
   }
 });
 
-/*
-      return res.status(403).json({ error: 'Only distributor accounts can create delivery groups.' });
-    }
-    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
-    if (!ownDp || ownDp.id !== req.body.distributorId) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    return res.json(await prisma.deliveryGroup.create({ data: req.body }));
-  } catch {
-    return res.status(500).json({ error: 'Server error' });
-  }
-});
-app.delete('/api/delivery-groups/:id', async (req, res) => {
-  try {
-    const requester = await requireRequesterProfile(req, res);
-    if (!requester) return;
-    if (requester.role !== 'distributor') {
-      return res.status(403).json({ error: 'Only distributor accounts can delete delivery groups.' });
-    }
-    }
-    return res.json(updated);
-  } catch (e) {
-    console.error('Payment status update error:', e);
-    return res.status(500).json({ error: 'Payment update failed' });
-  }
-});
-*/
+// Removed duplicate profile patch endpoints since they are already defined around line 980
 
 // Delivery groups
 app.get('/api/delivery-groups/:distributorId', async (req, res) => {
@@ -1766,26 +1783,6 @@ app.delete('/api/delivery-groups/:id', async (req, res) => {
 
     await prisma.deliveryGroup.delete({ where: { id: req.params.id } });
     return res.json({ success: true });
-  } catch {
-    return res.status(500).json({ error: 'Server error' });
-  }
-});
-
-app.patch('/api/profiles/shopkeeper/:id', async (req, res) => {
-  try {
-    const requester = await requireRequesterProfile(req, res);
-    if (!requester) return;
-    if (requester.role !== 'shopkeeper') {
-      return res.status(403).json({ error: 'Only shopkeeper accounts can update shopkeeper profile.' });
-    }
-
-    const ownProfile = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
-    if (!ownProfile || ownProfile.id !== req.params.id) {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    const updated = await prisma.shopkeeperProfile.update({ where: { id: req.params.id }, data: req.body });
-    return res.json(updated);
   } catch {
     return res.status(500).json({ error: 'Server error' });
   }
