@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, Store, Truck } from "lucide-react";
+import { ShieldCheck, Store, Truck, Mail, ArrowRight } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
 import { auth as firebaseAuth } from "../../lib/firebase";
 import { useAuthStore } from "../../store/authStore";
@@ -24,6 +24,8 @@ export function SignupPage() {
   const [role, setRole] = useState<Role>("shopkeeper");
   const [distributorType, setDistributorType] = useState<DistributorType>("dual");
   const [loading, setLoading] = useState(false);
+  const [authMethod, setAuthMethod] = useState<"google" | "manual">("google");
+  const [email, setEmail] = useState("");
 
   const { signIn, isAuthenticated, user } = useAuthStore();
   const { show } = useToast();
@@ -43,10 +45,10 @@ export function SignupPage() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(firebaseAuth, provider);
-      const email = result.user.email;
-      if (!email) throw new Error("Email not found from Google");
+      const emailVal = result.user.email;
+      if (!emailVal) throw new Error("Email not found from Google");
 
-      const signupResult = await signIn(email, role);
+      const signupResult = await signIn(emailVal, role);
 
       if (signupResult.needsProfile) {
         localStorage.setItem("dairy-walla-pending-role", role);
@@ -77,6 +79,38 @@ export function SignupPage() {
     }
   };
 
+  const handleManualSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      show("Please enter a valid email address", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      localStorage.removeItem("dairy-walla-manual-token");
+      const { manualRegister } = useAuthStore.getState();
+      const res = await manualRegister(email.trim(), role);
+      if (res.error) {
+        show(res.error, "error");
+        return;
+      }
+
+      localStorage.setItem("dairy-walla-pending-role", role);
+      if (role === "distributor") {
+        localStorage.setItem("dairy-walla-pending-distributor-type", distributorType);
+        navigate(`/confirm?role=${role}&type=${distributorType}`);
+      } else {
+        localStorage.removeItem("dairy-walla-pending-distributor-type");
+        navigate(`/confirm?role=${role}`);
+      }
+    } catch (err: any) {
+      console.error("Manual signup failure:", err);
+      show(err.message || "Manual registration failed", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -90,7 +124,32 @@ export function SignupPage() {
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-3xl font-bold text-gray-900 mb-1 leading-none">Create account</h2>
-          <p className="text-sm text-gray-500 mb-6">Choose role and continue with Google</p>
+          <p className="text-sm text-gray-500 mb-5">Choose role and register option below</p>
+
+          <div className="flex p-1 bg-gray-100/80 rounded-xl mb-6 border border-gray-200/50">
+            <button
+              type="button"
+              onClick={() => setAuthMethod("google")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMethod === "google"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Google Account
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthMethod("manual")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMethod === "manual"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Manual Form (No Google)
+            </button>
+          </div>
 
           <div className="space-y-5">
             <div>
@@ -99,8 +158,8 @@ export function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setRole("shopkeeper")}
-                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 ${
-                    role === "shopkeeper" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
+                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                    role === "shopkeeper" ? "border-brand-500 bg-brand-50 text-brand-700 ring-1 ring-brand-200" : "border-gray-300 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <Store className="w-4 h-4" />
@@ -109,8 +168,8 @@ export function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setRole("distributor")}
-                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 ${
-                    role === "distributor" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
+                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                    role === "distributor" ? "border-brand-500 bg-brand-50 text-brand-700 ring-1 ring-brand-200" : "border-gray-300 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <Truck className="w-4 h-4" />
@@ -154,20 +213,54 @@ export function SignupPage() {
               </div>
             )}
 
-            <button
-              onClick={handleSignup}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                  Continue with Google
-                </>
-              )}
-            </button>
+            {authMethod === "google" ? (
+              <button
+                onClick={handleSignup}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm active:scale-[0.98]"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                    Continue with Google
+                  </>
+                )}
+              </button>
+            ) : (
+              <form onSubmit={handleManualSignup} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Apna email enter karein (e.g. sharma@gmail.com)"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-gray-50/50 transition-all font-medium"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition-all shadow-md hover:shadow-brand-100 disabled:opacity-50 active:scale-[0.98]"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Next: Complete Profile
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </div>
 
           <p className="text-center text-sm text-gray-600 mt-5">
@@ -178,9 +271,9 @@ export function SignupPage() {
           </p>
         </div>
 
-        <div className="mt-3 bg-white/80 border border-emerald-100 text-emerald-700 rounded-2xl px-4 py-2.5 text-xs font-medium flex items-center justify-center gap-2">
-          <ShieldCheck className="w-4 h-4" />
-          Secure Google sign-in, no OTP charges
+        <div className="mt-3 bg-white/80 border border-emerald-100 text-emerald-700 rounded-2xl px-4 py-2.5 text-xs font-medium flex items-center justify-center gap-2 shadow-sm">
+          <ShieldCheck className="w-4 h-4 text-brand-600" />
+          Secure onboarding & instant profile activation
         </div>
       </div>
     </div>

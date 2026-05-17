@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, Store, Truck } from "lucide-react";
+import { ShieldCheck, Store, Truck, Mail, Lock, ArrowRight } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
 import { auth as firebaseAuth } from "../../lib/firebase";
 import { useAuthStore } from "../../store/authStore";
@@ -25,6 +25,9 @@ export function LoginPage() {
   const [role, setRole] = useState<Role>("shopkeeper");
   const [distributorType, setDistributorType] = useState<DistributorType>("dual");
   const [loading, setLoading] = useState(false);
+  const [authMethod, setAuthMethod] = useState<"google" | "manual">("google");
+  const [email, setEmail] = useState("");
+  const [pin, setPin] = useState("");
 
   const { signIn, isAuthenticated, user } = useAuthStore();
   const {
@@ -47,6 +50,41 @@ export function LoginPage() {
     }
   }, [isAuthenticated, user, navigate]);
 
+  const handleLoginSuccess = async (u: any) => {
+    const pendingConnect = localStorage.getItem('dairy-walla-pending-connect');
+    if (pendingConnect && u.role === 'shopkeeper') {
+       navigate(`/shop/connection?code=${pendingConnect}`);
+       localStorage.removeItem('dairy-walla-pending-connect');
+    } else {
+       navigate(u.role === "distributor" ? "/distributor" : "/shop");
+    }
+
+    try {
+      if (u.role === "distributor") {
+        const dp = await fetchDistributorProfile(u.id);
+        if (dp) {
+          await Promise.all([
+            fetchProducts(dp.id),
+            fetchConnections(u.id, "distributor"),
+            fetchDeliveryGroups(dp.id),
+          ]);
+          await runAutoOrdersForDistributor(u.id);
+          await fetchOrders(u.id, "distributor");
+        }
+      } else {
+        await fetchShopkeeperProfile(u.id);
+        await fetchAllDistributors();
+        await Promise.all([
+          fetchConnections(u.id, "shopkeeper"),
+          fetchOrders(u.id, "shopkeeper"),
+        ]);
+      }
+      await fetchNotifications(u.id);
+    } catch (err) {
+      console.error("Hydration Error:", err);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
@@ -54,10 +92,10 @@ export function LoginPage() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(firebaseAuth, provider);
-      const email = result.user.email;
-      if (!email) throw new Error("Email not found from Google");
+      const emailVal = result.user.email;
+      if (!emailVal) throw new Error("Email not found from Google");
 
-      const loginResult = await signIn(email, role);
+      const loginResult = await signIn(emailVal, role);
 
       if (loginResult.needsProfile) {
         localStorage.setItem("dairy-walla-pending-role", role);
@@ -72,45 +110,55 @@ export function LoginPage() {
       }
 
       if (loginResult.user) {
-        const u = loginResult.user;
-        const pendingConnect = localStorage.getItem('dairy-walla-pending-connect');
-        if (pendingConnect && u.role === 'shopkeeper') {
-           navigate(`/shop/connection?code=${pendingConnect}`);
-           localStorage.removeItem('dairy-walla-pending-connect');
-        } else {
-           navigate(u.role === "distributor" ? "/distributor" : "/shop");
-        }
-
-        try {
-          if (u.role === "distributor") {
-            const dp = await fetchDistributorProfile(u.id);
-            if (dp) {
-              await Promise.all([
-                fetchProducts(dp.id),
-                fetchConnections(u.id, "distributor"),
-                fetchDeliveryGroups(dp.id),
-              ]);
-              await runAutoOrdersForDistributor(u.id);
-              await fetchOrders(u.id, "distributor");
-            }
-          } else {
-            await fetchShopkeeperProfile(u.id);
-            await fetchAllDistributors();
-            await Promise.all([
-              fetchConnections(u.id, "shopkeeper"),
-              fetchOrders(u.id, "shopkeeper"),
-            ]);
-          }
-          await fetchNotifications(u.id);
-        } catch {
-          // non-critical
-        }
+        await handleLoginSuccess(loginResult.user);
       } else if (loginResult.error) {
         show(loginResult.error, "error");
       }
     } catch (err: any) {
       console.error("Google Login Error:", err);
       show(err.message || "Google Login failed", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManualLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !email.includes("@")) {
+      show("Please enter a valid email address", "error");
+      return;
+    }
+    if (!/^\d{6}$/.test(pin)) {
+      show("PIN must be exactly 6 digits", "error");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      localStorage.removeItem("dairy-walla-manual-token");
+      const { manualLogin } = useAuthStore.getState();
+      const loginResult = await manualLogin(email.trim().toLowerCase(), pin, role);
+
+      if (loginResult.needsProfile) {
+        localStorage.setItem("dairy-walla-pending-role", role);
+        if (role === "distributor") {
+          localStorage.setItem("dairy-walla-pending-distributor-type", distributorType);
+          navigate(`/confirm?role=${role}&type=${distributorType}`);
+        } else {
+          localStorage.removeItem("dairy-walla-pending-distributor-type");
+          navigate(`/confirm?role=${role}`);
+        }
+        return;
+      }
+
+      if (loginResult.user) {
+        await handleLoginSuccess(loginResult.user);
+      } else if (loginResult.error) {
+        show(loginResult.error, "error");
+      }
+    } catch (err: any) {
+      console.error("Manual Login Error:", err);
+      show(err.message || "Manual Login failed", "error");
     } finally {
       setLoading(false);
     }
@@ -129,7 +177,32 @@ export function LoginPage() {
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-3xl font-bold text-gray-900 mb-1 leading-none">Welcome back</h2>
-          <p className="text-sm text-gray-500 mb-6">Select your role and continue</p>
+          <p className="text-sm text-gray-500 mb-6">Choose role and sign in below</p>
+
+          <div className="flex p-1 bg-gray-100/80 rounded-xl mb-6 border border-gray-200/50">
+            <button
+              type="button"
+              onClick={() => setAuthMethod("google")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMethod === "google"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Google Account
+            </button>
+            <button
+              type="button"
+              onClick={() => setAuthMethod("manual")}
+              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                authMethod === "manual"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Email & PIN Login
+            </button>
+          </div>
 
           <div className="space-y-5">
             <div>
@@ -138,8 +211,8 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setRole("shopkeeper")}
-                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 ${
-                    role === "shopkeeper" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
+                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                    role === "shopkeeper" ? "border-brand-500 bg-brand-50 text-brand-700 ring-1 ring-brand-200" : "border-gray-300 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <Store className="w-4 h-4" />
@@ -148,8 +221,8 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setRole("distributor")}
-                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 ${
-                    role === "distributor" ? "border-brand-500 bg-brand-50 text-brand-700" : "border-gray-300 text-gray-600"
+                  className={`py-3 rounded-xl border text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                    role === "distributor" ? "border-brand-500 bg-brand-50 text-brand-700 ring-1 ring-brand-200" : "border-gray-300 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <Truck className="w-4 h-4" />
@@ -193,20 +266,72 @@ export function LoginPage() {
               </div>
             )}
 
-            <button
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm"
-            >
-              {loading ? (
-                <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                  Continue with Google
-                </>
-              )}
-            </button>
+            {authMethod === "google" ? (
+              <button
+                onClick={handleGoogleLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm active:scale-[0.98]"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                    Continue with Google
+                  </>
+                )}
+              </button>
+            ) : (
+              <form onSubmit={handleManualLogin} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Apna email enter karein (e.g. sharma@gmail.com)"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-gray-50/50 transition-all font-medium"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">6-Digit PIN</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={6}
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value)}
+                      placeholder="Enter 6-digit security PIN"
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-gray-50/50 transition-all font-medium tracking-widest text-center text-lg font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition-all shadow-md hover:shadow-brand-100 disabled:opacity-50 active:scale-[0.98]"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      Login to Dashboard
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
           </div>
 
           <p className="text-center text-sm text-gray-600 mt-5">
@@ -217,8 +342,8 @@ export function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-3 bg-white/80 border border-emerald-100 text-emerald-700 rounded-2xl px-4 py-2.5 text-xs font-medium flex items-center justify-center gap-2">
-          <ShieldCheck className="w-4 h-4" />
+        <div className="mt-3 bg-white/80 border border-emerald-100 text-emerald-700 rounded-2xl px-4 py-2.5 text-xs font-medium flex items-center justify-center gap-2 shadow-sm">
+          <ShieldCheck className="w-4 h-4 text-brand-600" />
           Trusted by 1000+ Distributors & 5000+ Shopkeepers
         </div>
 

@@ -89,6 +89,70 @@ function initializeFirebaseAdmin() {
 
 const adminAuth = initializeFirebaseAdmin();
 
+interface AuthenticatedRequest extends Request {
+  authEmail?: string;
+  authUid?: string;
+}
+
+function isRole(value: unknown): value is AppRole {
+  return value === 'distributor' || value === 'shopkeeper';
+}
+
+function isDistributorType(value: unknown): value is DistributorType {
+  return value === 'dairy' || value === 'icecream' || value === 'dual';
+}
+
+function normalizeDistributorType(value: unknown): DistributorType {
+  if (value === 'icecream') return 'icecream';
+  if (value === 'dual') return 'dual';
+  return 'dairy';
+}
+
+function isBusinessLine(value: unknown): value is BusinessLine {
+  return value === 'dairy' || value === 'icecream';
+}
+
+function initializeFirebaseAdmin() {
+  if (getApps().length > 0) {
+    return getFirebaseAdminAuth();
+  }
+
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (serviceAccountJson) {
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    initializeAdminApp({ credential: cert(serviceAccount) });
+    return getFirebaseAdminAuth();
+  }
+
+  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  if (serviceAccountBase64) {
+    const serviceAccount = JSON.parse(Buffer.from(serviceAccountBase64, 'base64').toString('utf8'));
+    initializeAdminApp({ credential: cert(serviceAccount) });
+    return getFirebaseAdminAuth();
+  }
+
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (projectId && clientEmail && privateKey) {
+    initializeAdminApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+    return getFirebaseAdminAuth();
+  }
+
+  // In development mode, return null to skip Firebase auth requirement
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn('⚠️  Firebase credentials not configured. Running in development mode without Firebase auth.');
+    return null;
+  }
+
+  throw new Error(
+    'Firebase Admin credentials are required in production. Set FIREBASE_SERVICE_ACCOUNT_KEY, FIREBASE_SERVICE_ACCOUNT_BASE64, or FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY in Render environment variables.'
+  );
+}
+
+const adminAuth = initializeFirebaseAdmin();
+
 app.use(cors());
 app.use(express.json());
 
@@ -97,6 +161,19 @@ app.get('/api/ping', (_req, res) => {
 });
 
 async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  // Check authorization header first for manual or firebase tokens
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    // Verify manual token
+    const manualUser = verifyManualToken(token);
+    if (manualUser) {
+      req.authEmail = manualUser.email;
+      req.authUid = `manual-${manualUser.email}`;
+      return next();
+    }
+  }
+
   // In development mode without Firebase, skip auth requirement
   if (!adminAuth) {
     const devEmail = String(req.headers['x-dev-auth-email'] || '').trim().toLowerCase();
@@ -109,7 +186,6 @@ async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextF
   }
 
   try {
-    const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
@@ -133,6 +209,9 @@ app.use('/api', (req, res, next) => {
     return next();
   }
   if (req.path.startsWith('/admin')) {
+    return next();
+  }
+  if (req.path.startsWith('/auth/manual')) {
     return next();
   }
   return requireAuth(req as AuthenticatedRequest, res, next);
@@ -230,6 +309,34 @@ function verifyPin(pin: string, storedPin: string | null | undefined): boolean {
   if (expectedBuffer.length !== actualBuffer.length) return false;
 
   return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function signManualToken(email: string, expiresAt: number) {
+  const data = `${email.toLowerCase()}:${expiresAt}`;
+  const signature = createHmac('sha256', ADMIN_SESSION_SECRET).update(data).digest('hex');
+  return `${Buffer.from(email.toLowerCase()).toString('base64')}.${expiresAt}.${signature}`;
+}
+
+function verifyManualToken(token: string): { email: string } | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [emailB64, expiresAtRaw, signature] = parts;
+    const email = Buffer.from(emailB64, 'base64').toString('utf8');
+    const expiresAt = Number(expiresAtRaw);
+    if (!Number.isFinite(expiresAt) || expiresAt < Date.now()) return null;
+
+    const data = `${email.toLowerCase()}:${expiresAt}`;
+    const expected = createHmac('sha256', ADMIN_SESSION_SECRET).update(data).digest('hex');
+    const expectedBuffer = Buffer.from(expected, 'hex');
+    const actualBuffer = Buffer.from(signature, 'hex');
+    if (expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer)) {
+      return { email: email.toLowerCase() };
+    }
+  } catch (err) {
+    console.error('Error verifying manual token:', err);
+  }
+  return null;
 }
 
 function signAdminSession(expiresAt: number) {
@@ -361,9 +468,10 @@ app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
     }
 
     const { dp, sp } = await getRoleProfiles(profile.id);
-    if (!dp && !sp) {
-      return res.json({ needsSetup: true, profile });
-    }
+
+    // If profile setup (name, phone, pin) is not complete OR role profiles are incomplete, flag needsSetup
+    const needsSetup = !profile.name || !profile.phone || !profile.pin || 
+      (profile.role === 'distributor' ? (!dp || !dp.profileComplete) : (!sp || !sp.profileComplete));
 
     if (role && profile.role !== role) {
       return res.status(409).json({ error: `This email is already registered as a ${profile.role}. Please log in with the correct role.` });
@@ -372,16 +480,178 @@ app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
     const conflict = roleConsistencyError(profile.role, dp, sp);
     if (conflict) return res.status(409).json({ error: conflict });
 
-    return res.json({ profile, dp, sp });
+    if (needsSetup) {
+      return res.json({
+        needsSetup: true,
+        email: profile.email,
+        role: profile.role,
+        profile,
+        dp,
+        sp
+      });
+    }
+
+    return res.json({
+      needsSetup: false,
+      profile,
+      dp,
+      sp
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Deprecated phone/PIN login path (identity is email-based now)
-app.post('/api/auth/login-pin', async (_req, res) => {
-  return res.status(410).json({ error: 'PIN phone login is disabled. Please continue with Google email login.' });
+// Manual Login: email and PIN based verification
+app.post('/api/auth/manual-login', async (req, res) => {
+  const { email, pin, role } = req.body;
+  try {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const cleanedPin = String(pin || '').trim();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    if (!/^\d{6}$/.test(cleanedPin)) {
+      return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
+    }
+
+    const profile = await prisma.profile.findUnique({ where: { email: normalizedEmail } });
+    if (!profile) {
+      return res.status(404).json({ error: 'Account not found. Please sign up first.' });
+    }
+
+    if (role && profile.role !== role) {
+      return res.status(409).json({ error: `This email is registered as a ${profile.role}. Please log in with the correct role.` });
+    }
+
+    if (!profile.pin) {
+      return res.status(400).json({ error: 'Account exists but no PIN is configured. Try registering again or completing profile setup.' });
+    }
+
+    if (!verifyPin(cleanedPin, profile.pin)) {
+      return res.status(401).json({ error: 'Incorrect 6-digit PIN. Please try again.' });
+    }
+
+    const { dp, sp } = await getRoleProfiles(profile.id);
+    const needsSetup = !dp && !sp;
+
+    const token = signManualToken(normalizedEmail, Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days session token
+
+    return res.json({ profile, dp, sp, token, needsSetup });
+  } catch (err) {
+    console.error('Manual Login Error:', err);
+    return res.status(500).json({ error: 'Login failed due to server error' });
+  }
+});
+
+// Manual Registration: email and role initial registration
+app.post('/api/auth/manual-register', async (req, res) => {
+  const { email, role } = req.body;
+  try {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    if (role !== 'distributor' && role !== 'shopkeeper') {
+      return res.status(400).json({ error: 'Invalid role.' });
+    }
+
+    const existingProfile = await prisma.profile.findUnique({ where: { email: normalizedEmail } });
+    if (existingProfile) {
+      if (existingProfile.pin) {
+        return res.status(409).json({ error: 'This email is already registered. Please login.' });
+      } else {
+        // If a placeholder was created previously but PIN setup was not completed, allow resuming
+        const { dp: existingDp, sp: existingSp } = await getRoleProfiles(existingProfile.id);
+        let dp = existingDp;
+        let sp = existingSp;
+
+        if (existingProfile.role === 'distributor' && !dp) {
+          let connectionCode = generateConnectionCode();
+          for (let attempts = 0; attempts < 5; attempts++) {
+            const codeExists = await prisma.distributorProfile.findUnique({ where: { connectionCode } });
+            if (!codeExists) break;
+            connectionCode = generateConnectionCode();
+          }
+          dp = await prisma.distributorProfile.create({
+            data: {
+              userId: existingProfile.id,
+              businessName: '',
+              connectionCode,
+              profileComplete: false,
+            }
+          });
+        } else if (existingProfile.role === 'shopkeeper' && !sp) {
+          sp = await prisma.shopkeeperProfile.create({
+            data: {
+              userId: existingProfile.id,
+              shopName: '',
+              profileComplete: false,
+            }
+          });
+        }
+
+        const token = signManualToken(normalizedEmail, Date.now() + 30 * 24 * 60 * 60 * 1000);
+        return res.json({
+          token,
+          needsSetup: true,
+          profile: existingProfile,
+          dp,
+          sp
+        });
+      }
+    }
+
+    const profile = await prisma.profile.create({
+      data: {
+        email: normalizedEmail,
+        role,
+        phone: '',
+      }
+    });
+
+    let dp = null;
+    let sp = null;
+
+    if (role === 'distributor') {
+      let connectionCode = generateConnectionCode();
+      for (let attempts = 0; attempts < 5; attempts++) {
+        const codeExists = await prisma.distributorProfile.findUnique({ where: { connectionCode } });
+        if (!codeExists) break;
+        connectionCode = generateConnectionCode();
+      }
+      dp = await prisma.distributorProfile.create({
+        data: {
+          userId: profile.id,
+          businessName: '',
+          connectionCode,
+          profileComplete: false,
+        }
+      });
+    } else {
+      sp = await prisma.shopkeeperProfile.create({
+        data: {
+          userId: profile.id,
+          shopName: '',
+          profileComplete: false,
+        }
+      });
+    }
+
+    const token = signManualToken(normalizedEmail, Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    return res.json({
+      token,
+      needsSetup: true,
+      profile,
+      dp,
+      sp
+    });
+  } catch (err) {
+    console.error('Manual Register Error:', err);
+    return res.status(500).json({ error: 'Failed to register manual account. Please try again.' });
+  }
 });
 
 // Setup profile using token email

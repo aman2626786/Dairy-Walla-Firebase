@@ -76,6 +76,40 @@ export function ConfirmProfilePage() {
   useEffect(() => {
     let alive = true;
 
+    const manualToken = localStorage.getItem('dairy-walla-manual-token');
+    if (manualToken) {
+      const checkManualUser = async () => {
+        try {
+          const res = await apiClient.post("/auth/me", {});
+          if (res.data.needsSetup) {
+            if (alive) setStep("profile");
+            return;
+          }
+          const { profile } = res.data;
+          if (profile.role !== "distributor" && profile.role !== "shopkeeper") {
+            if (alive) setStep("error");
+            return;
+          }
+          const resolvedRole: Role = profile.role;
+
+          useAuthStore.setState({
+            user: { name: profile.name || "", role: resolvedRole, phone: profile.phone, id: profile.id, email: profile.email },
+            isAuthenticated: true
+          });
+          localStorage.setItem('dairy-walla-active-role', resolvedRole);
+          localStorage.removeItem("dairy-walla-pending-role");
+          localStorage.removeItem("dairy-walla-pending-distributor-type");
+
+          const targetPath = resolvedRole === "distributor" ? "/distributor" : "/shop";
+          navigate(targetPath, { replace: true });
+        } catch (_e) {
+          if (alive) setStep("error");
+        }
+      };
+      void checkManualUser();
+      return;
+    }
+
     const unsubscribe = firebaseAuth.onAuthStateChanged(async (fUser) => {
       if (!fUser) {
         if (alive) setStep("error");
@@ -145,14 +179,19 @@ export function ConfirmProfilePage() {
 
     setLoading(true);
     try {
-      const fUser = firebaseAuth.currentUser;
-      const email = fUser?.email;
-      if (!email) {
-        show("Session expired. Login karo.", "error");
-        navigate("/login");
-        return;
+      const manualToken = localStorage.getItem('dairy-walla-manual-token');
+      let token = '';
+      if (manualToken) {
+        token = manualToken;
+      } else {
+        const fUser = firebaseAuth.currentUser;
+        if (!fUser) {
+          show("Session expired. Login karo.", "error");
+          navigate("/login");
+          return;
+        }
+        token = await fUser.getIdToken(true);
       }
-      const token = await fUser.getIdToken(true);
 
       const res = await apiClient.post("/auth/setup", {
         phone,

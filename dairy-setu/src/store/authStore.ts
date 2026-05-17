@@ -36,6 +36,8 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   signIn: (email: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
+  manualLogin: (email: string, pin: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
+  manualRegister: (email: string, role: Role) => Promise<{ error?: string; success?: boolean }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error?: string }>;
   updateUser: (updates: Partial<User>) => Promise<void>;
@@ -52,6 +54,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loadUser: async () => {
     if (authListenerUnsubscribe) {
       authListenerUnsubscribe();
+    }
+
+    const manualToken = localStorage.getItem('dairy-walla-manual-token');
+    if (manualToken) {
+      try {
+        const res = await apiClient.post('/auth/me', {});
+        if (res.data.needsSetup) {
+          useAppStore.getState().resetState();
+          set({ user: null, isAuthenticated: false, loading: false });
+          return;
+        }
+
+        const { profile } = res.data;
+        if (isRole(profile.role)) {
+          const role: Role = profile.role;
+          localStorage.setItem('dairy-walla-active-role', role);
+          localStorage.setItem('dairy-walla-email', profile.email);
+          set({
+            user: { id: profile.id, email: profile.email, name: profile.name || '', phone: profile.phone, role },
+            isAuthenticated: true,
+            loading: false,
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('Error loading manual user from API:', error);
+        localStorage.removeItem('dairy-walla-manual-token');
+        useAppStore.getState().resetState();
+        set({ user: null, isAuthenticated: false, loading: false });
+      }
     }
 
     return new Promise<void>((resolve) => {
@@ -156,13 +188,68 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    await firebaseSignOut(firebaseAuth);
-      localStorage.removeItem('dairy-walla-active-role');
-      localStorage.removeItem('dairy-walla-email');
-      localStorage.removeItem('dairy-walla-pending-role');
-      localStorage.removeItem('dairy-walla-pending-distributor-type');
-      useAppStore.getState().resetState();
-      set({ user: null, isAuthenticated: false });
+    try {
+      await firebaseSignOut(firebaseAuth);
+    } catch {
+      // non-critical if Firebase wasn't initialized/authenticated
+    }
+    localStorage.removeItem('dairy-walla-active-role');
+    localStorage.removeItem('dairy-walla-email');
+    localStorage.removeItem('dairy-walla-pending-role');
+    localStorage.removeItem('dairy-walla-pending-distributor-type');
+    localStorage.removeItem('dairy-walla-manual-token');
+    useAppStore.getState().resetState();
+    set({ user: null, isAuthenticated: false });
+  },
+
+  manualLogin: async (email, pin, role) => {
+    set({ loading: true });
+    try {
+      const res = await apiClient.post('/auth/manual-login', { email, pin, role });
+      const { profile, token, needsSetup } = res.data;
+
+      localStorage.setItem('dairy-walla-manual-token', token);
+      localStorage.setItem('dairy-walla-active-role', profile.role);
+      localStorage.setItem('dairy-walla-email', profile.email);
+
+      if (needsSetup) {
+        set({ loading: false });
+        return { needsProfile: true };
+      }
+
+      const user: User = { id: profile.id, email: profile.email, name: profile.name || '', phone: profile.phone, role: profile.role };
+      set({ user, isAuthenticated: true, loading: false });
+      return { user };
+    } catch (e) {
+      console.error('Manual Login Error:', e);
+      set({ loading: false });
+      if (axios.isAxiosError(e) && e.response?.data?.error) {
+        return { error: e.response.data.error };
+      }
+      return { error: 'Login failed. Please check your credentials and try again.' };
+    }
+  },
+
+  manualRegister: async (email, role) => {
+    set({ loading: true });
+    try {
+      const res = await apiClient.post('/auth/manual-register', { email, role });
+      const { token } = res.data;
+
+      localStorage.setItem('dairy-walla-manual-token', token);
+      localStorage.setItem('dairy-walla-active-role', role);
+      localStorage.setItem('dairy-walla-email', email.toLowerCase());
+
+      set({ loading: false });
+      return { success: true };
+    } catch (e) {
+      console.error('Manual Register Error:', e);
+      set({ loading: false });
+      if (axios.isAxiosError(e) && e.response?.data?.error) {
+        return { error: e.response.data.error };
+      }
+      return { error: 'Registration failed. Please try again.' };
+    }
   },
 
   deleteAccount: async () => {
@@ -181,6 +268,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       localStorage.removeItem('dairy-walla-email');
       localStorage.removeItem('dairy-walla-pending-role');
       localStorage.removeItem('dairy-walla-pending-distributor-type');
+      localStorage.removeItem('dairy-walla-manual-token');
       useAppStore.getState().resetState();
       set({ user: null, isAuthenticated: false, loading: false });
       return {};
