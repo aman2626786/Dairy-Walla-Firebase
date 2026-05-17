@@ -643,12 +643,6 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
     if (!email) return res.status(401).json({ error: 'Unauthorized' });
     if (!isRole(role)) return res.status(400).json({ error: 'Invalid role.' });
 
-    if (role === 'distributor' && !businessData) {
-      return res.status(400).json({ error: 'Distributor setup data is required.' });
-    }
-    if (role === 'shopkeeper' && !shopData) {
-      return res.status(400).json({ error: 'Shopkeeper setup data is required.' });
-    }
     const cleanedPhone = normalizePhone(phone);
     if (cleanedPhone.length !== 10) {
       return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
@@ -657,16 +651,6 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
     if (!cleanedName) {
       return res.status(400).json({ error: 'Name is required.' });
     }
-    if (typeof pin !== 'string' || !/^\d{6}$/.test(pin)) {
-      return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
-    }
-
-    const distributorType = role === 'distributor'
-      ? normalizeDistributorType((businessData as { distributorType?: unknown } | undefined)?.distributorType)
-      : 'dairy';
-    if (role === 'distributor' && !isDistributorType(distributorType)) {
-      return res.status(400).json({ error: 'Invalid distributor type.' });
-    }
 
     const pinHash = hashPin(pin);
 
@@ -674,7 +658,7 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
     if (!profile) {
       const phoneConflict = await prisma.profile.findFirst({ where: { phone: cleanedPhone } });
       if (phoneConflict) {
-        return res.status(409).json({ error: 'This phone number is already linked to another account.' });
+        return res.status(409).json({ error: `This phone number is already linked to another account (${phoneConflict.email || 'no email'}).` });
       }
       profile = await prisma.profile.create({
         data: {
@@ -703,7 +687,7 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
         },
       });
       if (phoneConflict) {
-        return res.status(409).json({ error: 'This phone number is already linked to another account.' });
+        return res.status(409).json({ error: `This phone number is already linked to another account (${phoneConflict.email || 'no email'}).` });
       }
 
       profile = await prisma.profile.update({
@@ -718,6 +702,11 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
     }
 
     if (role === 'distributor') {
+      const distributorType = normalizeDistributorType((businessData as { distributorType?: unknown } | undefined)?.distributorType);
+      if (!isDistributorType(distributorType)) {
+        return res.status(400).json({ error: 'Invalid distributor type.' });
+      }
+
       const existingShopkeeper = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
       if (existingShopkeeper) {
         return res.status(409).json({ error: 'This account already has a shopkeeper profile.' });
@@ -731,6 +720,7 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
         deliveryAreas: String((businessData as { deliveryAreas?: unknown })?.deliveryAreas ?? '').trim() || null,
         orderWindowStart: String((businessData as { orderWindowStart?: unknown })?.orderWindowStart ?? '18:00').trim(),
         orderWindowCutoff: String((businessData as { orderWindowCutoff?: unknown })?.orderWindowCutoff ?? '20:00').trim(),
+        gst: (businessData as { gst?: unknown })?.gst ? String((businessData as { gst?: unknown })?.gst).trim().toUpperCase() : null,
         locationName: String((businessData as { locationName?: unknown })?.locationName ?? '').trim() || null,
         latitude: parseOptionalNumber((businessData as { latitude?: unknown })?.latitude),
         longitude: parseOptionalNumber((businessData as { longitude?: unknown })?.longitude),
@@ -1819,6 +1809,7 @@ app.post('/api/profiles/distributor', async (req, res) => {
       deliveryAreas: req.body.deliveryAreas ? String(req.body.deliveryAreas).trim() : null,
       orderWindowStart: req.body.orderWindowStart ? String(req.body.orderWindowStart).trim() : '18:00',
       orderWindowCutoff: req.body.orderWindowCutoff ? String(req.body.orderWindowCutoff).trim() : '20:00',
+      gst: req.body.gst ? String(req.body.gst).trim().toUpperCase() : null,
       locationName: req.body.locationName ? String(req.body.locationName).trim() : null,
       latitude: parseOptionalNumber(req.body.latitude),
       longitude: parseOptionalNumber(req.body.longitude),
