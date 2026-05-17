@@ -444,9 +444,15 @@ app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    // If profile setup (name, phone, pin) is not complete OR role profiles are incomplete, flag needsSetup
-    const needsSetup = !profile.name || !profile.phone || !profile.pin || 
-      (profile.role === 'distributor' ? (!dp || !dp.profileComplete) : (!sp || !sp.profileComplete));
+    // If profile setup (name, phone) is not complete OR role profiles are incomplete, flag needsSetup
+    // Only require PIN if logging in manually (i.e. not Google/Firebase)
+    const isManual = req.authUid?.startsWith('manual-');
+    const hasRoleProfile = profile.role === 'distributor'
+      ? (dp && (dp.profileComplete || (dp.businessName && dp.businessName.trim() !== '')))
+      : (sp && (sp.profileComplete || (sp.shopName && sp.shopName.trim() !== '')));
+
+    const needsSetup = !profile.name || !profile.phone || !hasRoleProfile || (isManual && !profile.pin);
+
 
     if (role && profile.role !== role) {
       return res.status(409).json({ error: `This email is already registered as a ${profile.role}. Please log in with the correct role.` });
