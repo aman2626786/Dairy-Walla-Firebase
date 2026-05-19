@@ -802,10 +802,49 @@ app.delete('/api/auth/me', async (req: AuthenticatedRequest, res) => {
     const profile = await getRequesterProfile(req);
     if (!profile) return res.status(404).json({ error: 'Profile not found' });
 
+    // Wipe notifications and push tokens
     await prisma.notification.deleteMany({ where: { userId: profile.id } });
-    await prisma.distributorProfile.deleteMany({ where: { userId: profile.id } });
-    await prisma.shopkeeperProfile.deleteMany({ where: { userId: profile.id } });
-    await prisma.profile.delete({ where: { id: profile.id } });
+    await prisma.pushToken.deleteMany({ where: { userId: profile.id } });
+
+    // Scramble email to free it up for re-registration, remove PII
+    const deletedEmail = `deleted_${Date.now()}_${profile.id}@deleted.local`;
+    await prisma.profile.update({
+      where: { id: profile.id },
+      data: {
+        email: deletedEmail,
+        name: 'Deleted User',
+        phone: '',
+        pin: null
+      }
+    });
+
+    if (profile.role === 'distributor') {
+      await prisma.distributorProfile.updateMany({
+        where: { userId: profile.id },
+        data: {
+          businessName: 'Deleted Distributor',
+          ownerName: null,
+          address: null,
+          city: null,
+          gst: null,
+          profileComplete: false
+        }
+      });
+    } else if (profile.role === 'shopkeeper') {
+      await prisma.shopkeeperProfile.updateMany({
+        where: { userId: profile.id },
+        data: {
+          shopName: 'Deleted Shopkeeper',
+          ownerName: null,
+          address: null,
+          city: null,
+          profileComplete: false
+        }
+      });
+    }
+
+
+
 
     return res.json({ success: true });
   } catch (error) {
@@ -1219,7 +1258,7 @@ app.patch('/api/connections/:id', async (req, res) => {
       }
     } else if (requester.role === 'shopkeeper') {
       const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
-      const phoneMatches = conn.shopkeeperPhone && (conn.shopkeeperPhone === requester.phone || (ownSp && conn.shopkeeperPhone === ownSp.phone));
+      const phoneMatches = conn.shopkeeperPhone && conn.shopkeeperPhone === requester.phone;
       const allowed = (ownSp && conn.shopkeeperId === ownSp.id) || conn.shopkeeperId === requester.id || phoneMatches;
       if (!allowed) {
         return res.status(403).json({ error: 'Forbidden' });
@@ -1291,7 +1330,7 @@ app.delete('/api/connections/:id', async (req, res) => {
       }
     } else if (requester.role === 'shopkeeper') {
       const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
-      const phoneMatches = conn.shopkeeperPhone && (conn.shopkeeperPhone === requester.phone || (ownSp && conn.shopkeeperPhone === ownSp.phone));
+      const phoneMatches = conn.shopkeeperPhone && conn.shopkeeperPhone === requester.phone;
       const allowed = (ownSp && conn.shopkeeperId === ownSp.id) || conn.shopkeeperId === requester.id || phoneMatches;
       if (!allowed) {
         return res.status(403).json({ error: 'Forbidden' });
