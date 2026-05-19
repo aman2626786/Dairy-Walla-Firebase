@@ -20,7 +20,7 @@ const statusLabels: Record<OrderStatus, string> = {
   pending: 'Pending',
   accepted: 'Accepted',
   rejected: 'Rejected',
-  fulfilled: 'Fulfilled',
+  fulfilled: 'Accepted',
 };
 
 const paymentLabels: Record<PaymentStatus, string> = {
@@ -48,7 +48,13 @@ export function OrdersPage() {
 
   const filtered = myOrders.filter(o => {
     if (filter !== 'all' && o.type !== filter) return false;
-    if (statusFilter !== 'all' && o.status !== statusFilter) return false;
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'accepted') {
+        if (o.status !== 'accepted' && o.status !== 'fulfilled') return false;
+      } else if (o.status !== statusFilter) {
+        return false;
+      }
+    }
     if (paymentFilter !== 'all' && o.paymentStatus !== paymentFilter) return false;
     return true;
   });
@@ -127,7 +133,7 @@ export function OrdersPage() {
           ))}
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          {(['all', 'pending', 'accepted', 'rejected', 'fulfilled'] as const).map(f => (
+          {(['all', 'pending', 'accepted', 'rejected'] as const).map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}

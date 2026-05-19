@@ -255,7 +255,7 @@ export function ShopkeeperProfilePage() {
         </div>
 
         {billableOrders.length === 0 ? (
-          <p className="text-sm text-gray-500">Invoices can be generated here once orders are accepted or fulfilled.</p>
+          <p className="text-sm text-gray-500">Invoices can be generated here once orders are accepted.</p>
         ) : distributorType === 'dual' ? (
           <div className="space-y-4">
             <div>
@@ -341,7 +341,7 @@ export function ShopkeeperProfilePage() {
                     <div className="text-sm font-semibold text-gray-900">Order #{order.id.slice(0, 8)}</div>
                     <div className="text-xs text-gray-500 mt-1">{format(new Date(order.placedAt), 'dd MMM yyyy, hh:mm a')}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      Status: {order.status} - Type: {order.type}
+                      Status: {order.status === 'fulfilled' ? 'accepted' : order.status} - Type: {order.type}
                       <span className="ml-2">Section: {businessLineLabel(inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine))}</span>
                       <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
                         {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
