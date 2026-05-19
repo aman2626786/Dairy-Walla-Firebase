@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Phone, Building2, Store, Edit2, Check, X,
-  LogOut, Shield, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation, Copy, Globe
+  LogOut, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation, Copy, Globe
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
