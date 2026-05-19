@@ -1593,7 +1593,7 @@ app.post('/api/orders', async (req, res) => {
         distributorId,
         businessLine: orderLine,
         type: isLate ? 'late' : 'normal',
-        status: isLate ? 'pending' : 'accepted',
+        status: 'pending',
         paymentStatus: 'unpaid',
         source: 'web',
         deliveryDate: new Date(today),
@@ -1618,11 +1618,11 @@ app.post('/api/orders', async (req, res) => {
       });
       await createNotificationAndPush({
         userId: requester.id,
-        type: order.status === 'accepted' ? 'order_accepted' : 'order_pending',
-        title: order.status === 'accepted' ? 'Order accepted' : 'Order placed',
-        message: order.status === 'accepted'
-          ? `Your order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} and accepted.`
-          : `Your late order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} for approval.`,
+        type: 'order_pending',
+        title: 'Order placed',
+        message: isLate
+          ? `Your late order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} for approval.`
+          : `Your order #${shortOrderId} was sent to ${dp?.businessName || 'your distributor'} for approval.`,
         data: { orderId: order.id, role: 'shopkeeper' },
       });
     } catch (notificationError) {
