@@ -17,8 +17,8 @@ const statusConfig: Record<OrderStatus, { label: string; className: string; icon
 };
 
 const paymentConfig: Record<PaymentStatus, { label: string; className: string }> = {
-  paid: { label: 'Payment Paid', className: 'badge-green' },
-  unpaid: { label: 'Payment Unpaid', className: 'badge-red' },
+  paid: { label: 'Payment Received', className: 'badge-green' },
+  unpaid: { label: 'Payment Due', className: 'badge-yellow' },
 };
 
 export function OrderHistoryPage() {

@@ -24,13 +24,13 @@ const statusLabels: Record<OrderStatus, string> = {
 };
 
 const paymentLabels: Record<PaymentStatus, string> = {
-  paid: 'Payment Paid',
-  unpaid: 'Payment Unpaid',
+  paid: 'Payment Received',
+  unpaid: 'Payment Due',
 };
 
 const paymentColors: Record<PaymentStatus, string> = {
   paid: 'badge-green',
-  unpaid: 'badge-red',
+  unpaid: 'badge-yellow',
 };
 
 export function OrdersPage() {
@@ -94,7 +94,7 @@ export function OrdersPage() {
     }
     try {
       await updateOrderPaymentStatus(order.id, paymentStatus);
-      show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'} for ${order.shopName}`);
+      show(`Payment marked as ${paymentStatus === 'paid' ? 'Received' : 'Due'} for ${order.shopName}`);
     } catch {
       show('Payment status could not be saved. Check DB migration.', 'error');
     }
@@ -109,12 +109,12 @@ export function OrdersPage() {
           <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} total orders</p>
         </div>
         <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Create Bill
+          <PlusCircle className="w-4 h-4" /> Generate Order Bill
         </button>
       </div>
       <div className="md:hidden mb-4">
         <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+          <PlusCircle className="w-4 h-4" /> Generate Order Bill
         </button>
       </div>
 
@@ -154,7 +154,7 @@ export function OrdersPage() {
                 paymentFilter === f ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {f === 'all' ? 'All Payments' : f === 'paid' ? 'Paid' : 'Unpaid'}
+              {f === 'all' ? 'All Payments' : f === 'paid' ? 'Payment Received' : 'Payment Due'}
             </button>
           ))}
         </div>

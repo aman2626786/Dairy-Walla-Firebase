@@ -137,6 +137,7 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [remindAllLoading, setRemindAllLoading] = useState(false);
   const [manualBillOpen, setManualBillOpen] = useState(false);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
   // const [remindWhatsappLoading, setRemindWhatsappLoading] = useState(false);
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -361,6 +362,36 @@ export function DashboardPage() {
     }
   };
 
+  const handleSendReminder = async (connectionId: string) => {
+    const conn = shopkeepersNotOrdered.find(c => c.id === connectionId);
+    if (!conn || !profile) return;
+    setRemindingId(connectionId);
+    try {
+      const getProfiles = () => useAppStore.getState().shopkeeperProfiles;
+      let shopProfile = getProfiles().find(sp => sp.id === conn.shopkeeperId);
+      if (!shopProfile) {
+        await fetchShopkeeperProfileById(conn.shopkeeperId);
+        shopProfile = getProfiles().find(sp => sp.id === conn.shopkeeperId);
+      }
+      if (shopProfile?.userId) {
+        await addNotification({
+          userId: shopProfile.userId,
+          type: 'order_reminder',
+          message: `Reminder from ${profile.businessName}: You have not placed your order for today.`,
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+        show(`Reminder sent to ${conn.shopName}!`);
+      } else {
+        show(`Could not find profile for ${conn.shopName}`, 'error');
+      }
+    } catch (e) {
+      show('Failed to send reminder', 'error');
+    } finally {
+      setRemindingId(null);
+    }
+  };
+
   // const handleRemindAllViaWhatsapp = async () => {
   //   const remindShopkeepersViaWhatsapp = (useAppStore.getState() as any).remindShopkeepersViaWhatsapp;
   //   if (!profile || shopkeepersNotOrdered.length === 0) return;
@@ -389,7 +420,7 @@ export function DashboardPage() {
     { label: 'Normal Orders', value: normalOrders.length, icon: <CheckCircle className="w-5 h-5" />, color: 'text-green-600 bg-green-50', sub: 'Today' },
     { label: 'Late Orders', value: lateOrders.length, icon: <Clock className="w-5 h-5" />, color: 'text-yellow-600 bg-yellow-50', sub: 'Pending approval' },
     { label: 'Active Shops', value: activeConnections.length, icon: <Users className="w-5 h-5" />, color: 'text-blue-600 bg-blue-50', sub: `${pendingConnections.length} pending` },
-    { label: "Today's Revenue", value: `₹${totalRevenue.toLocaleString()}`, icon: <TrendingUp className="w-5 h-5" />, color: 'text-purple-600 bg-purple-50', sub: 'Confirmed orders' },
+    { label: "Confirmed Value", value: `₹${totalRevenue.toLocaleString()}`, icon: <TrendingUp className="w-5 h-5" />, color: 'text-purple-600 bg-purple-50', sub: 'Confirmed orders' },
   ];
 
   return (
@@ -409,7 +440,7 @@ export function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <button className="btn-primary text-sm py-2 px-4 flex items-center gap-2" onClick={() => setManualBillOpen(true)}>
-              <PlusCircle className="w-4 h-4" /> Create Bill
+              <PlusCircle className="w-4 h-4" /> Generate Manual Bill
             </button>
             <button className="btn-secondary text-sm py-2 px-4 flex items-center gap-2" onClick={() => {
               const link = `${window.location.origin}/d/${profile?.connectionCode}`;
@@ -427,7 +458,7 @@ export function DashboardPage() {
       </div>
       <div className="md:hidden mb-4">
         <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+          <PlusCircle className="w-4 h-4" /> Generate Manual Bill
         </button>
       </div>
 
@@ -446,7 +477,7 @@ export function DashboardPage() {
         <div className="text-right hidden sm:block">
           <div className="flex items-center justify-end gap-1 text-green-600 mb-1">
             <TrendingUp size={16} />
-            <span className="text-sm font-medium text-green-700">₹{weeklyRevenue.toLocaleString()} in last 7 days</span>
+            <span className="text-sm font-medium text-green-700">₹{weeklyRevenue.toLocaleString()} 7d Order Value</span>
           </div>
           <button className="text-sm text-blue-600 font-medium hover:underline" onClick={() => show('Leaderboard page coming soon!')}>
             View Leaderboard &rarr;
@@ -474,7 +505,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="flex items-center gap-2">
               <LineChart className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-semibold text-gray-900 text-sm">Revenue Trend (Last 7 Days)</h2>
+              <h2 className="font-semibold text-gray-900 text-sm">Order Value Trend (Last 7 Days)</h2>
             </div>
             <div className={`text-xs font-semibold ${revenueGrowthPct >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
               {revenueGrowthPct >= 0 ? '+' : ''}{revenueGrowthPct.toFixed(1)}% vs yesterday
@@ -483,7 +514,7 @@ export function DashboardPage() {
           <RevenueTrendChart data={last7DaysAnalytics} />
           <div className="grid grid-cols-3 gap-2 mt-2">
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="text-[11px] text-gray-500">7d Revenue</div>
+              <div className="text-[11px] text-gray-500">7d Order Value</div>
               <div className="text-sm font-semibold text-gray-900">₹{formatCompactNumber(weeklyRevenue)}</div>
             </div>
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -546,6 +577,66 @@ export function DashboardPage() {
         </div>
       </div>
 
+      {/* Route-wise Delivery Groups */}
+      <div className="card p-4 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Package className="w-5 h-5 text-brand-600" />
+          <div>
+            <h2 className="font-semibold text-gray-900 text-sm">Route-wise Delivery Groups</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Orders grouped by delivery routes or areas</p>
+          </div>
+        </div>
+
+        {(() => {
+          const routeMap: Record<string, typeof todayOrders> = {};
+          todayOrders.forEach((order) => {
+            const conn = connections.find((c) => c.shopkeeperId === order.shopkeeperId);
+            const route = conn?.deliveryGroupName || 'Unassigned Area / Route';
+            if (!routeMap[route]) routeMap[route] = [];
+            routeMap[route].push(order);
+          });
+
+          const routes = Object.keys(routeMap).sort();
+          if (routes.length === 0) {
+            return <div className="text-center py-6 text-sm text-gray-500">No orders received today yet.</div>;
+          }
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {routes.map((routeName) => {
+                const routeOrders = routeMap[routeName];
+                return (
+                  <div key={routeName} className="p-3 rounded-xl border border-gray-100 bg-gray-50/50">
+                    <div className="flex items-center justify-between gap-3 bg-gray-100 px-3 py-1.5 rounded-lg mb-2">
+                      <span className="text-sm font-semibold text-gray-800">📍 {routeName}</span>
+                      <span className="badge-green text-xs font-bold">{routeOrders.length} orders</span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {routeOrders.map((order) => (
+                        <div key={order.id} className="py-2 flex items-center justify-between gap-3 text-xs">
+                          <div className="min-w-0">
+                            <div className="font-medium text-gray-900 truncate">{order.shopName || order.shopkeeperName}</div>
+                            <div className="text-[10px] text-gray-500 truncate mt-0.5">
+                              {order.items?.length || 0} items · {order.items?.map(i => `${i.productName}(${i.quantity})`).join(', ')}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="font-bold text-gray-900">₹{order.total.toLocaleString()}</div>
+                            <div className={`text-[10px] font-semibold mt-0.5 ${order.status === 'accepted' || order.status === 'fulfilled' ? 'text-green-600' : 'text-amber-600'}`}>
+                              {order.status === 'accepted' || order.status === 'fulfilled' ? 'Confirmed' : 'Pending'}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+
       {/* Shopkeepers Not Ordered Today */}
       <div className="card p-4 mb-6">
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -584,16 +675,25 @@ export function DashboardPage() {
                     <div className="text-sm font-medium text-gray-800 truncate">{conn.shopName}</div>
                     <div className="text-xs text-gray-500 truncate">{conn.shopkeeperName}</div>
                   </div>
-                  {shopkeeperTel && shopkeeperTel.length === 10 && (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <a href={`https://wa.me/91${shopkeeperTel}`} target="_blank" rel="noopener noreferrer" className="btn-secondary p-2">
-                        <MessageSquare className="w-4 h-4 text-green-600" />
-                      </a>
-                      <a href={`tel:${shopkeeperTel}`} className="btn-secondary p-2">
-                        <Phone className="w-4 h-4" />
-                      </a>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleSendReminder(conn.id)}
+                      disabled={remindingId === conn.id}
+                      className="btn-secondary py-1 px-2.5 text-xs disabled:opacity-70"
+                    >
+                      {remindingId === conn.id ? 'Sending...' : 'Remind'}
+                    </button>
+                    {shopkeeperTel && shopkeeperTel.length === 10 && (
+                      <>
+                        <a href={`https://wa.me/91${shopkeeperTel}`} target="_blank" rel="noopener noreferrer" className="btn-secondary p-1.5">
+                          <MessageSquare className="w-3.5 h-3.5 text-green-600" />
+                        </a>
+                        <a href={`tel:${shopkeeperTel}`} className="btn-secondary p-1.5">
+                          <Phone className="w-3.5 h-3.5" />
+                        </a>
+                      </>
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -12,7 +12,7 @@ import {
   inferBusinessLineFromCategory,
   toDistributorType,
 } from '../../utils/businessLine';
-import { formatItemTotalQuantity, formatOrderTotalQuantity } from '../../utils/orderQuantity';
+import { formatItemTotalQuantity, formatOrderTotalQuantity, getPackagingPiecesText } from '../../utils/orderQuantity';
 
 interface InitialShopkeeperBillInfo {
   shopkeeperId?: string | null;
@@ -230,7 +230,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Create Manual Bill" size="lg">
+    <Modal open={open} onClose={onClose} title="Generate Manual Bill" size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -363,6 +363,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
                       {quantity > 0 && (
                         <div className="text-xs text-brand-700 mt-1">
                           Total Qty: {formatItemTotalQuantity(product.unit, quantity)}
+                          {getPackagingPiecesText(product.name, product.category || '', quantity)}
                         </div>
                       )}
                     </div>

@@ -1496,6 +1496,40 @@ app.get('/api/orders/:role/:userId', async (req, res) => {
   }
 });
 
+app.post('/api/reminders/send', async (req, res) => {
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can send reminders.' });
+    }
+    const { shopkeeperId } = req.body;
+    const shopkeeper = await prisma.shopkeeperProfile.findUnique({
+      where: { id: shopkeeperId },
+      include: { user: true }
+    });
+    if (!shopkeeper || !shopkeeper.userId) {
+      return res.status(404).json({ error: 'Shopkeeper not found' });
+    }
+    const distributor = await prisma.distributorProfile.findUnique({
+      where: { userId: requester.id }
+    });
+
+    await createNotificationAndPush({
+      userId: shopkeeper.userId,
+      type: 'order_reminder',
+      title: 'Order Reminder 🔔',
+      message: `Dear ${shopkeeper.shopName || 'Shopkeeper'}, you haven't placed your order for today with ${distributor?.businessName || 'your distributor'}. Please place it soon!`,
+      data: { role: 'shopkeeper' }
+    });
+
+    return res.json({ success: true });
+  } catch (e: any) {
+    console.error('Reminder failed:', e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.post('/api/orders', async (req, res) => {
   try {
     const requester = await requireRequesterProfile(req, res);

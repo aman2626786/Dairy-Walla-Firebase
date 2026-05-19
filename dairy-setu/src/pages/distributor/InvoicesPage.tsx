@@ -12,7 +12,7 @@ import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } f
 import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 import { BrandLogo } from '../../components/ui/BrandLogo';
-import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize } from '../../utils/orderQuantity';
+import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize, getPackagingPiecesText } from '../../utils/orderQuantity';
 import { ManualBillModal } from './ManualBillModal';
 
 export function InvoicesPage() {
@@ -171,12 +171,12 @@ export function InvoicesPage() {
           <p className="text-sm text-gray-500 mt-0.5">{billableOrders.length} invoices</p>
         </div>
         <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Create Bill
+          <PlusCircle className="w-4 h-4" /> Generate Manual Bill
         </button>
       </div>
       <div className="md:hidden mb-4">
         <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+          <PlusCircle className="w-4 h-4" /> Generate Manual Bill
         </button>
       </div>
 
@@ -266,7 +266,12 @@ export function InvoicesPage() {
                       <div className="text-xs text-gray-400">{item.brand} - {formatPackSize(item.unit)}</div>
                     </td>
                     <td className="py-2 text-right text-gray-700">{item.quantity}</td>
-                    <td className="py-2 text-right text-gray-700">{formatItemTotalQuantity(item.unit, item.quantity)}</td>
+                    <td className="py-2 text-right text-gray-700">
+                      {formatItemTotalQuantity(item.unit, item.quantity)}
+                      <span className="text-xs text-gray-500 block">
+                        {getPackagingPiecesText(item.productName, item.category || '', item.quantity)}
+                      </span>
+                    </td>
                     <td className="py-2 text-right text-green-600">{formatItemRate(item.unitPrice, item.unit)}</td>
                     <td className="py-2 text-right font-semibold text-green-600">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
                   </tr>

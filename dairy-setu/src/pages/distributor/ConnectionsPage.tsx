@@ -108,7 +108,7 @@ export function ConnectionsPage() {
             setManualBillOpen(true);
           }}
         >
-          <PlusCircle className="w-4 h-4" /> Create Bill
+          <PlusCircle className="w-4 h-4" /> Generate Order Bill
         </button>
       </div>
       <div className="md:hidden mb-4">
@@ -119,7 +119,7 @@ export function ConnectionsPage() {
             setManualBillOpen(true);
           }}
         >
-          <PlusCircle className="w-4 h-4" /> Create Manual Bill
+          <PlusCircle className="w-4 h-4" /> Generate Order Bill
         </button>
       </div>
 

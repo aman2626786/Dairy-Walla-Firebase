@@ -82,7 +82,7 @@ export function ShopkeeperProfilePage() {
   );
   const paymentStyles: Record<PaymentStatus, string> = {
     paid: 'badge-green',
-    unpaid: 'badge-red',
+    unpaid: 'badge-yellow',
   };
 
   const handlePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
@@ -92,7 +92,7 @@ export function ShopkeeperProfilePage() {
     }
     try {
       await updateOrderPaymentStatus(order.id, paymentStatus);
-      show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'}`);
+      show(`Payment marked as ${paymentStatus === 'paid' ? 'Received' : 'Due'}`);
     } catch {
       show('Payment status could not be saved. Check DB migration.', 'error');
     }
@@ -250,7 +250,7 @@ export function ShopkeeperProfilePage() {
         <div className="flex items-center justify-between gap-3 mb-3">
           <h2 className="font-semibold text-gray-900 text-sm">Generate Bill (Separate)</h2>
           <button className="btn-primary py-1.5 px-3 text-xs" onClick={() => setManualBillOpen(true)}>
-            <PlusCircle className="w-3.5 h-3.5" /> Create Bill
+            <PlusCircle className="w-3.5 h-3.5" /> Generate Order Bill
           </button>
         </div>
 
@@ -344,7 +344,7 @@ export function ShopkeeperProfilePage() {
                       Status: {order.status === 'fulfilled' ? 'accepted' : order.status} - Type: {order.type}
                       <span className="ml-2">Section: {businessLineLabel(inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine))}</span>
                       <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
-                        {order.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                        {order.paymentStatus === 'paid' ? 'Payment Received' : 'Payment Due'}
                       </span>
                     </div>
                   </div>

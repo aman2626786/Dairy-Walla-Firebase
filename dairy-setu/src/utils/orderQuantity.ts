@@ -131,8 +131,38 @@ export function formatOrderTotalQuantity(items: OrderItem[]) {
   return [...totalParts, ...fallbackParts].filter(Boolean).join(' + ') || '0';
 }
 
+export function getPackagingPiecesText(name: string, category: string, qty: number): string {
+  const lowerName = String(name || '').toLowerCase();
+  const lowerCat = String(category || '').toLowerCase();
+
+  // Ice Cream rules:
+  if (lowerCat.includes('icecream') || lowerCat.includes('ice cream') || lowerName.includes('ice cream') || lowerName.includes('icecream') || lowerName.includes('cone') || lowerName.includes('cup')) {
+    if (lowerName.includes('20 mrp') || lowerName.includes('20mrp') || lowerName.includes('cup')) {
+      return ` (${qty * 24} pcs)`;
+    }
+    if (lowerName.includes('35 mrp') || lowerName.includes('35mrp') || lowerName.includes('cone')) {
+      return ` (${qty * 20} pcs)`;
+    }
+    return ` (${qty * 24} pcs)`;
+  }
+
+  // Milk rules:
+  if (lowerName.includes('500ml') || lowerName.includes('500 ml')) {
+    return ` (${qty * 24} pouches)`;
+  }
+  if (lowerName.includes('1l') || lowerName.includes('1 l') || lowerName.includes('1litre') || lowerName.includes('1 litre')) {
+    return ` (${qty * 12} pouches)`;
+  }
+  if (lowerName.includes('200ml') || lowerName.includes('200 ml')) {
+    return ` (${qty * 40} cups)`;
+  }
+
+  return '';
+}
+
 export function formatInvoiceShareItem(item: OrderItem) {
   const totalQuantity = formatItemTotalQuantity(item.unit, item.quantity);
+  const extraText = getPackagingPiecesText(item.productName, item.category || '', item.quantity);
   const amount = Number(item.quantity || 0) * Number(item.unitPrice || 0);
-  return `${item.productName} (${totalQuantity}) @ ${formatItemRate(item.unitPrice, item.unit)} = ₹${amount.toLocaleString()}`;
+  return `${item.productName} (${totalQuantity}${extraText}) @ ${formatItemRate(item.unitPrice, item.unit)} = ₹${amount.toLocaleString()}`;
 }
