@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, Store, Truck, Mail, Lock, ArrowRight } from "lucide-react";
+import { ShieldCheck, Store, Truck } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from "firebase/auth";
 import { auth as firebaseAuth } from "../../lib/firebase";
 import { useAuthStore } from "../../store/authStore";
@@ -25,9 +25,6 @@ export function LoginPage() {
   const [role, setRole] = useState<Role>("shopkeeper");
   const [distributorType, setDistributorType] = useState<DistributorType>("dual");
   const [loading, setLoading] = useState(false);
-  const [authMethod, setAuthMethod] = useState<"google" | "manual">("google");
-  const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
 
   const { signIn, isAuthenticated, user } = useAuthStore();
   const {
@@ -122,48 +119,6 @@ export function LoginPage() {
     }
   };
 
-  const handleManualLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !email.includes("@")) {
-      show("Please enter a valid email address", "error");
-      return;
-    }
-    if (!/^\d{6}$/.test(pin)) {
-      show("PIN must be exactly 6 digits", "error");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      localStorage.removeItem("dairy-walla-manual-token");
-      const { manualLogin } = useAuthStore.getState();
-      const loginResult = await manualLogin(email.trim().toLowerCase(), pin, role);
-
-      if (loginResult.needsProfile) {
-        localStorage.setItem("dairy-walla-pending-role", role);
-        if (role === "distributor") {
-          localStorage.setItem("dairy-walla-pending-distributor-type", distributorType);
-          navigate(`/confirm?role=${role}&type=${distributorType}`);
-        } else {
-          localStorage.removeItem("dairy-walla-pending-distributor-type");
-          navigate(`/confirm?role=${role}`);
-        }
-        return;
-      }
-
-      if (loginResult.user) {
-        await handleLoginSuccess(loginResult.user);
-      } else if (loginResult.error) {
-        show(loginResult.error, "error");
-      }
-    } catch (err: any) {
-      console.error("Manual Login Error:", err);
-      show(err.message || "Manual Login failed", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-gray-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -178,31 +133,6 @@ export function LoginPage() {
         <div className="bg-white rounded-3xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-3xl font-bold text-gray-900 mb-1 leading-none">Welcome back</h2>
           <p className="text-sm text-gray-500 mb-6">Choose role and sign in below</p>
-
-          <div className="flex p-1 bg-gray-100/80 rounded-xl mb-6 border border-gray-200/50">
-            <button
-              type="button"
-              onClick={() => setAuthMethod("google")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMethod === "google"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-900"
-              }`}
-            >
-              Google Account
-            </button>
-            <button
-              type="button"
-              onClick={() => setAuthMethod("manual")}
-              className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                authMethod === "manual"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-900"
-              }`}
-            >
-              Email & PIN Login
-            </button>
-          </div>
 
           <div className="space-y-5">
             <div>
@@ -266,72 +196,20 @@ export function LoginPage() {
               </div>
             )}
 
-            {authMethod === "google" ? (
-              <button
-                onClick={handleGoogleLogin}
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm active:scale-[0.98]"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
-                    Continue with Google
-                  </>
-                )}
-              </button>
-            ) : (
-              <form onSubmit={handleManualLogin} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Apna email enter karein (e.g. sharma@gmail.com)"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-gray-50/50 transition-all font-medium"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">6-Digit PIN</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={6}
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      placeholder="Enter 6-digit security PIN"
-                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-gray-50/50 transition-all font-medium tracking-widest text-center text-lg font-bold"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm transition-all shadow-md hover:shadow-brand-100 disabled:opacity-50 active:scale-[0.98]"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      Login to Dashboard
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-            )}
+            <button
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-xl text-sm transition-all shadow-sm active:scale-[0.98]"
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+                  Continue with Google
+                </>
+              )}
+            </button>
           </div>
 
           <p className="text-center text-sm text-gray-600 mt-5">

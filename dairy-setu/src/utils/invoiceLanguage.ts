@@ -1,13 +1,13 @@
 export type InvoiceLanguage = 'hinglish' | 'english' | 'hindi';
 
-const KEY = 'invoice-language';
+const KEY = 'app-language';
 
 export function getInvoiceLanguage(): InvoiceLanguage {
-  const val = localStorage.getItem(KEY);
-  if (val === 'english' || val === 'hindi' || val === 'hinglish') return val;
-  return 'hinglish';
+  const saved = localStorage.getItem(KEY);
+  if (saved === 'hindi') return 'hindi';
+  return 'english';
 }
 
 export function setInvoiceLanguage(language: InvoiceLanguage) {
-  localStorage.setItem(KEY, language);
+  localStorage.setItem(KEY, language === 'hindi' ? 'hindi' : 'english');
 }

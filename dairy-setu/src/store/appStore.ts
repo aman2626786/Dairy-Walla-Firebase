@@ -53,6 +53,7 @@ interface AppState {
 
   // Connection actions
   requestConnection: (shopkeeperId: string, shopkeeperName: string, shopName: string, distributorCode: string, shopkeeperPhone?: string) => Promise<boolean>;
+  cancelConnection: (connectionId: string) => Promise<boolean>;
   updateConnectionStatus: (connectionId: string, status: ConnectionStatus, deliveryGroupId?: string) => Promise<void>;
   assignDeliveryGroup: (connectionId: string, groupId: string, groupName: string) => Promise<void>;
   toggleConnectionAutoOrder: (connectionId: string, enabled: boolean) => Promise<void>;
@@ -245,6 +246,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     return false;
   },
 
+  cancelConnection: async (connectionId) => {
+    try {
+      await apiClient.delete(`${API_URL}/connections/${connectionId}`);
+      set(state => ({ connections: state.connections.filter(c => c.id !== connectionId) }));
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  },
+
   updateConnectionStatus: async (connectionId, status) => {
     try {
       await apiClient.patch(`${API_URL}/connections/${connectionId}`, { status });
@@ -325,7 +337,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         await get().addNotification({ userId: data.distributorUserId, type: isLate ? 'late_order' : 'order_placed', message: isLate ? `Late order from ${shopName}` : `New order from ${shopName}`, read: false, createdAt: new Date().toISOString() });
       }
       return data.order;
-    } catch (e) { console.error(e); throw new Error('Order place karne mein error'); }
+    } catch (e) { console.error(e); throw new Error('Error placing the order'); }
   },
 
   createManualBill: async (input) => {
@@ -349,12 +361,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error(e);
       if (axios.isAxiosError(e)) {
         if (e.response?.status === 404) {
-          throw new Error('Manual bill API nahi mila. Backend server restart karein.');
+          throw new Error('Manual bill API not found. Please restart the backend server.');
         }
         const message = String(e.response?.data?.error || e.message || '').trim();
-        throw new Error(message || 'Manual bill create nahi hua');
+        throw new Error(message || 'Manual bill could not be created');
       }
-      throw new Error('Manual bill create nahi hua');
+      throw new Error('Manual bill could not be created');
     }
   },
 

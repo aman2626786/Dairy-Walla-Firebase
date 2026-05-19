@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Phone, Building2, Store, Edit2, Check, X,
-  LogOut, Shield, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation
+  LogOut, Shield, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation, Copy, Globe
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { useToast } from '../components/ui/Toast';
 import { MobileHeader } from '../components/layout/MobileHeader';
 import { getCurrentLocation, getCoordinatesFromLocation } from '../utils/location';
+import { useTranslation } from '../utils/i18n';
 
 const DELIVERY_TIMINGS = ['Morning (6–9 AM)', 'Afternoon (12–3 PM)', 'Evening (5–8 PM)', 'Any Time'];
 const COMPANIES = ['Amul', 'Saras', 'Mother Dairy', 'Parag', 'Local Brand', 'Multiple Brands'];
@@ -28,6 +29,7 @@ export function ProfilePage() {
   const { distributorProfiles, shopkeeperProfiles, updateDistributorSettings, updateShopkeeperProfile, products, connections } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
+  const { t, language, setLanguage } = useTranslation();
 
   const isDistributor = user?.role === 'distributor';
   const distProfile = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -63,15 +65,11 @@ export function ProfilePage() {
   const saveEdit = async (key: string) => {
     const val = editValue.trim();
     if (!val && ['name', 'businessName', 'shopName', 'city', 'phone'].includes(key)) {
-      show('Ye field empty nahi ho sakta', 'error');
+      show(t('This field cannot be empty.'), 'error');
       return;
     }
     if (key === 'phone' && !/^\d{10}$/.test(val)) {
-      show('Phone number 10 digit ka hona chahiye', 'error');
-      return;
-    }
-    if (key === 'pin' && val.length !== 6) {
-      show('PIN 6 digit ka hona chahiye', 'error');
+      show(t('Phone number must be exactly 10 digits.'), 'error');
       return;
     }
 
@@ -80,8 +78,6 @@ export function ProfilePage() {
         await updateUser({ name: val });
       } else if (key === 'phone') {
         await updateUser({ phone: val });
-      } else if (key === 'pin') {
-        await updateUser({ pin: val } as any);
       } else if (isDistributor && distProfile) {
         await updateDistributorSettings(distProfile.id, { [key]: val });
         if (key === 'ownerName') await updateUser({ name: val });
@@ -90,16 +86,27 @@ export function ProfilePage() {
         if (key === 'ownerName') await updateUser({ name: val });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Update nahi ho paya';
+      const message = error instanceof Error ? error.message : 'Update failed.';
       show(message, 'error');
       return;
     }
 
     setEditingField(null);
-    show('Updated!');
+    if (key === 'city' && val) {
+      const coords = getCoordinatesFromLocation(val);
+      if (coords) {
+        setLocationData(prev => ({
+          ...prev,
+          latitude: coords.lat,
+          longitude: coords.lon,
+        }));
+      }
+    }
   };
 
-  const cancelEdit = () => setEditingField(null);
+  const cancelEdit = () => {
+    setEditingField(null);
+  };
 
   const handleGetLocation = async () => {
     setLoadingLocation(true);
@@ -110,10 +117,9 @@ export function ProfilePage() {
         latitude: location.latitude,
         longitude: location.longitude,
       }));
-      show('Location captured!');
+      show(t('Location captured!'));
     } catch (_error) {
-      show('Location access denied', 'error');
-      // Try to get from city
+      show(t('Location access denied'), 'error');
       const profile = isDistributor ? distProfile : shopProfile;
       if (profile?.city) {
         const coords = getCoordinatesFromLocation(profile.city);
@@ -145,7 +151,7 @@ export function ProfilePage() {
       });
     }
     setEditingLocation(false);
-    show('Location updated!');
+    show(t('Location updated!'));
   };
 
   const handleLogout = async () => {
@@ -159,17 +165,16 @@ export function ProfilePage() {
       show(res.error, 'error');
       setShowDeleteConfirm(false);
     } else {
-      show('Account deleted successfully');
+      show(t('Account deleted successfully'));
       navigate('/login');
     }
   };
 
   // Build field rows
   const distributorFields: EditField[] = [
-    { key: 'ownerName', label: 'Owner Name', value: distProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
-    { key: 'businessName', label: 'Business Name', value: distProfile?.businessName || '', placeholder: 'Dairy ka naam' },
+    { key: 'ownerName', label: 'Owner Name', value: distProfile?.ownerName || user?.name || '', placeholder: 'Your name' },
+    { key: 'businessName', label: 'Business Name', value: distProfile?.businessName || '', placeholder: 'Dairy name' },
     { key: 'phone', label: 'Mobile Number', value: user?.phone || '', placeholder: '10 digit mobile number' },
-    { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'company', label: 'Company / Brand', value: distProfile?.company || '', type: 'select', options: COMPANIES },
     { key: 'city', label: 'City', value: distProfile?.city || '', placeholder: 'e.g. Ajmer' },
     { key: 'address', label: 'Address', value: distProfile?.address || '', placeholder: 'Shop address' },
@@ -178,10 +183,9 @@ export function ProfilePage() {
   ];
 
   const shopkeeperFields: EditField[] = [
-    { key: 'ownerName', label: 'Owner Name', value: shopProfile?.ownerName || user?.name || '', placeholder: 'Aapka naam' },
-    { key: 'shopName', label: 'Shop Name', value: shopProfile?.shopName || '', placeholder: 'Shop ka naam' },
+    { key: 'ownerName', label: 'Owner Name', value: shopProfile?.ownerName || user?.name || '', placeholder: 'Your name' },
+    { key: 'shopName', label: 'Shop Name', value: shopProfile?.shopName || '', placeholder: 'Shop name' },
     { key: 'phone', label: 'Mobile Number', value: user?.phone || '', placeholder: '10 digit mobile number' },
-    { key: 'pin', label: 'Login PIN', value: '******', placeholder: '6 digit PIN' },
     { key: 'city', label: 'City', value: shopProfile?.city || '', placeholder: 'e.g. Ajmer' },
     { key: 'address', label: 'Address', value: shopProfile?.address || '', placeholder: 'Shop address' },
     { key: 'deliveryTiming', label: 'Delivery Timing', value: shopProfile?.deliveryTiming || '', type: 'select', options: DELIVERY_TIMINGS },
@@ -194,7 +198,6 @@ export function ProfilePage() {
     ownerName: <User className="w-3.5 h-3.5" />,
     businessName: <Building2 className="w-3.5 h-3.5" />,
     phone: <Phone className="w-3.5 h-3.5" />,
-    pin: <Shield className="w-3.5 h-3.5" />,
     shopName: <Store className="w-3.5 h-3.5" />,
     company: <Tag className="w-3.5 h-3.5" />,
     city: <MapPin className="w-3.5 h-3.5" />,
@@ -206,10 +209,10 @@ export function ProfilePage() {
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
-      <MobileHeader title="My Profile" showBack />
+      <MobileHeader title={t('My Profile')} showBack />
       <div className="hidden md:block mb-6">
-        <h1 className="text-xl font-bold text-gray-900">My Profile</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Apni profile manage karo</p>
+        <h1 className="text-xl font-bold text-gray-900">{t('My Profile')}</h1>
+        <p className="text-sm text-gray-500 mt-0.5">{t('Manage your profile details.')}</p>
       </div>
 
       {/* Avatar card */}
@@ -230,6 +233,41 @@ export function ProfilePage() {
         </div>
       </div>
 
+      {/* Language Selector Card */}
+      <div className="card p-5 mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <Globe className="w-5 h-5 text-brand-600 flex-shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">{t('App Language')}</h3>
+              <p className="text-xs text-gray-400">{t('Select your preferred language.')}</p>
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setLanguage('english')}
+            className={`py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+              language === 'english'
+                ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-sm'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            English
+          </button>
+          <button
+            onClick={() => setLanguage('hindi')}
+            className={`py-2 px-4 rounded-xl border text-xs font-bold transition-all ${
+              language === 'hindi'
+                ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-sm'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            हिंदी (Hindi)
+          </button>
+        </div>
+      </div>
+
       {/* Editable profile fields */}
       <div className="card divide-y divide-gray-100 mb-4">
         {fields.map(field => (
@@ -237,14 +275,14 @@ export function ProfilePage() {
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 {fieldIcons[field.key]}
-                {field.label}
+                {t(field.label)}
               </div>
               {editingField !== field.key && (
                 <button
                   onClick={() => startEdit(field)}
                   className="flex items-center gap-1 text-xs text-brand-600 hover:underline font-medium"
                 >
-                  <Edit2 className="w-3 h-3" /> Edit
+                  <Edit2 className="w-3 h-3" /> {t('Edit')}
                 </button>
               )}
             </div>
@@ -302,14 +340,14 @@ export function ProfilePage() {
         <div className="p-4">
           <div className="flex items-center justify-between mb-1">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              <Navigation className="w-3.5 h-3.5" /> Location
+              <Navigation className="w-3.5 h-3.5" /> {t('Location')}
             </div>
             {!editingLocation && (
               <button
                 onClick={() => setEditingLocation(true)}
                 className="flex items-center gap-1 text-xs text-brand-600 hover:underline font-medium"
               >
-                <Edit2 className="w-3 h-3" /> Edit
+                <Edit2 className="w-3 h-3" /> {t('Edit')}
               </button>
             )}
           </div>
@@ -331,7 +369,7 @@ export function ProfilePage() {
                   className="btn-secondary flex-1 flex items-center justify-center gap-1.5"
                 >
                   <Navigation className="w-4 h-4" />
-                  {loadingLocation ? 'Getting...' : 'Get GPS Location'}
+                  {loadingLocation ? 'Getting...' : t('Get GPS Location')}
                 </button>
               </div>
               {locationData.latitude && locationData.longitude && (
@@ -341,10 +379,10 @@ export function ProfilePage() {
               )}
               <div className="flex gap-2">
                 <button onClick={saveLocation} className="btn-primary flex-1">
-                  <Check className="w-4 h-4" /> Save
+                  <Check className="w-4 h-4" /> {t('Save')}
                 </button>
                 <button onClick={() => setEditingLocation(false)} className="btn-secondary flex-1">
-                  <X className="w-4 h-4" /> Cancel
+                  <X className="w-4 h-4" /> {t('Cancel')}
                 </button>
               </div>
             </div>
@@ -371,30 +409,32 @@ export function ProfilePage() {
           <>
             <div className="p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
-                Connection Code
+                {t('Connection Code')}
               </div>
               <div className="flex items-center justify-between">
                 <div className="font-mono font-bold text-brand-600 text-lg tracking-wider">
                   {distProfile.connectionCode}
                 </div>
                 <button
-                  className="text-xs text-brand-600 hover:underline font-medium"
-                  onClick={() => { navigator.clipboard.writeText(distProfile.connectionCode); show('Code copied!'); }}
+                  onClick={() => {
+                    navigator.clipboard.writeText(distProfile.connectionCode || '');
+                    show(t('Connection code copied to clipboard!'));
+                  }}
+                  className="flex items-center gap-1 text-xs text-brand-600 hover:underline font-medium"
                 >
-                  Copy
+                  <Copy className="w-3.5 h-3.5" /> {t('Copy Code')}
                 </button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Shopkeepers ko ye code share karo connect karne ke liye</p>
             </div>
 
             {/* Products Count */}
             <div className="p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                 <Package className="w-3.5 h-3.5" />
-                Products in Catalog
+                {t('Products in Catalog')}
               </div>
               <div className="text-sm font-medium text-gray-900">
-                {products.filter(p => p.distributorId === distProfile.id).length} products
+                {products.filter(p => p.distributorId === distProfile.id).length} {t('items')}
                 <span className="text-gray-400 ml-2">
                   ({products.filter(p => p.distributorId === distProfile.id && p.available).length} available)
                 </span>
@@ -405,10 +445,10 @@ export function ProfilePage() {
             <div className="p-4">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">
                 <Users className="w-3.5 h-3.5" />
-                Connected Shopkeepers
+                {t('Connected Shopkeepers')}
               </div>
               <div className="text-sm font-medium text-gray-900">
-                {connections.filter(c => c.distributorId === distProfile.id && c.status === 'active').length} active connections
+                {connections.filter(c => c.distributorId === distProfile.id && c.status === 'active').length} active
               </div>
             </div>
           </>
@@ -420,7 +460,7 @@ export function ProfilePage() {
         {isDistributor && (
           <button onClick={() => navigate('/distributor/settings')}
             className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-            <span className="text-sm font-medium text-gray-700">Order Window Settings</span>
+            <span className="text-sm font-medium text-gray-700">{t('Order Window Settings')}</span>
             <ChevronRight className="w-4 h-4 text-gray-400" />
           </button>
         )}
@@ -428,7 +468,7 @@ export function ProfilePage() {
           onClick={() => navigate(isDistributor ? '/distributor/notifications' : '/shop/notifications')}
           className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
         >
-          <span className="text-sm font-medium text-gray-700">Notifications</span>
+          <span className="text-sm font-medium text-gray-700">{t('Notifications')}</span>
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>
       </div>
@@ -436,7 +476,7 @@ export function ProfilePage() {
       {/* Logout */}
       <button onClick={handleLogout}
         className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border-2 border-red-200 text-red-600 hover:bg-red-50 transition-colors font-medium">
-        <LogOut className="w-4 h-4" /> Logout
+        <LogOut className="w-4 h-4" /> {t('Logout')}
       </button>
 
       {/* Delete Account */}
@@ -444,18 +484,18 @@ export function ProfilePage() {
         {!showDeleteConfirm ? (
           <button onClick={() => setShowDeleteConfirm(true)}
             className="w-full flex items-center justify-center gap-2 p-4 text-gray-500 hover:text-red-600 transition-colors font-medium text-sm">
-            Delete Account
+            {t('Delete Account')}
           </button>
         ) : (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center animate-fade-in">
-            <h3 className="text-red-800 font-semibold mb-2">Are you absolutely sure?</h3>
-            <p className="text-xs text-red-600 mb-4">Ye action wapas nahi ho sakta. Aapka sara data hamesha ke liye delete ho jayega.</p>
+            <h3 className="text-red-800 font-semibold mb-2">{t('Are you absolutely sure?')}</h3>
+            <p className="text-xs text-red-600 mb-4">{t('This action cannot be undone. All your account data will be permanently deleted.')}</p>
             <div className="flex gap-2">
               <button onClick={handleDeleteAccount} className="flex-1 bg-red-600 text-white py-2 rounded-xl text-sm font-medium hover:bg-red-700 transition-colors">
-                Yes, Delete
+                {t('Yes, Delete')}
               </button>
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white text-gray-700 border border-gray-300 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition-colors">
-                Cancel
+                {t('Cancel')}
               </button>
             </div>
           </div>

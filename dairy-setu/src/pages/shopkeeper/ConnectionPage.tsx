@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Link2, CheckCircle, Clock, XCircle, Search, MapPin, Tag, Phone, Repeat, Bell } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -110,7 +110,7 @@ export function ConnectionPage() {
 
   const handleConnect = async () => {
     if (!code.trim()) { show('Enter a connection code or phone number', 'error'); return; }
-    if (!user || !shopProfile) { show('Shopkeeper profile missing. Profile setup complete karo.', 'error'); return; }
+    if (!user || !shopProfile) { show('Shopkeeper profile is missing. Please complete your profile setup.', 'error'); return; }
 
     setLoading(true);
     await new Promise(r => setTimeout(r, 600));
@@ -135,16 +135,16 @@ export function ConnectionPage() {
   const handleConnectFromSearch = (connectionCode: string) => {
     setCode(connectionCode);
     setShowSearch(false);
-    show('Code filled! Ab send karo', 'info');
+    show('Connection code filled! Now click send request.', 'info');
   };
 
   const handleToggleAutoOrder = async (connectionId: string, enabled: boolean) => {
     setTogglingConnectionId(connectionId);
     try {
       await toggleConnectionAutoOrder(connectionId, enabled);
-      show(enabled ? 'Auto order ON ho gaya' : 'Auto order OFF ho gaya');
+      show(enabled ? 'Auto order enabled successfully.' : 'Auto order disabled successfully.');
     } catch {
-      show('Auto order setting update nahi ho paayi', 'error');
+      show('Failed to update auto order settings.', 'error');
     } finally {
       setTogglingConnectionId(null);
     }
@@ -329,7 +329,7 @@ export function ConnectionPage() {
                     Results ({searchResults.length})
                   </div>
                   {searchResults.length === 0 ? (
-                    <div className="text-sm text-gray-400 text-center py-4">Koi distributor nahi mila</div>
+                    <div className="text-sm text-gray-400 text-center py-4">No distributors found</div>
                   ) : (
                     searchResults.map(dp => {
                       const status = getConnectionStatusForDistributor(dp.id);

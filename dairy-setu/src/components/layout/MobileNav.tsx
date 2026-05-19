@@ -51,12 +51,12 @@ export function MobileNav() {
         { to: '/distributor/invoices', icon: <FileText className="w-5 h-5" />, label: t('Invoices') },
         { to: '/distributor/notifications', icon: <Bell className="w-5 h-5" />, label: t('Notifications'), badge: unread },
         { to: '/distributor/settings', icon: <Settings className="w-5 h-5" />, label: t('Settings') },
-        { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
+        { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: t('Profile') },
       ]
     : [
         { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: t('My Distributor'), dot: hasMyDistributorDot },
         { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: t('Notifications'), badge: unread },
-        { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: 'Profile' },
+        { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: t('Profile') },
       ];
 
   return (
@@ -101,7 +101,7 @@ export function MobileNav() {
                 </span>
               )}
             </div>
-            <span className="text-[10px]">More</span>
+            <span className="text-[10px]">{t('More')}</span>
           </button>
         </div>
       </div>

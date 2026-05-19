@@ -91,7 +91,7 @@ export async function createInvoicePdf({
   distributorEmail,
   shopkeeperPhone,
   shopkeeperEmail,
-  language = 'hinglish',
+  language = 'english',
   gstInfo,
 }: InvoicePdfInput) {
   const brandAssets = await getPdfBrandAssets();

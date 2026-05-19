@@ -1,4 +1,4 @@
-﻿import { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, Tag, Package, Send, CheckCircle, Phone } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -16,7 +16,7 @@ export function DistributorProfilePage() {
   const { distributorId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { distributorProfiles, shopkeeperProfiles, products, connections, requestConnection, fetchProducts } = useAppStore();
+  const { distributorProfiles, shopkeeperProfiles, products, connections, requestConnection, cancelConnection, fetchProducts } = useAppStore();
   const { show } = useToast();
 
   const distributor = distributorProfiles.find(dp => dp.id === distributorId);
@@ -80,6 +80,35 @@ export function DistributorProfilePage() {
       show(`Connection request sent to ${distributor.businessName}!`);
     } else {
       show('Failed to send request', 'error');
+    }
+  };
+
+  const handleCancelOrDisconnect = async () => {
+    if (!myConnection || !distributor) return;
+
+    const isFirstConfirmed = window.confirm(
+      myConnection.status === 'active'
+        ? `Are you sure you want to disconnect from ${distributor.businessName}?`
+        : `Are you sure you want to cancel your connection request to ${distributor.businessName}?`
+    );
+    if (!isFirstConfirmed) return;
+
+    const isSecondConfirmed = window.confirm(
+      myConnection.status === 'active'
+        ? `Double Check: Do you really want to remove this connection? You won't be able to place orders until connected again.`
+        : `Double Check: Are you absolutely sure you want to cancel this pending request?`
+    );
+    if (!isSecondConfirmed) return;
+
+    const success = await cancelConnection(myConnection.id);
+    if (success) {
+      show(
+        myConnection.status === 'active'
+          ? `Disconnected from ${distributor.businessName}`
+          : `Request canceled successfully`
+      );
+    } else {
+      show('Failed to cancel connection', 'error');
     }
   };
 
@@ -194,14 +223,30 @@ export function DistributorProfilePage() {
           </div>
 
           {myConnection?.status === 'active' ? (
-            <div className="flex items-center justify-center gap-2 p-3 bg-green-50 rounded-xl text-green-700">
-              <CheckCircle className="w-5 h-5" />
-              <span className="font-medium">Connected</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-center gap-2 p-3 bg-green-50 rounded-xl text-green-700">
+                <CheckCircle className="w-5 h-5" />
+                <span className="font-medium">Connected</span>
+              </div>
+              <button
+                onClick={() => void handleCancelOrDisconnect()}
+                className="w-full text-center py-2 text-xs font-semibold text-red-600 hover:text-red-800 transition-colors border border-red-200 rounded-xl bg-red-50 hover:bg-red-100"
+              >
+                Disconnect
+              </button>
             </div>
           ) : myConnection?.status === 'pending' ? (
-            <button disabled className="btn-secondary w-full opacity-60 cursor-not-allowed">
-              Request Pending
-            </button>
+            <div className="flex flex-col gap-2">
+              <button disabled className="btn-secondary w-full opacity-60 cursor-not-allowed">
+                Request Pending
+              </button>
+              <button
+                onClick={() => void handleCancelOrDisconnect()}
+                className="w-full text-center py-2 text-xs font-semibold text-gray-500 hover:text-red-600 transition-colors border border-gray-200 rounded-xl bg-gray-50 hover:bg-red-50"
+              >
+                Cancel Request
+              </button>
+            </div>
           ) : (
             <button onClick={() => void handleConnect()} className="btn-primary w-full flex items-center justify-center gap-2">
               <Send className="w-4 h-4" />

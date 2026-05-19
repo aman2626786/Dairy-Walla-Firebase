@@ -90,7 +90,7 @@ export function OrdersPage() {
       await updateOrderPaymentStatus(order.id, paymentStatus);
       show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'} for ${order.shopName}`);
     } catch {
-      show('Payment status save nahi hua. DB migration check karein.', 'error');
+      show('Payment status could not be saved. Check DB migration.', 'error');
     }
   };
 

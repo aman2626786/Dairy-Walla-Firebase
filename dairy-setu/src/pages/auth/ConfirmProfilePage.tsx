@@ -8,7 +8,6 @@ import { getCurrentLocation, getCoordinatesFromLocation } from "../../utils/loca
 import { auth as firebaseAuth } from "../../lib/firebase";
 import { apiClient } from "../../lib/apiClient";
 import { BrandLogo } from "../../components/ui/BrandLogo";
-import { useTranslation, type AppLanguage } from "../../utils/i18n";
 import type { DistributorType, Role } from "../../types";
 
 type Step = "verifying" | "profile" | "done" | "error";
@@ -52,7 +51,6 @@ export function ConfirmProfilePage() {
         : "dairy";
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const { t, language, setLanguage } = useTranslation();
 
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
@@ -67,7 +65,6 @@ export function ConfirmProfilePage() {
   const [shopCity, setShopCity] = useState("");
   const [deliveryTiming, setDeliveryTiming] = useState("");
   const [locationName, setLocationName] = useState("");
-  const [pin, setPin] = useState("");
   const [phone, setPhone] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const { show } = useToast();
@@ -172,10 +169,9 @@ export function ConfirmProfilePage() {
   const handleSubmit = async () => {
     const name = role === "distributor" ? ownerName : shopOwnerName;
     const sName = role === "distributor" ? businessName : shopName;
-    if (!name.trim()) { show("Owner name daalo", "error"); return; }
-    if (!sName.trim()) { show(role === "distributor" ? "Business name daalo" : "Shop name daalo", "error"); return; }
-    if (phone.length !== 10) { show("10 digit ka Phone number daalo", "error"); return; }
-    if (pin.length !== 6) { show("6 digit ka PIN set karein", "error"); return; }
+    if (!name.trim()) { show("Owner name is required.", "error"); return; }
+    if (!sName.trim()) { show(role === "distributor" ? "Business name is required." : "Shop name is required.", "error"); return; }
+    if (phone.length !== 10) { show("Phone number must be exactly 10 digits.", "error"); return; }
 
     setLoading(true);
     try {
@@ -186,7 +182,7 @@ export function ConfirmProfilePage() {
       } else {
         const fUser = firebaseAuth.currentUser;
         if (!fUser) {
-          show("Session expired. Login karo.", "error");
+          show("Session expired. Please log in again.", "error");
           navigate("/login");
           return;
         }
@@ -197,7 +193,6 @@ export function ConfirmProfilePage() {
         phone,
         role,
         name,
-        pin,
         businessData: role === "distributor" ? {
           businessName: businessName.trim(),
           ownerName: ownerName.trim(),
@@ -272,7 +267,7 @@ export function ConfirmProfilePage() {
         {step === "verifying" && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
             <div className="w-12 h-12 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-sm text-gray-600">Account check ho raha hai...</p>
+            <p className="text-sm text-gray-600">Verifying account status...</p>
           </div>
         )}
 
@@ -283,10 +278,10 @@ export function ConfirmProfilePage() {
               <AlertCircle className="w-8 h-8 text-red-500" />
             </div>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Session Expired</h2>
-            <p className="text-sm text-gray-500 mb-5">Profile setup session expire ho gayi hai.</p>
+            <p className="text-sm text-gray-500 mb-5">Profile setup session has expired.</p>
             <button onClick={() => navigate("/login")}
               className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-              Login Karke Setup Pura Karein
+              Log In to Complete Setup
             </button>
           </div>
         )}
@@ -299,19 +294,7 @@ export function ConfirmProfilePage() {
               <div className="font-semibold text-gray-900 capitalize">{role}</div>
             </div>
 
-            <div className="mb-5 bg-brand-50 p-4 rounded-xl border border-brand-100">
-              <label className="block text-sm font-semibold text-brand-900 mb-1.5">{t('App Language')}</label>
-              <select
-                value={language}
-                onChange={e => setLanguage(e.target.value as AppLanguage)}
-                className="w-full px-3 py-2.5 border border-brand-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
-              >
-                <option value="hinglish">Hinglish (Default)</option>
-                <option value="english">English</option>
-                <option value="hindi">Hindi</option>
-              </select>
-              <p className="text-xs text-brand-700 mt-1">{t('Select your preferred language.')}</p>
-            </div>
+
 
             <h2 className="text-lg font-semibold text-gray-900 mb-4">{role === "distributor" ? "Business Details" : "Shop Details"}</h2>
             <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
@@ -413,10 +396,7 @@ export function ConfirmProfilePage() {
                   </div>
                 </div>
               )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Set 6-Digit PIN (For future login) *</label>
-            <input type="password" pattern="[0-9]*" inputMode="numeric" className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 tracking-[0.5em] font-bold" placeholder="------" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))} maxLength={6} />
-          </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Location (optional)</label>
                 <input className="w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-2" placeholder="e.g. Vaishali Nagar, Ajmer" value={locationName} onChange={e => setLocationName(e.target.value)} />
@@ -441,7 +421,7 @@ export function ConfirmProfilePage() {
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h2 className="text-lg font-semibold text-gray-900 mb-2">Profile Ready!</h2>
-            <p className="text-sm text-gray-500">Dashboard pe ja rahe hain...</p>
+            <p className="text-sm text-gray-500">Redirecting to dashboard...</p>
           </div>
         )}
       </div>

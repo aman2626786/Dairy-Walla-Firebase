@@ -252,7 +252,7 @@ export function ShopCatalogPage() {
       {!selectedGroup ? (
         <div className="space-y-3 mb-24">
           <div className="text-sm text-gray-600">
-            Distributor select karein. Phir sirf usi distributor ke products dikhenge.
+            Select a distributor. You will only see products from that distributor.
           </div>
           {groupedByDistributor.map(group => {
             const totalProducts = availableProducts.filter(product => product.distributorId === group.conn.distributorId).length;
@@ -317,7 +317,7 @@ export function ShopCatalogPage() {
           type="button"
           onClick={() => {
             if (cart.length > 0) {
-              show('Pehle current cart ka order place karein ya cart clear karein.', 'info');
+              show('Please place the order for your current cart first or clear the cart.', 'info');
               return;
             }
             setSelectedDistributorId(null);

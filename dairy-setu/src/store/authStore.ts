@@ -36,7 +36,7 @@ interface AuthState {
   isAuthenticated: boolean;
   loading: boolean;
   signIn: (email: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
-  manualLogin: (email: string, pin: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
+  manualLogin: (email: string, role: Role) => Promise<{ error?: string; user?: User; needsProfile?: boolean }>;
   manualRegister: (email: string, role: Role) => Promise<{ error?: string; success?: boolean }>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<{ error?: string }>;
@@ -140,7 +140,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const firebaseEmail = firebaseAuth.currentUser?.email;
       if (!firebaseEmail || firebaseEmail.toLowerCase() !== email.toLowerCase()) {
         set({ loading: false });
-        return { error: 'Session mismatch. Kripya Google se dubara login karein.' };
+        return { error: 'Session mismatch. Please log in with Google again.' };
       }
 
       const res = await apiClient.post('/auth/me', {});
@@ -202,10 +202,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: null, isAuthenticated: false });
   },
 
-  manualLogin: async (email, pin, role) => {
+  manualLogin: async (email, role) => {
     set({ loading: true });
     try {
-      const res = await apiClient.post('/auth/manual-login', { email, pin, role });
+      const res = await apiClient.post('/auth/manual-login', { email, role });
       const { profile, token, needsSetup } = res.data;
 
       localStorage.setItem('dairy-walla-manual-token', token);
@@ -258,7 +258,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const fUser = await waitForFirebaseUser();
       if (!fUser) {
         set({ loading: false });
-        return { error: 'Active session nahi mila. Kripya Google se login karke dobara try karein.' };
+        return { error: 'Active session not found. Please log in with Google again and retry.' };
       }
 
       await apiClient.delete('/auth/me');
@@ -276,9 +276,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('Delete Account API Error:', e);
       set({ loading: false });
       if (e.code === 'auth/requires-recent-login') {
-        return { error: 'Security ke liye, pehle logout karke dobara login karein, phir account delete karein.' };
+        return { error: 'For security reasons, please log out and log in again before deleting your account.' };
       }
-      return { error: 'Account delete nahi ho paya.' };
+      return { error: 'Could not delete the account.' };
     }
   },
 
@@ -304,7 +304,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.error('Failed to update user in DB', e);
       set({ user });
       const message = axios.isAxiosError(e) ? String(e.response?.data?.error || e.message || '').trim() : '';
-      throw new Error(message || 'Profile update nahi ho paya');
+      throw new Error(message || 'Could not update the profile');
     }
   },
 }));

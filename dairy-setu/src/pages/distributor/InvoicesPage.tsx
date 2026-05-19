@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import type { Order } from '../../types';
 import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
 import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
-import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
+import { getInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 import { BrandLogo } from '../../components/ui/BrandLogo';
 import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize } from '../../utils/orderQuantity';
 import { ManualBillModal } from './ManualBillModal';
@@ -21,7 +21,7 @@ export function InvoicesPage() {
   const { show } = useToast();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [manualBillOpen, setManualBillOpen] = useState(false);
-  const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(
+  const [invoiceLanguage] = useState<InvoiceLanguage>(
     () => getInvoiceLanguage()
   );
 
@@ -83,7 +83,7 @@ export function InvoicesPage() {
       });
       show('Invoice PDF downloaded');
     } catch {
-      show('Invoice generate nahi hua. Please retry.', 'error');
+      show('Invoice could not be generated. Please retry.', 'error');
     }
   };
 
@@ -109,7 +109,7 @@ export function InvoicesPage() {
       show('Print bill opened');
     } catch {
       printWindow?.close();
-      show('Print open nahi hua. Please retry.', 'error');
+      show('Could not open print window. Please retry.', 'error');
     }
   };
 
@@ -179,22 +179,7 @@ export function InvoicesPage() {
           <PlusCircle className="w-4 h-4" /> Create Manual Bill
         </button>
       </div>
-      <div className="card p-3 mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm text-gray-700">Bill language</p>
-        <select
-          value={invoiceLanguage}
-          onChange={e => {
-            const next = e.target.value as InvoiceLanguage;
-            setInvoiceLanguageState(next);
-            setInvoiceLanguage(next);
-          }}
-          className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white"
-        >
-          <option value="hinglish">Hinglish (Default)</option>
-          <option value="english">English</option>
-          <option value="hindi">Hindi</option>
-        </select>
-      </div>
+
 
       {billableOrders.length === 0 ? (
         <EmptyState

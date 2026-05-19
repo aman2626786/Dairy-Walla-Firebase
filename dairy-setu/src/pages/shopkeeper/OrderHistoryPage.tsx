@@ -34,7 +34,7 @@ export function OrderHistoryPage() {
 
   const handleRepeatOrder = () => {
     if (!yesterdayOrder) {
-      show('Kal ka koi order nahi mila', 'error');
+      show("Yesterday's order was not found.", 'error');
       return;
     }
     clearCart();
@@ -44,7 +44,7 @@ export function OrderHistoryPage() {
         setCartQuantity(product, item.quantity);
       }
     });
-    show(`${yesterdayOrder.items.length} items cart mein add ho gaye!`);
+    show(`${yesterdayOrder.items.length} items added to your cart!`);
     navigate('/shop/review');
   };
 
@@ -65,7 +65,7 @@ export function OrderHistoryPage() {
             <RefreshCw className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
-            <div className="font-semibold text-brand-800 text-sm">Kal ka Order Repeat Karo</div>
+            <div className="font-semibold text-brand-800 text-sm">Repeat Yesterday's Order</div>
             <div className="text-xs text-brand-600 mt-0.5">
               {yesterdayOrder.items.length} items - ₹{yesterdayOrder.total.toLocaleString()}
             </div>

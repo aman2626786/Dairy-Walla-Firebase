@@ -10,7 +10,7 @@ import { useToast } from '../../components/ui/Toast';
 import type { Order, PaymentStatus } from '../../types';
 import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
 import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
-import { getInvoiceLanguage, setInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
+import { getInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
 import { formatInvoiceShareItem, formatItemRate, formatItemTotalQuantity, formatOrderTotalQuantity, formatPackSize } from '../../utils/orderQuantity';
 import { ManualBillModal } from './ManualBillModal';
 
@@ -26,7 +26,7 @@ export function ShopkeeperProfilePage() {
   const [toTime, setToTime] = useState('');
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
   const [manualBillOpen, setManualBillOpen] = useState(false);
-  const [invoiceLanguage, setInvoiceLanguageState] = useState<InvoiceLanguage>(
+  const [invoiceLanguage] = useState<InvoiceLanguage>(
     () => getInvoiceLanguage()
   );
 
@@ -94,7 +94,7 @@ export function ShopkeeperProfilePage() {
       await updateOrderPaymentStatus(order.id, paymentStatus);
       show(`Payment marked as ${paymentStatus === 'paid' ? 'paid' : 'unpaid'}`);
     } catch {
-      show('Payment status save nahi hua. DB migration check karein.', 'error');
+      show('Payment status could not be saved. Check DB migration.', 'error');
     }
   };
 
@@ -119,7 +119,7 @@ export function ShopkeeperProfilePage() {
       });
       show('Invoice PDF downloaded');
     } catch {
-      show('Invoice generate nahi hua. Please retry.', 'error');
+      show('Invoice could not be generated. Please retry.', 'error');
     }
   };
 
@@ -144,7 +144,7 @@ export function ShopkeeperProfilePage() {
       show('Print bill opened');
     } catch {
       printWindow?.close();
-      show('Print open nahi hua. Please retry.', 'error');
+      show('Could not open print window. Please retry.', 'error');
     }
   };
 
@@ -166,7 +166,7 @@ export function ShopkeeperProfilePage() {
         </button>
         <div className="card p-6 mt-4">
           <h1 className="font-semibold text-gray-900 mb-1">Shopkeeper not found</h1>
-          <p className="text-sm text-gray-500">Aapko is shopkeeper ki profile access nahi hai.</p>
+          <p className="text-sm text-gray-500">You do not have access to this shopkeeper profile.</p>
         </div>
       </div>
     );
@@ -253,24 +253,9 @@ export function ShopkeeperProfilePage() {
             <PlusCircle className="w-3.5 h-3.5" /> Create Bill
           </button>
         </div>
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-xs text-gray-600">Bill language</p>
-          <select
-            value={invoiceLanguage}
-            onChange={e => {
-              const next = e.target.value as InvoiceLanguage;
-              setInvoiceLanguageState(next);
-              setInvoiceLanguage(next);
-            }}
-            className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white"
-          >
-            <option value="hinglish">Hinglish (Default)</option>
-            <option value="english">English</option>
-            <option value="hindi">Hindi</option>
-          </select>
-        </div>
+
         {billableOrders.length === 0 ? (
-          <p className="text-sm text-gray-500">Accepted/Fulfilled orders aane par yahan se bill generate hoga.</p>
+          <p className="text-sm text-gray-500">Invoices can be generated here once orders are accepted or fulfilled.</p>
         ) : distributorType === 'dual' ? (
           <div className="space-y-4">
             <div>
@@ -346,7 +331,7 @@ export function ShopkeeperProfilePage() {
           All Orders (Date-wise sequence)
         </h2>
         {myOrdersForShopkeeper.length === 0 ? (
-          <div className="card p-5 text-sm text-gray-500">Is filter ke liye koi order nahi mila.</div>
+          <div className="card p-5 text-sm text-gray-500">No orders found for this filter.</div>
         ) : (
           <div className="space-y-3">
             {myOrdersForShopkeeper.map(order => (

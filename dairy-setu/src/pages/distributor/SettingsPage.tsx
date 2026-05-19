@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
-import { useTranslation, type AppLanguage } from '../../utils/i18n';
+import { useTranslation } from '../../utils/i18n';
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
@@ -29,7 +29,7 @@ export function SettingsPage() {
   const { user } = useAuthStore();
   const { distributorProfiles, updateDistributorSettings } = useAppStore();
   const { show } = useToast();
-  const { t, language, setLanguage } = useTranslation();
+  const { t } = useTranslation();
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const [start, setStart] = useState(profile?.orderWindowStart || '18:00');
@@ -130,23 +130,7 @@ export function SettingsPage() {
         <button className="btn-primary" onClick={handleSave}>Save Settings</button>
       </div>
 
-      <div className="card p-5 mb-4">
-        <h2 className="font-semibold text-gray-900 text-sm mb-3">{t('App Language')}</h2>
-        <p className="text-xs text-gray-500 mb-3">{t('Select your preferred language.')}</p>
-        <select
-          value={language}
-          onChange={e => {
-            const next = e.target.value as AppLanguage;
-            setLanguage(next);
-            show('Language updated for the app');
-          }}
-          className="input"
-        >
-          <option value="hinglish">Hinglish (Default)</option>
-          <option value="english">English</option>
-          <option value="hindi">Hindi</option>
-        </select>
-      </div>
+
 
       {/* WhatsApp Bridge info */}
       <div className="card p-5 bg-green-50 border-green-200">

@@ -51,6 +51,9 @@ export function getCurrentLocation(): Promise<{ latitude: number; longitude: num
 
 // Format distance for display
 export function formatDistance(km: number): string {
+  if (km < 0.005) {
+    return 'Very close';
+  }
   if (km < 1) {
     return `${Math.round(km * 1000)}m away`;
   }

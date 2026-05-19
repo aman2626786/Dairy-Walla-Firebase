@@ -148,11 +148,11 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
       return;
     }
     if (!shopName.trim() || !shopkeeperName.trim()) {
-      show('Shop name aur shopkeeper name required hai.', 'error');
+      show('Shop name and shopkeeper name are required.', 'error');
       return;
     }
     if (selectedItems.length === 0) {
-      show('Bill ke liye kam se kam ek product select karein.', 'error');
+      show('Please select at least one product for the bill.', 'error');
       return;
     }
     if (
@@ -163,7 +163,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
         parsedSgstPercent < 0 ||
         parsedGstPercent > 100)
     ) {
-      show('CGST aur SGST total 0 se 100 ke beech hona chahiye.', 'error');
+      show('CGST and SGST totals must be between 0 and 100.', 'error');
       return;
     }
 
@@ -212,7 +212,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
         });
       } catch (pdfError) {
         console.error('Manual bill PDF error:', pdfError);
-        show('Bill save ho gaya, PDF generate nahi hua. Invoices se PDF/Print retry karein.', 'error');
+        show('Bill saved, but PDF could not be generated. Please retry PDF/Print from Invoices.', 'error');
         onCreated?.(order);
         onClose();
         return;
@@ -222,7 +222,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
       onCreated?.(order);
       onClose();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Manual bill generate nahi hua. Please retry.';
+      const message = error instanceof Error ? error.message : 'Could not generate manual bill. Please retry.';
       show(message, 'error');
     } finally {
       setSaving(false);
@@ -349,7 +349,7 @@ export function ManualBillModal({ open, onClose, distributor, initialShopkeeper,
         <div className="border border-gray-100 rounded-xl overflow-hidden">
           <div className="max-h-72 overflow-y-auto divide-y divide-gray-50">
             {visibleProducts.length === 0 ? (
-              <div className="p-4 text-sm text-gray-500">Is section me available product nahi mila.</div>
+              <div className="p-4 text-sm text-gray-500">No products available in this section.</div>
             ) : (
               visibleProducts.map(product => {
                 const quantity = Number(quantities[product.id] || 0);

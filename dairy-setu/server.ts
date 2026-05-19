@@ -486,15 +486,11 @@ app.post('/api/auth/me', async (req: AuthenticatedRequest, res) => {
 
 // Manual Login: email and PIN based verification
 app.post('/api/auth/manual-login', async (req, res) => {
-  const { email, pin, role } = req.body;
+  const { email, role } = req.body;
   try {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const cleanedPin = String(pin || '').trim();
     if (!normalizedEmail || !normalizedEmail.includes('@')) {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
-    }
-    if (!/^\d{6}$/.test(cleanedPin)) {
-      return res.status(400).json({ error: 'PIN must be exactly 6 digits.' });
     }
 
     const profile = await prisma.profile.findUnique({ where: { email: normalizedEmail } });
@@ -504,14 +500,6 @@ app.post('/api/auth/manual-login', async (req, res) => {
 
     if (role && profile.role !== role) {
       return res.status(409).json({ error: `This email is registered as a ${profile.role}. Please log in with the correct role.` });
-    }
-
-    if (!profile.pin) {
-      return res.status(400).json({ error: 'Account exists but no PIN is configured. Try registering again or completing profile setup.' });
-    }
-
-    if (!verifyPin(cleanedPin, profile.pin)) {
-      return res.status(401).json({ error: 'Incorrect 6-digit PIN. Please try again.' });
     }
 
     const { dp, sp } = await getRoleProfiles(profile.id);
@@ -637,7 +625,7 @@ app.post('/api/auth/manual-register', async (req, res) => {
 
 // Setup profile using token email
 app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
-  const { phone, role, name, businessData, shopData, pin } = req.body;
+  const { phone, role, name, businessData, shopData } = req.body;
   try {
     const email = req.authEmail;
     if (!email) return res.status(401).json({ error: 'Unauthorized' });
@@ -652,8 +640,6 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Name is required.' });
     }
 
-    const pinHash = hashPin(pin);
-
     let profile = await prisma.profile.findUnique({ where: { email } });
     if (!profile) {
       const phoneConflict = await prisma.profile.findFirst({ where: { phone: cleanedPhone } });
@@ -666,7 +652,6 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
           phone: cleanedPhone,
           role,
           name: cleanedName,
-          pin: pinHash,
         },
       });
     } else {
@@ -696,7 +681,6 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
           role,
           name: cleanedName,
           phone: cleanedPhone,
-          pin: pinHash,
         },
       });
     }
@@ -1058,12 +1042,46 @@ app.get('/api/connections/:role/:userId', async (req, res) => {
     if (role === 'distributor') {
       const dp = await prisma.distributorProfile.findUnique({ where: { userId } });
       if (!dp) return res.json([]);
-      return res.json(await prisma.connection.findMany({ where: { distributorId: dp.id } }));
+      const conns = await prisma.connection.findMany({
+        where: { distributorId: dp.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      // Deduplicate by shopkeeperId
+      const uniqueMap = new Map<string, typeof conns[0]>();
+      for (const c of conns) {
+        if (!c.shopkeeperId) continue;
+        const existing = uniqueMap.get(c.shopkeeperId);
+        if (!existing) {
+          uniqueMap.set(c.shopkeeperId, c);
+        } else {
+          if (existing.status !== 'active' && c.status === 'active') {
+            uniqueMap.set(c.shopkeeperId, c);
+          }
+        }
+      }
+      return res.json(Array.from(uniqueMap.values()));
     }
 
     const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId } });
     if (!sp) return res.json([]);
-    return res.json(await prisma.connection.findMany({ where: { shopkeeperId: sp.id } }));
+    const conns = await prisma.connection.findMany({
+      where: { shopkeeperId: sp.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    // Deduplicate by distributorId
+    const uniqueMap = new Map<string, typeof conns[0]>();
+    for (const c of conns) {
+      if (!c.distributorId) continue;
+      const existing = uniqueMap.get(c.distributorId);
+      if (!existing) {
+        uniqueMap.set(c.distributorId, c);
+      } else {
+        if (existing.status !== 'active' && c.status === 'active') {
+          uniqueMap.set(c.distributorId, c);
+        }
+      }
+    }
+    return res.json(Array.from(uniqueMap.values()));
   } catch {
     return res.status(500).json({ error: 'Server error' });
   }
@@ -1086,6 +1104,61 @@ app.post('/api/connections', async (req, res) => {
     const dp = await prisma.distributorProfile.findUnique({ where: { connectionCode: distributorCode } });
     if (!dp) return res.status(404).json({ error: 'Invalid code' });
 
+    // Prevent duplicate connections or pending requests
+    const existingConn = await prisma.connection.findFirst({
+      where: {
+        shopkeeperId,
+        distributorId: dp.id,
+      },
+    });
+
+    if (existingConn) {
+      if (existingConn.status === 'active') {
+        return res.status(400).json({ error: 'You are already connected to this distributor.' });
+      }
+      if (existingConn.status === 'pending') {
+        return res.status(400).json({ error: 'A connection request is already pending.' });
+      }
+      // If rejected, reuse the record and update it to pending
+      const updatedConn = await prisma.connection.update({
+        where: { id: existingConn.id },
+        data: {
+          shopkeeperName,
+          shopName,
+          shopkeeperPhone,
+          status: 'pending',
+          createdAt: new Date(),
+        },
+      });
+
+      // Send notifications for recycled connection request
+      try {
+        if (dp.userId) {
+          await createNotificationAndPush({
+            userId: dp.userId,
+            type: 'new_connection',
+            title: 'New Connection Request',
+            message: `${shopName || shopkeeperName || 'Shopkeeper'} wants to connect with you.`,
+            data: { connectionId: updatedConn.id, role: 'distributor' },
+          });
+        }
+        const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { id: shopkeeperId } });
+        if (ownSp?.userId) {
+          await createNotificationAndPush({
+            userId: ownSp.userId,
+            type: 'connection_requested',
+            title: 'Request Sent',
+            message: `Your connection request has been sent to ${dp.businessName || 'Distributor'}.`,
+            data: { connectionId: updatedConn.id, role: 'shopkeeper' },
+          });
+        }
+      } catch (err) {
+        console.error('Error sending recycled connection request notifications:', err);
+      }
+
+      return res.json({ connection: updatedConn, distributorUserId: dp.userId });
+    }
+
     const conn = await prisma.connection.create({
       data: {
         shopkeeperId,
@@ -1099,6 +1172,31 @@ app.post('/api/connections', async (req, res) => {
         autoOrderEnabled: false,
       },
     });
+
+    // Send notifications for new connection request
+    try {
+      if (dp.userId) {
+        await createNotificationAndPush({
+          userId: dp.userId,
+          type: 'new_connection',
+          title: 'New Connection Request',
+          message: `${shopName || shopkeeperName || 'Shopkeeper'} wants to connect with you.`,
+          data: { connectionId: conn.id, role: 'distributor' },
+        });
+      }
+      const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { id: shopkeeperId } });
+      if (ownSp?.userId) {
+        await createNotificationAndPush({
+          userId: ownSp.userId,
+          type: 'connection_requested',
+          title: 'Request Sent',
+          message: `Your connection request has been sent to ${dp.businessName || 'Distributor'}.`,
+          data: { connectionId: conn.id, role: 'shopkeeper' },
+        });
+      }
+    } catch (err) {
+      console.error('Error sending new connection request notifications:', err);
+    }
 
     return res.json({ connection: conn, distributorUserId: dp.userId });
   } catch {
@@ -1115,12 +1213,15 @@ app.patch('/api/connections/:id', async (req, res) => {
 
     if (requester.role === 'distributor') {
       const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
-      if (!ownDp || conn.distributorId !== ownDp.id) {
+      const allowed = (ownDp && conn.distributorId === ownDp.id) || conn.distributorId === requester.id;
+      if (!allowed) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     } else if (requester.role === 'shopkeeper') {
       const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
-      if (!ownSp || conn.shopkeeperId !== ownSp.id) {
+      const phoneMatches = conn.shopkeeperPhone && (conn.shopkeeperPhone === requester.phone || (ownSp && conn.shopkeeperPhone === ownSp.phone));
+      const allowed = (ownSp && conn.shopkeeperId === ownSp.id) || conn.shopkeeperId === requester.id || phoneMatches;
+      if (!allowed) {
         return res.status(403).json({ error: 'Forbidden' });
       }
     } else {
@@ -1135,9 +1236,74 @@ app.patch('/api/connections/:id', async (req, res) => {
     if (req.body.deliveryGroupName !== undefined) updateData.deliveryGroupName = req.body.deliveryGroupName ? String(req.body.deliveryGroupName).trim() : null;
     if (req.body.shopkeeperPhone !== undefined) updateData.shopkeeperPhone = req.body.shopkeeperPhone ? String(req.body.shopkeeperPhone).trim() : null;
 
-    const updated = await prisma.connection.update({ where: { id: req.params.id }, data: updateData });
+        const updated = await prisma.connection.update({ where: { id: req.params.id }, data: updateData });
+
+    // Send notifications if connection status changes to active
+    if (updated.status === 'active' && conn.status !== 'active') {
+      try {
+        if (updated.shopkeeperId) {
+          const sp = await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } });
+          if (sp?.userId) {
+            await createNotificationAndPush({
+              userId: sp.userId,
+              type: 'connection_accepted',
+              title: 'Connection Accepted',
+              message: `${updated.businessName || 'Distributor'} accepted your connection request. You can now place orders.`,
+              data: { connectionId: updated.id, role: 'shopkeeper' },
+            });
+          }
+        }
+        if (updated.distributorId) {
+          const dp = await prisma.distributorProfile.findUnique({ where: { id: updated.distributorId } });
+          if (dp?.userId) {
+            await createNotificationAndPush({
+              userId: dp.userId,
+              type: 'connection_active',
+              title: 'Connection Active',
+              message: `You are now connected with ${updated.shopName || updated.shopkeeperName || 'Shopkeeper'}.`,
+              data: { connectionId: updated.id, role: 'distributor' },
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error sending connection active notifications:', err);
+      }
+    }
+
     return res.json(updated);
   } catch {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/connections/:id', async (req, res) => {
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    const conn = await prisma.connection.findUnique({ where: { id: req.params.id } });
+    if (!conn) return res.status(404).json({ error: 'Not found' });
+
+    if (requester.role === 'distributor') {
+      const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+      const allowed = (ownDp && conn.distributorId === ownDp.id) || conn.distributorId === requester.id;
+      if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else if (requester.role === 'shopkeeper') {
+      const ownSp = await prisma.shopkeeperProfile.findUnique({ where: { userId: requester.id } });
+      const phoneMatches = conn.shopkeeperPhone && (conn.shopkeeperPhone === requester.phone || (ownSp && conn.shopkeeperPhone === ownSp.phone));
+      const allowed = (ownSp && conn.shopkeeperId === ownSp.id) || conn.shopkeeperId === requester.id || phoneMatches;
+      if (!allowed) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } else {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    await prisma.connection.delete({ where: { id: req.params.id } });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error(error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
