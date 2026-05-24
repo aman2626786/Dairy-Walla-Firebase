@@ -967,7 +967,10 @@ app.get('/api/profiles/shopkeeper-by-id/:id', async (req, res) => {
 app.get('/api/distributors', async (req, res) => {
   try {
     const { lat, lng } = req.query;
-    const dps = await prisma.distributorProfile.findMany({ include: { user: true } });
+    const dps = await prisma.distributorProfile.findMany({ 
+      where: { profileComplete: true },
+      include: { user: true } 
+    });
     let results: any[] = dps.map((dp) => ({ ...dp, phone: dp.user.phone, email: dp.user.email }));
 
     if (lat !== undefined && lng !== undefined) {
