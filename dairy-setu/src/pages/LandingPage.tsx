@@ -96,18 +96,18 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/70 backdrop-blur-md border border-brand-100/50 shadow-md shadow-brand-100/20 text-brand-700 text-xs font-bold mb-8 animate-fade-in hover:scale-105 transition-all">
             <Zap className="w-3.5 h-3.5 fill-brand-600 animate-bounce" />
-            {t('The Complete Dairy Business Operating System')}
+            {t('The Complete Dairy & Ice Cream Business Operating System')}
           </div>
           
           <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black text-slate-900 leading-[1.05] mb-6 sm:mb-8 max-w-5xl mx-auto tracking-tight">
-            {language === 'hindi' ? 'डेयरी डिस्ट्रीब्यूशन को करें' : 'Digitizing Dairy'} <br className="hidden md:block" />
+            {language === 'hindi' ? 'डेयरी और आइसक्रीम डिस्ट्रीब्यूशन को करें' : 'Digitizing Dairy & Ice Cream'} <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 via-emerald-500 to-amber-500">
               {language === 'hindi' ? 'डिजिटल' : 'Distribution'}
             </span>
           </h1>
           
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-500 leading-relaxed mb-8 sm:mb-12 max-w-4xl mx-auto font-medium">
-            {t('DairyWalla helps dairy distributors manage product catalogs, shopkeeper orders, stock availability, order windows, invoices, and delivery workflows from one simple platform.')}
+            {t('DairyWalla helps dairy and ice cream distributors manage product catalogs, shopkeeper orders, stock availability, order windows, invoices, and delivery workflows from one simple platform.')}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 sm:mb-24 px-2 sm:px-0">
@@ -342,7 +342,7 @@ export function LandingPage() {
                      </div>
                      <h3 className="text-xl font-bold text-slate-900 mb-4">{t('Who It Helps & How')}</h3>
                      <p className="text-slate-500 text-sm font-medium leading-relaxed mb-6">
-                        {t('Built specifically for local Dairy Distributors and retail Shopkeepers. Shopkeepers order in 1-click; Distributors get auto-consolidated load lists, automated PDF bills, and WhatsApp summaries instantly.')}
+                        {t('Built specifically for local Dairy and Ice Cream Distributors and retail Shopkeepers. Shopkeepers order in 1-click; Distributors get auto-consolidated load lists, automated PDF bills, and WhatsApp summaries instantly.')}
                      </p>
                   </div>
                   <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider relative z-10 flex items-center gap-1">
