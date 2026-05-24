@@ -99,6 +99,20 @@ export function ShopkeeperProfilePage() {
     show(`Order from ${order.shopName} accepted`);
   };
 
+  const handleFulfill = (order: Order) => {
+    updateOrderStatus(order.id, 'fulfilled');
+    if (order.shopkeeperId) {
+      addNotification({
+        userId: order.shopkeeperId,
+        type: 'order_fulfilled',
+        message: 'Your order has been fulfilled',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    show(`Order from ${order.shopName} marked as fulfilled`);
+  };
+
   const handleReject = (order: Order) => {
     updateOrderStatus(order.id, 'rejected');
     if (order.shopkeeperId) {
@@ -386,6 +400,13 @@ export function ShopkeeperProfilePage() {
                         </button>
                         <button onClick={() => handleReject(order)} className="btn-danger py-1 px-2.5 text-xs">
                           <XCircle className="w-3.5 h-3.5 mr-1 inline" /> Reject
+                        </button>
+                      </div>
+                    )}
+                    {order.status === 'accepted' && (
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button onClick={() => handleFulfill(order)} className="btn-primary py-1 px-2.5 text-xs">
+                          <CheckCircle className="w-3.5 h-3.5 mr-1 inline" /> Mark Fulfilled
                         </button>
                       </div>
                     )}

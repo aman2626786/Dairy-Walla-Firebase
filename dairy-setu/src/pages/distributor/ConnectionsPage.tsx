@@ -18,7 +18,7 @@ export function ConnectionsPage() {
     fetchShopkeeperProfileById,
     updateConnectionStatus,
     addNotification,
-  } = useAppStore();
+   cancelConnection, } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
   const [manualBillOpen, setManualBillOpen] = useState(false);
@@ -64,6 +64,17 @@ export function ConnectionsPage() {
       createdAt: new Date().toISOString(),
     });
     show(`${shopName} approved`);
+  };
+
+  const handleDisconnect = async (connId: string) => {
+    if (confirm('Are you sure you want to disconnect this shopkeeper?')) {
+      const success = await cancelConnection(connId);
+      if (success) {
+        show('Shopkeeper disconnected successfully');
+      } else {
+        show('Failed to disconnect shopkeeper', 'error');
+      }
+    }
   };
 
   const handleReject = (connId: string, shopName: string, shopkeeperId: string) => {
@@ -231,6 +242,9 @@ export function ConnectionsPage() {
                       <Phone className="w-3.5 h-3.5" /> Call
                     </a>
                   )}
+                  <button onClick={() => handleDisconnect(conn.id)} className="btn-danger py-1.5 px-3 text-xs">
+                    <XCircle className="w-3.5 h-3.5 inline mr-1" /> Disconnect
+                  </button>
                 </div>
               );
             })}

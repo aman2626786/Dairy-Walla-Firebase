@@ -11,7 +11,7 @@ const reminderSound = '/sounds/reminder-tone.mp3';
 
 export function ConnectionPage() {
   const { user } = useAuthStore();
-  const { connections, distributorProfiles, shopkeeperProfiles, requestConnection, toggleConnectionAutoOrder, notifications } = useAppStore();
+  const { connections, distributorProfiles, shopkeeperProfiles, requestConnection, toggleConnectionAutoOrder, notifications , cancelConnection } = useAppStore();
   const { show } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -107,6 +107,18 @@ export function ConnectionPage() {
         return cityMatch && companyMatch;
       })
     : [];
+
+  const handleDisconnect = async (connId: string, isPending: boolean) => {
+    const msg = isPending ? 'Cancel connection request?' : 'Are you sure you want to disconnect from this distributor?';
+    if (confirm(msg)) {
+      const success = await cancelConnection(connId);
+      if (success) {
+        show(isPending ? 'Request cancelled' : 'Disconnected successfully');
+      } else {
+        show('Failed to complete action', 'error');
+      }
+    }
+  };
 
   const handleConnect = async () => {
     if (!code.trim()) { show('Enter a connection code or phone number', 'error'); return; }
@@ -233,6 +245,12 @@ export function ConnectionPage() {
                     Your request is waiting for the distributor to approve. You will be notified once approved.
                   </p>
                 )}
+                
+                <div className="pt-3 mt-3 border-t border-gray-100 flex justify-end">
+                  <button onClick={() => handleDisconnect(conn.id, conn.status === 'pending')} className="btn-danger py-1 px-3 text-xs">
+                    {conn.status === 'pending' ? 'Cancel Request' : 'Disconnect'}
+                  </button>
+                </div>
               </div>
             );
           })}
