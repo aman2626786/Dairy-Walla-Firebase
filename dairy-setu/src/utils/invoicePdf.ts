@@ -317,11 +317,11 @@ export async function createInvoicePdf({
         `${item.productName}\n${item.brand}`,
         formatPackSize(item.unit),
         String(item.quantity),
-        `₹${Number(item.unitPrice || 0).toLocaleString()}`,
-        `₹${formatMoney(itemTaxableAmount)}`,
+        `Rs. ${Number(item.unitPrice || 0).toLocaleString()}`,
+        `Rs. ${formatMoney(itemTaxableAmount)}`,
         `CGST(${formatMoney(tax.cgstPercent)}%)\nSGST(${formatMoney(tax.sgstPercent)}%)\nTax`,
         `${formatMoney(itemCgstAmount)}\n${formatMoney(itemSgstAmount)}\n${formatMoney(itemTaxAmount)}`,
-        `₹${formatMoney(itemTaxableAmount + itemTaxAmount)}`,
+        `Rs. ${formatMoney(itemTaxableAmount + itemTaxAmount)}`,
       ];
     }
 
@@ -332,8 +332,8 @@ export async function createInvoicePdf({
       formatPackSize(item.unit),
       String(item.quantity),
       formatItemTotalQuantity(item.unit, item.quantity),
-      formatItemRate(item.unitPrice, item.unit),
-      `₹${(item.quantity * item.unitPrice).toLocaleString()}`,
+      formatItemRate(item.unitPrice, item.unit).replace('₹', 'Rs. '),
+      `Rs. ${(item.quantity * item.unitPrice).toLocaleString()}`,
     ];
   });
 
@@ -411,18 +411,18 @@ export async function createInvoicePdf({
   doc.setTextColor(80, 80, 80);
   if (tax.enabled) {
     doc.text(i18n.subtotal, pageW - margin - 64, footerTop + 6.3);
-    doc.text(`₹${formatMoney(tax.subtotal)}`, pageW - margin - 8, footerTop + 6.3, { align: 'right' });
+    doc.text(`Rs. ${formatMoney(tax.subtotal)}`, pageW - margin - 8, footerTop + 6.3, { align: 'right' });
     doc.text(`CGST ${formatMoney(tax.cgstPercent)}%`, pageW - margin - 64, footerTop + 11.2);
-    doc.text(`₹${formatMoney(tax.cgstAmount)}`, pageW - margin - 8, footerTop + 11.2, { align: 'right' });
+    doc.text(`Rs. ${formatMoney(tax.cgstAmount)}`, pageW - margin - 8, footerTop + 11.2, { align: 'right' });
     doc.text(`SGST ${formatMoney(tax.sgstPercent)}%`, pageW - margin - 64, footerTop + 16.1);
-    doc.text(`₹${formatMoney(tax.sgstAmount)}`, pageW - margin - 8, footerTop + 16.1, { align: 'right' });
+    doc.text(`Rs. ${formatMoney(tax.sgstAmount)}`, pageW - margin - 8, footerTop + 16.1, { align: 'right' });
     doc.text(i18n.totalAmount, pageW - margin - 64, footerTop + 21);
   } else {
     doc.text(i18n.totalAmount, pageW - margin - 64, footerTop + 6.7);
   }
   doc.setTextColor(...brand);
   doc.setFontSize(12);
-  doc.text(`₹${formatMoney(tax.displayTotal)}`, pageW - margin - 8, footerTop + (tax.enabled ? 25.2 : 11.2), { align: 'right' });
+  doc.text(`Rs. ${formatMoney(tax.displayTotal)}`, pageW - margin - 8, footerTop + (tax.enabled ? 25.2 : 11.2), { align: 'right' });
 
   return doc;
 }
