@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle, Share2, Trophy, PlusCircle } from 'lucide-react';
+import { AlertTriangle, BarChart3, BarChartHorizontal, CheckCircle, ChevronRight, Clock, LineChart, MessageSquare, MessageSquareWarning, Package, Phone, TrendingUp, Users, XCircle, Share2, PlusCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -460,29 +460,6 @@ export function DashboardPage() {
         <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
           <PlusCircle className="w-4 h-4" /> Generate Manual Bill
         </button>
-      </div>
-
-      {/* Rank Widget */}
-      <div className="bg-gradient-to-r from-amber-100 to-orange-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between mb-6 shadow-sm animate-fade-in">
-        <div className="flex items-center gap-4">
-          <div className="bg-amber-200 p-3 rounded-full text-amber-700 shadow-inner">
-            <Trophy size={28} />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Global Rank</h3>
-            <p className="text-3xl font-extrabold text-gray-900">#4</p>
-          </div>
-        </div>
-        
-        <div className="text-right hidden sm:block">
-          <div className="flex items-center justify-end gap-1 text-green-600 mb-1">
-            <TrendingUp size={16} />
-            <span className="text-sm font-medium text-green-700">₹{weeklyRevenue.toLocaleString()} 7d Order Value</span>
-          </div>
-          <button className="text-sm text-blue-600 font-medium hover:underline" onClick={() => show('Leaderboard page coming soon!')}>
-            View Leaderboard &rarr;
-          </button>
-        </div>
       </div>
 
       {/* Stats */}
