@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2, Star, PlusCircle, Printer, Download, Share2 } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, MapPin, Phone, User2, Star, PlusCircle, Printer, Download, Share2, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { useAppStore } from '../../store/appStore';
@@ -18,7 +18,7 @@ export function ShopkeeperProfilePage() {
   const { shopkeeperId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { connections, orders, shopkeeperProfiles, distributorProfiles, fetchShopkeeperProfileById, updateOrderPaymentStatus } = useAppStore();
+  const { connections, orders, shopkeeperProfiles, distributorProfiles, fetchShopkeeperProfileById, updateOrderPaymentStatus, updateOrderStatus, addNotification } = useAppStore();
   const { show } = useToast();
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -83,6 +83,34 @@ export function ShopkeeperProfilePage() {
   const paymentStyles: Record<PaymentStatus, string> = {
     paid: 'badge-green',
     unpaid: 'badge-yellow',
+  };
+
+  const handleAccept = (order: Order) => {
+    updateOrderStatus(order.id, 'accepted');
+    if (order.shopkeeperId) {
+      addNotification({
+        userId: order.shopkeeperId,
+        type: 'order_accepted',
+        message: 'Your order has been accepted',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    show(`Order from ${order.shopName} accepted`);
+  };
+
+  const handleReject = (order: Order) => {
+    updateOrderStatus(order.id, 'rejected');
+    if (order.shopkeeperId) {
+      addNotification({
+        userId: order.shopkeeperId,
+        type: 'order_rejected',
+        message: 'Your order was not accepted',
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    show('Order rejected', 'error');
   };
 
   const handlePaymentStatus = async (order: Order, paymentStatus: PaymentStatus) => {
@@ -351,6 +379,16 @@ export function ShopkeeperProfilePage() {
                   <div className="text-right">
                     <div className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</div>
                     <div className="text-xs text-gray-500">{order.items.length} items</div>
+                    {order.status === 'pending' && (
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button onClick={() => handleAccept(order)} className="btn-primary py-1 px-2.5 text-xs">
+                          <CheckCircle className="w-3.5 h-3.5 mr-1 inline" /> Accept
+                        </button>
+                        <button onClick={() => handleReject(order)} className="btn-danger py-1 px-2.5 text-xs">
+                          <XCircle className="w-3.5 h-3.5 mr-1 inline" /> Reject
+                        </button>
+                      </div>
+                    )}
                     {order.status !== 'rejected' && (
                       <div className="flex justify-end gap-2 mt-2">
                         {order.paymentStatus === 'paid' ? (

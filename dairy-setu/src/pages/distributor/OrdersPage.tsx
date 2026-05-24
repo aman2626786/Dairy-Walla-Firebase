@@ -65,7 +65,7 @@ export function OrdersPage() {
       addNotification({
         userId: order.shopkeeperId,
         type: 'order_accepted',
-        message: 'Your late order has been accepted',
+        message: 'Your order has been accepted',
         read: false,
         createdAt: new Date().toISOString(),
       });
@@ -79,7 +79,7 @@ export function OrdersPage() {
       addNotification({
         userId: order.shopkeeperId,
         type: 'order_rejected',
-        message: 'Your late order was not accepted',
+        message: 'Your order was not accepted',
         read: false,
         createdAt: new Date().toISOString(),
       });
@@ -191,7 +191,7 @@ export function OrdersPage() {
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {order.type === 'late' && order.status === 'pending' && (
+                  {order.status === 'pending' && (
                     <div className="flex gap-2">
                       <button onClick={() => handleAccept(order)} className="btn-primary py-1.5 px-3 text-xs">
                         <CheckCircle className="w-3.5 h-3.5" /> Accept
