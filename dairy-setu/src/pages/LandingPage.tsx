@@ -3,17 +3,19 @@ import {
   Store, Clock, FileText,
   ArrowRight,
   CheckCircle, Zap, TrendingUp,
-  Check, Share2, ClipboardList, Download, Globe,
+  Check, Share2, ClipboardList, Globe, Play,
   Heart, Sparkles, HelpCircle, Info
 } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation, type AppLanguage } from '../utils/i18n';
+import { useToast } from '../components/ui/Toast';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
   const { t, language, setLanguage } = useTranslation();
+  const { show } = useToast();
 
   const handleCTA = () => {
     if (isAuthenticated && user) {
@@ -121,21 +123,19 @@ export function LandingPage() {
             <div className="bg-white/80 backdrop-blur-md border border-brand-100/60 rounded-3xl shadow-2xl shadow-brand-100/40 p-5 sm:p-7 flex flex-col sm:flex-row items-center justify-between gap-5 hover:border-brand-200 transition-all duration-300">
               <div className="flex items-center gap-4 text-left">
                 <div className="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0 border border-brand-100/50 shadow-sm shadow-brand-100/10">
-                  <Download className="w-7 h-7" />
+                  <Play className="w-7 h-7 fill-brand-600" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('Download App')}</h2>
-                  <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed mt-0.5">{t('Download the DairyWalla APK to use the app on your mobile device.')}</p>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('DairyWalla App')}</h2>
+                  <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed mt-0.5">{t('The official DairyWalla app will be available on the Google Play Store soon.')}</p>
                 </div>
               </div>
-              <a
-                href="https://cobalt-list-472201-v5.web.app"
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={() => show('App is coming soon to the Google Play Store!', 'info')}
                 className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-7 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-300 hover:-translate-y-0.5 whitespace-nowrap shadow-md shadow-slate-900/15"
               >
-                {t('Download APK')} <ArrowRight className="w-4 h-4" />
-              </a>
+                <Play className="w-4 h-4 fill-current" /> {t('Coming Soon')}
+              </button>
             </div>
           </div>
 
