@@ -26,8 +26,15 @@ export function LandingPage() {
   return (
     <div className="min-h-screen bg-white font-sans selection:bg-brand-500 selection:text-white overflow-x-hidden">
       
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md z-50 border-b border-slate-100">
+      {/* Fixed Header Wrapper */}
+      <div className="fixed top-0 left-0 right-0 z-50 flex flex-col">
+        {/* Announcement Banner */}
+        <div className="bg-brand-600 text-white text-xs sm:text-sm font-bold text-center py-2.5 px-4 shadow-md">
+          🎉 Get DairyWalla App & Website FREE for up to 5 months for each user! Pay only after that.
+        </div>
+
+        {/* Navigation */}
+        <nav className="bg-white/95 backdrop-blur-md border-b border-slate-100 w-full">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16 sm:h-20">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -76,9 +83,10 @@ export function LandingPage() {
           </div>
         </div>
       </nav>
+      </div>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-16 sm:pt-36 sm:pb-24 lg:pt-52 lg:pb-36 overflow-hidden px-4 sm:px-0">
+      <section className="relative pt-32 pb-16 sm:pt-40 sm:pb-24 lg:pt-56 lg:pb-36 overflow-hidden px-4 sm:px-0">
         {/* Organic background neon gradients */}
         <div className="absolute top-20 right-0 w-[700px] h-[700px] bg-gradient-to-br from-brand-300/30 to-emerald-300/20 rounded-full blur-3xl opacity-75 -z-10 translate-x-1/3 animate-pulse"></div>
         <div className="absolute top-40 left-0 w-[500px] h-[500px] bg-gradient-to-tr from-blue-300/20 to-teal-200/20 rounded-full blur-3xl opacity-60 -z-10 -translate-x-1/3"></div>
@@ -90,23 +98,23 @@ export function LandingPage() {
           </div>
           
           <h1 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-black text-slate-900 leading-[1.05] mb-6 sm:mb-8 max-w-5xl mx-auto tracking-tight">
-            {language === 'hindi' ? 'डेयरी बिजनेस अब होगा' : 'Ab Dairy Business'} <br className="hidden md:block" />
+            {language === 'hindi' ? 'डेयरी डिस्ट्रीब्यूशन को करें' : 'Digitizing Dairy'} <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 via-emerald-500 to-amber-500">
-              {language === 'hindi' ? '100 गुना ज्यादा तेज।' : 'Hoga 100x Zyada Fast.'}
+              {language === 'hindi' ? 'डिजिटल' : 'Distribution'}
             </span>
           </h1>
           
           <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-slate-500 leading-relaxed mb-8 sm:mb-12 max-w-4xl mx-auto font-medium">
-            {t('Everything you need to manage your dairy distribution in one place. From smart ordering to auto-invoicing, DairyWalla takes care of the hard work so you can grow.')}
+            {t('DairyWalla helps dairy distributors manage product catalogs, shopkeeper orders, stock availability, order windows, invoices, and delivery workflows from one simple platform.')}
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16 sm:mb-24 px-2 sm:px-0">
-            <button onClick={handleCTA} className="w-full sm:w-auto bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-700 hover:to-emerald-700 text-white font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl shadow-2xl shadow-brand-500/20 flex items-center justify-center gap-3 text-base sm:text-lg transition-all duration-300 hover:-translate-y-1">
-              {t('Start Free Trial')} <ArrowRight className="w-5 h-5" />
+            <button onClick={() => navigate('/demo')} className="w-full sm:w-auto bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-700 hover:to-emerald-700 text-white font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl shadow-2xl shadow-brand-500/20 flex items-center justify-center gap-3 text-base sm:text-lg transition-all duration-300 hover:-translate-y-1">
+              {t('Book Demo')} <ArrowRight className="w-5 h-5" />
             </button>
-            <a href="#our-story" className="w-full sm:w-auto bg-white/80 backdrop-blur-md border border-slate-200/80 hover:border-brand-300 hover:bg-white text-slate-700 font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 text-base sm:text-lg shadow-sm hover:shadow-md">
-              {t('Our Story')} <Heart className="w-4 h-4 text-brand-500 fill-brand-500/10" />
-            </a>
+            <button onClick={() => navigate('/signup')} className="w-full sm:w-auto bg-white/80 backdrop-blur-md border border-slate-200/80 hover:border-brand-300 hover:bg-white text-slate-700 font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 text-base sm:text-lg shadow-sm hover:shadow-md">
+              {t('Join Waitlist')}
+            </button>
           </div>
 
           <div className="max-w-2xl mx-auto mb-20 sm:mb-28">
@@ -451,8 +459,8 @@ export function LandingPage() {
          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-brand-50 rounded-full blur-3xl opacity-40 -z-10 translate-x-1/2"></div>
          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-6xl font-bold text-slate-900 mb-6 sm:mb-8 tracking-tight px-2 sm:px-0">{t('Ready to boost your business?')}</h2>
          <p className="text-slate-500 text-sm sm:text-base md:text-lg lg:text-xl font-medium mb-8 sm:mb-12 max-w-2xl mx-auto italic px-2 sm:px-0">{t('Join hundreds of local distributors and shops saving hours every single day.')}</p>
-         <button onClick={handleCTA} className="bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 sm:py-4 lg:py-5 px-8 sm:px-12 lg:px-16 rounded-2xl shadow-2xl shadow-brand-200 transition-all hover:-translate-y-1 text-sm sm:text-base lg:text-xl flex items-center justify-center gap-3 mx-auto">
-            {t('Get Started For Free')} <ArrowRight className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" />
+         <button onClick={() => navigate('/demo')} className="bg-brand-600 hover:bg-brand-700 text-white font-bold py-3 sm:py-4 lg:py-5 px-8 sm:px-12 lg:px-16 rounded-2xl shadow-2xl shadow-brand-200 transition-all hover:-translate-y-1 text-sm sm:text-base lg:text-xl flex items-center justify-center gap-3 mx-auto">
+            {t('Book Demo')} <ArrowRight className="w-4 sm:w-5 lg:w-6 h-4 sm:h-5 lg:h-6" />
          </button>
       </section>
 
@@ -464,7 +472,16 @@ export function LandingPage() {
             </div>
             <span className="text-xl font-bold text-slate-900 tracking-tight">DairyWalla</span>
          </div>
-         <p className="text-slate-400 text-sm font-medium tracking-tight">{t('© 2026 DairyWalla — Local Dairy Distribution Digitized.')}</p>
+         <div className="flex flex-col items-center gap-2">
+            <div className="flex gap-4 mb-2">
+              <a href="/feedback" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Leave Feedback</a>
+              <span className="text-slate-300">•</span>
+              <a href="/privacy-policy" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Privacy Policy</a>
+            </div>
+            <p className="text-slate-400 text-sm font-medium tracking-tight">
+               Built with ❤️ by <a href="https://portfolio-aman-sharma.web.app/" target="_blank" rel="noreferrer" className="text-brand-600 font-bold hover:underline">Aman Sharma</a>
+            </p>
+         </div>
       </footer>
     </div>
   );

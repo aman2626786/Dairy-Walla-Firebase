@@ -2,6 +2,7 @@
   "hosting": {
     "site": "dairywalla-website",
     "public": "dist",
+    "cleanUrls": true,
     "ignore": [
       "firebase.json",
       "**/.*",

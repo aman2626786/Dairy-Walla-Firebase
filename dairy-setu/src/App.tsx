@@ -6,6 +6,8 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { SignupPage } from './pages/auth/SignupPage';
 import { ConfirmProfilePage } from './pages/auth/ConfirmProfilePage';
+import { DemoFormPage } from './pages/DemoFormPage';
+import { FeedbackPage } from './pages/FeedbackPage';
 import { DashboardPage } from './pages/distributor/DashboardPage';
 import { OrdersPage } from './pages/distributor/OrdersPage';
 import { SummaryPage } from './pages/distributor/SummaryPage';
@@ -244,6 +246,8 @@ function AppWithAuth() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/confirm" element={<ConfirmProfilePage />} />
+      <Route path="/demo" element={<DemoFormPage />} />
+      <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/d/:code" element={<ShareLinkHandler />} />
 
       <Route path="/distributor" element={

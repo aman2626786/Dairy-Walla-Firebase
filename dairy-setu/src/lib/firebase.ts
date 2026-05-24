@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: "AIzaSyA9Yu8uSBopX6TXX5eVSpMDbiaikEQ-8WI",
@@ -13,6 +14,7 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 // Persist session across refresh/restart until user explicitly logs out.
 void setPersistence(auth, browserLocalPersistence).catch((error) => {
