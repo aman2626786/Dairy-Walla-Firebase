@@ -28,8 +28,12 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
 }) {
   return (
     <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'}`}>
-      <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3">
-        <span className="text-4xl">{getCategoryEmoji(String(product.category))}</span>
+      <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3 overflow-hidden">
+        {product.imageUrl ? (
+          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-4xl">{getCategoryEmoji(String(product.category))}</span>
+        )}
       </div>
 
       <div className="flex items-start justify-between gap-2 mb-3">

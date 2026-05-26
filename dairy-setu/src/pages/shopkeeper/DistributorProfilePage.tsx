@@ -277,8 +277,12 @@ export function DistributorProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {dairyProducts.map(product => (
                       <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
@@ -298,8 +302,12 @@ export function DistributorProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {iceCreamProducts.map(product => (
                       <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
@@ -324,8 +332,12 @@ export function DistributorProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {items.map(product => (
                       <div key={product.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0">
-                          <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                        <div className="w-12 h-12 rounded-lg bg-white flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 text-sm leading-tight">{product.name}</div>
