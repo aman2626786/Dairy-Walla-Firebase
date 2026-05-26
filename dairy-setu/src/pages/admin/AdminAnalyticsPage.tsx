@@ -27,7 +27,8 @@ export function AdminAnalyticsPage() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await apiClient.get('/admin/stats');
+      const days = dateRange.replace('d', '');
+      const res = await apiClient.get(`/admin/stats?days=${days}`);
       setStats(res.data);
       setError('');
     } catch (error) {

@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal, Trophy } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
@@ -31,6 +31,7 @@ interface ProductFormData {
   quantity: string;
   price: string;
   available: boolean;
+  imageUrl?: string;
 }
 
 const defaultForm: ProductFormData = {
@@ -41,6 +42,7 @@ const defaultForm: ProductFormData = {
   quantity: '',
   price: '',
   available: true,
+  imageUrl: '',
 };
 
 const normalizeCategory = (value: string): ProductCategory =>
@@ -69,6 +71,8 @@ export function CatalogPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductFormData>(defaultForm);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [filterCat, setFilterCat] = useState<ProductCategory | 'all'>('all');
   const [selectedCategoryOption, setSelectedCategoryOption] = useState<string>('milk');
   const [manualCategory, setManualCategory] = useState('');
@@ -197,7 +201,9 @@ export function CatalogPage() {
       businessLine: defaultBusinessLine,
       category: defaultBusinessLine === 'icecream' ? 'ice cream' : 'milk',
       brand: defaultBrandValue,
+      imageUrl: '',
     });
+    setImageFile(null);
     setSelectedCategoryOption(defaultBusinessLine === 'icecream' ? 'ice cream' : 'milk');
     setManualCategory('');
     setSelectedBrandOption(useManualBrand ? manualBrandValue : matchedDefaultBrand);
@@ -223,7 +229,9 @@ export function CatalogPage() {
       quantity: quantityText === '-' ? '' : quantityText,
       price: String(product.price),
       available: product.available,
+      imageUrl: product.imageUrl || '',
     });
+    setImageFile(null);
 
     setSelectedCategoryOption(categoryIsKnown ? normalizedCategory : manualCategoryValue);
     setManualCategory(categoryIsKnown ? '' : String(product.category).trim());
@@ -306,6 +314,30 @@ export function CatalogPage() {
       price,
       available: form.available,
     };
+    if (form.imageUrl) payload.imageUrl = form.imageUrl;
+
+    if (imageFile) {
+      setUploadingImage(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        formData.append('upload_preset', 'dairy_products');
+        formData.append('cloud_name', 'drmcpl540');
+
+        const uploadRes = await fetch('https://api.cloudinary.com/v1_1/drmcpl540/image/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.secure_url) {
+          payload.imageUrl = uploadData.secure_url;
+        }
+      } catch (err) {
+        console.error('Image upload failed', err);
+      } finally {
+        setUploadingImage(false);
+      }
+    }
 
     const success = editingProduct
       ? await updateProduct(editingProduct.id, payload)
@@ -344,8 +376,12 @@ export function CatalogPage() {
       {items.map(product => (
         <div key={product.id} className={`card p-4 ${!product.available ? 'opacity-60' : ''}`}>
           <div className="flex items-start gap-3">
-            <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+            <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {product.imageUrl ? (
+                <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-2xl">{getCategoryEmoji(String(product.category))}</span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
@@ -413,7 +449,11 @@ export function CatalogPage() {
             >
               <td className="px-5 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-lg">{getCategoryEmoji(String(product.category))}</span>
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt={product.name} className="w-8 h-8 rounded-md object-cover" />
+                  ) : (
+                    <span className="text-lg">{getCategoryEmoji(String(product.category))}</span>
+                  )}
                   <span className="text-sm font-medium text-gray-900">{product.name}</span>
                 </div>
               </td>
@@ -652,8 +692,46 @@ export function CatalogPage() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingProduct ? 'Edit Product' : 'Add Product'}>
         <div className="space-y-4">
-          <div className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-            Product image upload is disabled. Catalog icon will be auto-shown from product category.
+          <div className="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+            <div className="w-16 h-16 rounded-xl bg-white border border-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 shadow-sm">
+              {imageFile ? (
+                <img src={URL.createObjectURL(imageFile)} alt="Preview" className="w-full h-full object-cover" />
+              ) : form.imageUrl ? (
+                <img src={form.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl text-gray-400">{getCategoryEmoji(String(selectedCategoryForPreview))}</span>
+              )}
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Product Image</label>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => {
+                    if (e.target.files && e.target.files[0]) {
+                      setImageFile(e.target.files[0]);
+                    }
+                  }}
+                  className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 cursor-pointer"
+                />
+                {(imageFile || form.imageUrl) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageFile(null);
+                      setForm(f => ({ ...f, imageUrl: '' }));
+                      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+                      if (fileInput) fileInput.value = '';
+                    }}
+                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                    title="Remove Image"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -666,35 +744,6 @@ export function CatalogPage() {
                 onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
               />
             </div>
-            {distributorType === 'dual' && (
-              <div className="col-span-2">
-                <label className="label">Section</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleBusinessLineChange('dairy')}
-                    className={`py-2 rounded-xl border text-sm font-medium ${
-                      form.businessLine === 'dairy'
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    Dairy Products
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleBusinessLineChange('icecream')}
-                    className={`py-2 rounded-xl border text-sm font-medium ${
-                      form.businessLine === 'icecream'
-                        ? 'border-brand-500 bg-brand-50 text-brand-700'
-                        : 'border-gray-300 text-gray-600'
-                    }`}
-                  >
-                    Ice Cream
-                  </button>
-                </div>
-              </div>
-            )}
 
             <div>
               <label className="label">Brand</label>
@@ -752,17 +801,6 @@ export function CatalogPage() {
               )}
             </div>
 
-            <div className="col-span-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
-              <div className="text-xs text-gray-500 mb-1">Auto Category Visual (Generic, no brand logo)</div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white border border-gray-200 text-xl">
-                  {getCategoryEmoji(String(selectedCategoryForPreview))}
-                </span>
-                <span className="text-sm font-medium text-gray-700">
-                  {formatCategoryLabel(String(selectedCategoryForPreview))}
-                </span>
-              </div>
-            </div>
 
             <div>
               <label className="label">Quantity / Pack Size</label>
@@ -807,8 +845,8 @@ export function CatalogPage() {
             <button className="btn-secondary flex-1" onClick={() => setModalOpen(false)}>
               Cancel
             </button>
-            <button className="btn-primary flex-1" onClick={() => void handleSave()}>
-              {editingProduct ? 'Save Changes' : 'Add Product'}
+            <button className="btn-primary flex-1" onClick={() => void handleSave()} disabled={uploadingImage}>
+              {uploadingImage ? 'Uploading Image...' : editingProduct ? 'Save Changes' : 'Add Product'}
             </button>
           </div>
         </div>

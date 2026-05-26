@@ -187,6 +187,16 @@ function normalizePhone(value: unknown): string {
   return String(value ?? '').replace(/\D/g, '');
 }
 
+function isSpamPhone(phone: string): boolean {
+  if (phone.length !== 10) return true;
+  if (!/^[6789]/.test(phone)) return true;
+  if (/^(\d)\1{9}$/.test(phone)) return true;
+  const asc = '01234567890123456789';
+  const desc = '98765432109876543210';
+  if (asc.includes(phone) || desc.includes(phone)) return true;
+  return false;
+}
+
 function parseOptionalNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
   const num = typeof value === 'number' ? value : Number(value);
@@ -632,8 +642,8 @@ app.post('/api/auth/setup', async (req: AuthenticatedRequest, res) => {
     if (!isRole(role)) return res.status(400).json({ error: 'Invalid role.' });
 
     const cleanedPhone = normalizePhone(phone);
-    if (cleanedPhone.length !== 10) {
-      return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+    if (isSpamPhone(cleanedPhone)) {
+      return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number.' });
     }
     const cleanedName = typeof name === 'string' ? name.trim() : '';
     if (!cleanedName) {
@@ -869,8 +879,8 @@ app.patch('/api/auth/user/:id', async (req: AuthenticatedRequest, res) => {
 
     if (req.body?.phone !== undefined) {
       const cleanedPhone = normalizePhone(req.body.phone);
-      if (cleanedPhone.length !== 10) {
-        return res.status(400).json({ error: 'Phone number must be exactly 10 digits.' });
+      if (isSpamPhone(cleanedPhone)) {
+        return res.status(400).json({ error: 'Please enter a valid 10-digit Indian mobile number.' });
       }
       const phoneConflict = await prisma.profile.findFirst({
         where: {
@@ -1413,6 +1423,7 @@ app.post('/api/products', async (req, res) => {
     const price = Number(req.body?.price);
     const available = req.body?.available !== false;
     const businessLine = inferBusinessLine(category, req.body?.businessLine);
+    const imageUrl = req.body?.imageUrl ? String(req.body.imageUrl).trim() : null;
 
     if (!name || !brand || !quantity || !Number.isFinite(price) || price < 0) {
       return res.status(400).json({ error: 'Invalid product payload.' });
@@ -1434,7 +1445,7 @@ app.post('/api/products', async (req, res) => {
         unit: quantity,
         price,
         available,
-        imageUrl: null,
+        imageUrl,
       },
     });
 
@@ -1482,8 +1493,8 @@ app.patch('/api/products/:id', async (req, res) => {
       ...(req.body?.price !== undefined ? { price: Number(req.body.price) } : {}),
       ...(req.body?.available !== undefined ? { available: req.body.available !== false } : {}),
       ...(req.body?.category !== undefined ? { category } : {}),
-      businessLine,
-      ...(req.body?.imageUrl !== undefined ? { imageUrl: null } : {}),
+       businessLine,
+      ...(req.body?.imageUrl !== undefined ? { imageUrl: req.body.imageUrl ? String(req.body.imageUrl).trim() : null } : {}),
     };
 
     const updated = await prisma.product.update({ where: { id: req.params.id }, data: updatePayload });
@@ -2298,13 +2309,20 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Admin Stats - Platform Overview
-app.get('/api/admin/stats', async (_req, res) => {
+app.get('/api/admin/stats', async (req, res) => {
   try {
+    const days = parseInt(req.query.days as string);
+    const dateFilter = days && !isNaN(days) ? {
+      placedAt: {
+        gte: new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+      }
+    } : {};
+
     const profiles = await prisma.profile.findMany();
     const distributors = await prisma.distributorProfile.findMany();
     const shopkeepers = await prisma.shopkeeperProfile.findMany();
     const connections = await prisma.connection.findMany();
-    const orders = await prisma.order.findMany();
+    const orders = await prisma.order.findMany({ where: dateFilter });
     const products = await prisma.product.findMany();
 
     // Calculate stats

@@ -280,6 +280,7 @@ export function DashboardPage() {
   }, [todayOrders]);
 
   const handleAcceptLate = (order: Order) => {
+    if (!window.confirm('Are you sure you want to accept this late order?')) return;
     updateOrderStatus(order.id, 'accepted');
     const shopProfile = shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId);
     if (shopProfile?.userId) {
@@ -295,6 +296,7 @@ export function DashboardPage() {
   };
 
   const handleRejectLate = (order: Order) => {
+    if (!window.confirm('Are you sure you want to reject this late order?')) return;
     updateOrderStatus(order.id, 'rejected');
     const shopProfile = shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId);
     if (shopProfile?.userId) {

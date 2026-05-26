@@ -9,6 +9,7 @@ import { auth as firebaseAuth } from "../../lib/firebase";
 import { apiClient } from "../../lib/apiClient";
 import { BrandLogo } from "../../components/ui/BrandLogo";
 import type { DistributorType, Role } from "../../types";
+import { isSpamPhone } from "../../utils/validation";
 
 type Step = "verifying" | "profile" | "done" | "error";
 const COMPANIES = ["Amul", "Saras", "Mother Dairy", "Parag", "Local Brand", "Multiple Brands"];
@@ -171,7 +172,7 @@ export function ConfirmProfilePage() {
     const sName = role === "distributor" ? businessName : shopName;
     if (!name.trim()) { show("Owner name is required.", "error"); return; }
     if (!sName.trim()) { show(role === "distributor" ? "Business name is required." : "Shop name is required.", "error"); return; }
-    if (phone.length !== 10) { show("Phone number must be exactly 10 digits.", "error"); return; }
+    if (isSpamPhone(phone)) { show("Please enter a valid 10-digit Indian mobile number.", "error"); return; }
 
     setLoading(true);
     try {

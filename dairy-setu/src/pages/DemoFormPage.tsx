@@ -5,6 +5,7 @@ import { useToast } from '../components/ui/Toast';
 import { ArrowRight, CheckCircle, Store, User, Building } from 'lucide-react';
 import { BrandLogo } from '../components/ui/BrandLogo';
 import confetti from 'canvas-confetti';
+import { isSpamPhone } from '../utils/validation';
 
 export function DemoFormPage() {
   const { show } = useToast();
@@ -30,8 +31,8 @@ export function DemoFormPage() {
       return;
     }
     
-    if (formData.phone.length < 10) {
-      show('Please enter a valid phone number', 'error');
+    if (isSpamPhone(formData.phone)) {
+      show('Please enter a valid 10-digit Indian mobile number.', 'error');
       return;
     }
 

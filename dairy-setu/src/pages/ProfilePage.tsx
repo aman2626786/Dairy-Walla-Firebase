@@ -10,6 +10,7 @@ import { useToast } from '../components/ui/Toast';
 import { MobileHeader } from '../components/layout/MobileHeader';
 import { getCurrentLocation, getCoordinatesFromLocation } from '../utils/location';
 import { useTranslation } from '../utils/i18n';
+import { isSpamPhone } from '../utils/validation';
 
 const DELIVERY_TIMINGS = ['Morning (6–9 AM)', 'Afternoon (12–3 PM)', 'Evening (5–8 PM)', 'Any Time'];
 const COMPANIES = ['Amul', 'Saras', 'Mother Dairy', 'Parag', 'Local Brand', 'Multiple Brands'];
@@ -68,8 +69,8 @@ export function ProfilePage() {
       show(t('This field cannot be empty.'), 'error');
       return;
     }
-    if (key === 'phone' && !/^\d{10}$/.test(val)) {
-      show(t('Phone number must be exactly 10 digits.'), 'error');
+    if (key === 'phone' && isSpamPhone(val)) {
+      show(t('Please enter a valid 10-digit Indian mobile number.'), 'error');
       return;
     }
 

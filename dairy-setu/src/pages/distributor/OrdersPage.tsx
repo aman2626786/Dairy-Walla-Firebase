@@ -60,6 +60,7 @@ export function OrdersPage() {
   });
 
   const handleAccept = (order: Order) => {
+    if (!window.confirm('Are you sure you want to accept this order?')) return;
     updateOrderStatus(order.id, 'accepted');
     if (order.shopkeeperId) {
       addNotification({
@@ -74,6 +75,7 @@ export function OrdersPage() {
   };
 
   const handleFulfill = (order: Order) => {
+    if (!window.confirm('Has this order been delivered?')) return;
     updateOrderStatus(order.id, 'fulfilled');
     if (order.shopkeeperId) {
       addNotification({
@@ -88,6 +90,7 @@ export function OrdersPage() {
   };
 
   const handleReject = (order: Order) => {
+    if (!window.confirm('Are you sure you want to reject this order?')) return;
     updateOrderStatus(order.id, 'rejected');
     if (order.shopkeeperId) {
       addNotification({
@@ -105,6 +108,11 @@ export function OrdersPage() {
     if (order.paymentStatus === 'paid' && paymentStatus === 'unpaid') {
       show('Payment once paid cannot be marked unpaid again.', 'error');
       return;
+    }
+    if (paymentStatus === 'paid') {
+      if (!window.confirm('Are you sure you want to mark this payment as received? This action cannot be undone.')) {
+        return;
+      }
     }
     try {
       await updateOrderPaymentStatus(order.id, paymentStatus);
@@ -189,7 +197,7 @@ export function OrdersPage() {
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="font-semibold text-gray-900 text-sm">{order.shopName}</span>
                     <span className={statusColors[order.status]}>{statusLabels[order.status]}</span>
-                    <span className={paymentColors[order.paymentStatus]}>{paymentLabels[order.paymentStatus]}</span>
+                    {order.status !== 'rejected' && <span className={paymentColors[order.paymentStatus]}>{paymentLabels[order.paymentStatus]}</span>}
                     <span className={order.type === 'late' ? 'badge-yellow' : 'badge-green'}>
                       {order.type === 'late' ? 'Late' : 'Normal'}
                     </span>

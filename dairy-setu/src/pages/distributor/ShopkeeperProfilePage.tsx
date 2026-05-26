@@ -86,6 +86,7 @@ export function ShopkeeperProfilePage() {
   };
 
   const handleAccept = (order: Order) => {
+    if (!window.confirm('Are you sure you want to accept this order?')) return;
     updateOrderStatus(order.id, 'accepted');
     if (order.shopkeeperId) {
       addNotification({
@@ -100,6 +101,7 @@ export function ShopkeeperProfilePage() {
   };
 
   const handleFulfill = (order: Order) => {
+    if (!window.confirm('Has this order been delivered?')) return;
     updateOrderStatus(order.id, 'fulfilled');
     if (order.shopkeeperId) {
       addNotification({
@@ -114,6 +116,7 @@ export function ShopkeeperProfilePage() {
   };
 
   const handleReject = (order: Order) => {
+    if (!window.confirm('Are you sure you want to reject this order?')) return;
     updateOrderStatus(order.id, 'rejected');
     if (order.shopkeeperId) {
       addNotification({
@@ -131,6 +134,11 @@ export function ShopkeeperProfilePage() {
     if (order.paymentStatus === 'paid' && paymentStatus === 'unpaid') {
       show('Payment once paid cannot be marked unpaid again.', 'error');
       return;
+    }
+    if (paymentStatus === 'paid') {
+      if (!window.confirm('Are you sure you want to mark this payment as received? This action cannot be undone.')) {
+        return;
+      }
     }
     try {
       await updateOrderPaymentStatus(order.id, paymentStatus);
@@ -385,9 +393,11 @@ export function ShopkeeperProfilePage() {
                     <div className="text-xs text-gray-500 mt-0.5">
                       Status: {order.status === 'fulfilled' ? 'accepted' : order.status} - Type: {order.type}
                       <span className="ml-2">Section: {businessLineLabel(inferBusinessLineFromCategory(String(order.businessLine || order.items?.[0]?.category || 'other'), order.businessLine))}</span>
-                      <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
-                        {order.paymentStatus === 'paid' ? 'Payment Received' : 'Payment Due'}
-                      </span>
+                      {order.status !== 'rejected' && (
+                        <span className={`ml-2 ${paymentStyles[order.paymentStatus]}`}>
+                          {order.paymentStatus === 'paid' ? 'Payment Received' : 'Payment Due'}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right">
