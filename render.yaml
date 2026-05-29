@@ -1,18 +1,12 @@
 services:
   - type: web
-    name: dairy-walla-web
-    runtime: static
+    name: dairy-walla-api
+    runtime: node
     rootDir: dairy-setu
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm run start:api
     envVars:
-      - key: VITE_SUPABASE_ENABLED
-        value: "true"
-      - key: VITE_SUPABASE_URL
-        sync: false
-      - key: VITE_SUPABASE_ANON_KEY
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
         sync: false
