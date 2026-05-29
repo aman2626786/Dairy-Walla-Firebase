@@ -40,6 +40,7 @@ export function OrdersPage() {
   const [filter, setFilter] = useState<'all' | 'normal' | 'late'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
   const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
+  const [businessLineFilter, setBusinessLineFilter] = useState<'all' | 'dairy' | 'icecream'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [manualBillOpen, setManualBillOpen] = useState(false);
 
@@ -56,6 +57,19 @@ export function OrdersPage() {
       }
     }
     if (paymentFilter !== 'all' && o.paymentStatus !== paymentFilter) return false;
+    
+    if (businessLineFilter !== 'all') {
+      let line = o.businessLine;
+      if (!line && o.items && o.items.length > 0) {
+        line = o.items[0].businessLine;
+        if (!line) {
+          const text = `${o.items[0].category || ''} ${o.items[0].productName || ''}`.toLowerCase();
+          line = text.includes('ice') || text.includes('cream') || text.includes('kulfi') ? 'icecream' : 'dairy';
+        }
+      }
+      if ((line || 'dairy') !== businessLineFilter) return false;
+    }
+    
     return true;
   });
 
@@ -177,6 +191,19 @@ export function OrdersPage() {
               }`}
             >
               {f === 'all' ? 'All Payments' : f === 'paid' ? 'Payment Received' : 'Payment Due'}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+          {(['all', 'dairy', 'icecream'] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setBusinessLineFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
+                businessLineFilter === f ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {f === 'all' ? 'All Products' : f === 'dairy' ? 'Dairy 🥛' : 'Ice Cream 🍦'}
             </button>
           ))}
         </div>

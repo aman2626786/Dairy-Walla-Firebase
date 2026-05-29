@@ -71,12 +71,9 @@ export function DiscoverPage() {
       return dp;
     })
     .sort((a, b) => {
-      const distA = (a as DistributorWithDistance).distance;
-      const distB = (b as DistributorWithDistance).distance;
-      if (distA !== undefined && distB !== undefined) {
-        return distA - distB;
-      }
-      return 0;
+      const distA = (a as DistributorWithDistance).distance ?? Infinity;
+      const distB = (b as DistributorWithDistance).distance ?? Infinity;
+      return distA - distB;
     });
 
   // Filter distributors

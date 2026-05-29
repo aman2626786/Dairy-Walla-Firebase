@@ -69,35 +69,6 @@ function getDateRange(period: FilterPeriod, customFrom: string, customTo: string
     case 'custom':
       return {
         from: customFrom ? new Date(customFrom) : new Date(),
-
-type FilterPeriod = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
-
-interface SummaryItem {
-  productId: string;
-  productName: string;
-  brand: string;
-  category: ProductCategory;
-  unit: string;
-  totalQty: number;
-  totalValue: number;
-}
-
-function getDateRange(period: FilterPeriod, customFrom: string, customTo: string): { from: Date; to: Date; label: string } {
-  const now = new Date();
-  switch (period) {
-    case 'today':
-      return { from: new Date(now.setHours(0,0,0,0)), to: new Date(new Date().setHours(23,59,59,999)), label: 'Today' };
-    case 'yesterday': {
-      const y = subDays(new Date(), 1);
-      return { from: new Date(y.setHours(0,0,0,0)), to: new Date(new Date(subDays(new Date(),1)).setHours(23,59,59,999)), label: 'Yesterday' };
-    }
-    case 'week':
-      return { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }), label: 'This Week' };
-    case 'month':
-      return { from: startOfMonth(now), to: endOfMonth(now), label: 'This Month' };
-    case 'custom':
-      return {
-        from: customFrom ? new Date(customFrom) : new Date(),
         to: customTo ? new Date(customTo + 'T23:59:59') : new Date(),
         label: customFrom && customTo ? `${format(new Date(customFrom), 'dd MMM')} - ${format(new Date(customTo), 'dd MMM')}` : 'Custom',
       };
@@ -473,6 +444,23 @@ export function SummaryPage() {
             </div>
             <div className="card p-3 text-center">
               <div className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
+              <div className="text-xs text-gray-500">Value</div>
+            </div>
+          </div>
+
+          {/* Generate Bill button */}
+          <button
+            onClick={() => setBillModalOpen(true)}
+            className="btn-primary w-full mb-4 py-3"
+          >
+            <FileText className="w-4 h-4" />
+            Generate Bill for {summaryLabel.replace('Summary - ', '')}
+          </button>
+
+          {/* Category-wise summary */}
+          <div className="space-y-3">
+            {CATEGORY_ORDER.map(cat => {
+              const items = summaryByCategory[cat];
               if (items.length === 0) return null;
               const catTotal = items.reduce((s, i) => s + i.totalValue, 0);
               const catQty = items.reduce((s, i) => s + i.totalQty, 0);
