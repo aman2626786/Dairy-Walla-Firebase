@@ -12,6 +12,7 @@ import autoTable from 'jspdf-autotable';
 import type { ProductCategory } from '../../types';
 import { addPdfLogoWatermark, getPdfBrandAssets } from '../../utils/pdfBranding';
 import { BrandLogo } from '../../components/ui/BrandLogo';
+import { inferBusinessLineFromCategory } from '../../utils/businessLine';
 
 // Category display order and labels
 const CATEGORY_ORDER: ProductCategory[] = ['milk', 'paneer', 'curd', 'butter', 'ghee', 'other'];
@@ -68,6 +69,35 @@ function getDateRange(period: FilterPeriod, customFrom: string, customTo: string
     case 'custom':
       return {
         from: customFrom ? new Date(customFrom) : new Date(),
+
+type FilterPeriod = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
+
+interface SummaryItem {
+  productId: string;
+  productName: string;
+  brand: string;
+  category: ProductCategory;
+  unit: string;
+  totalQty: number;
+  totalValue: number;
+}
+
+function getDateRange(period: FilterPeriod, customFrom: string, customTo: string): { from: Date; to: Date; label: string } {
+  const now = new Date();
+  switch (period) {
+    case 'today':
+      return { from: new Date(now.setHours(0,0,0,0)), to: new Date(new Date().setHours(23,59,59,999)), label: 'Today' };
+    case 'yesterday': {
+      const y = subDays(new Date(), 1);
+      return { from: new Date(y.setHours(0,0,0,0)), to: new Date(new Date(subDays(new Date(),1)).setHours(23,59,59,999)), label: 'Yesterday' };
+    }
+    case 'week':
+      return { from: startOfWeek(now, { weekStartsOn: 1 }), to: endOfWeek(now, { weekStartsOn: 1 }), label: 'This Week' };
+    case 'month':
+      return { from: startOfMonth(now), to: endOfMonth(now), label: 'This Month' };
+    case 'custom':
+      return {
+        from: customFrom ? new Date(customFrom) : new Date(),
         to: customTo ? new Date(customTo + 'T23:59:59') : new Date(),
         label: customFrom && customTo ? `${format(new Date(customFrom), 'dd MMM')} - ${format(new Date(customTo), 'dd MMM')}` : 'Custom',
       };
@@ -76,7 +106,7 @@ function getDateRange(period: FilterPeriod, customFrom: string, customTo: string
 
 export function SummaryPage() {
   const { user } = useAuthStore();
-  const { orders, distributorProfiles } = useAppStore();
+  const { orders, distributorProfiles, products } = useAppStore();
   const { show } = useToast();
 
   const [period, setPeriod] = useState<FilterPeriod>('today');
@@ -84,6 +114,7 @@ export function SummaryPage() {
   const [customTo, setCustomTo] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [billModalOpen, setBillModalOpen] = useState(false);
+  const [billType, setBillType] = useState<'all' | 'dairy' | 'icecream'>('all');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const { from, to, label } = getDateRange(period, customFrom, customTo);
@@ -106,6 +137,12 @@ export function SummaryPage() {
       const items = Array.isArray(order.items) ? order.items : [];
 
       items.forEach(item => {
+        if (profile?.distributorType === 'dual' && billType !== 'all') {
+          const product = products.find(p => p.id === item.productId);
+          const line = product ? inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine) : 'dairy';
+          if (line !== billType) return;
+        }
+
         const productKey = item.productId || `${item.productName}-${item.brand}-${item.unit}`;
         const existing = map.get(productKey);
         if (existing) {
@@ -134,11 +171,12 @@ export function SummaryPage() {
     });
 
     return grouped;
-  }, [filteredOrders]);
+  }, [filteredOrders, profile, billType, products]);
 
   const allItems = CATEGORY_ORDER.flatMap(cat => summaryByCategory[cat]);
   const totalValue = allItems.reduce((s, i) => s + i.totalValue, 0);
   const totalQty = allItems.reduce((s, i) => s + i.totalQty, 0);
+  const summaryLabel = billType === 'dairy' ? `Dairy Summary - ${label}` : billType === 'icecream' ? `Ice Cream Summary - ${label}` : `Order Summary - ${label}`;
 
   const periodButtons: { key: FilterPeriod; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -158,7 +196,7 @@ export function SummaryPage() {
     const lines: string[] = [];
     lines.push('------------------------');
     lines.push(`  ${profile?.businessName}`);
-    lines.push(`  Order Summary - ${label}`);
+    lines.push(`  ${summaryLabel}`);
     lines.push('------------------------');
     lines.push('');
 
@@ -210,7 +248,7 @@ export function SummaryPage() {
 
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Order Summary Bill - ${label}`, 33, 17);
+    doc.text(summaryLabel, 33, 17);
     doc.text(`Generated: ${format(new Date(), 'dd MMM yyyy, h:mm a')}`, 33, 22);
     doc.text(`Total Orders: ${filteredOrders.length}  |  Total Value: ₹${totalValue.toLocaleString()}`, 33, 27);
 
@@ -322,14 +360,14 @@ export function SummaryPage() {
     doc.setTextColor(150, 150, 150);
     doc.text('Generated by DairyWalla | Smart dairy ordering platform', pageW / 2, y, { align: 'center' });
 
-    const filename = `DairyWalla-Bill-${label.replace(/\s/g, '-')}-${format(new Date(), 'ddMMMyyyy')}.pdf`;
+    const filename = `DairyWalla-Bill-${summaryLabel.replace(/\s/g, '-')}-${format(new Date(), 'ddMMMyyyy')}.pdf`;
     doc.save(filename);
     show('PDF downloaded!');
   };
   const handleShare = () => {
     const text = generateBillText();
     if (navigator.share) {
-      navigator.share({ title: `DairyWalla Bill - ${label}`, text });
+      navigator.share({ title: `DairyWalla Bill - ${summaryLabel}`, text });
     } else {
       navigator.clipboard.writeText(text);
       show('Bill copied to clipboard!');
@@ -389,6 +427,30 @@ export function SummaryPage() {
             </div>
           </div>
         )}
+
+        {/* Bill Type Filter for Dual Distributors */}
+        {profile?.distributorType === 'dual' && (
+          <div className="flex bg-gray-100 p-1 rounded-lg mt-3">
+            <button
+              onClick={() => setBillType('all')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${billType === 'all' ? 'bg-brand-600 text-white' : 'text-gray-600'}`}
+            >
+              All Products
+            </button>
+            <button
+              onClick={() => setBillType('dairy')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${billType === 'dairy' ? 'bg-brand-600 text-white' : 'text-gray-600'}`}
+            >
+              Dairy
+            </button>
+            <button
+              onClick={() => setBillType('icecream')}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${billType === 'icecream' ? 'bg-brand-600 text-white' : 'text-gray-600'}`}
+            >
+              Ice Cream
+            </button>
+          </div>
+        )}
       </div>
 
       {allItems.length === 0 ? (
@@ -411,23 +473,6 @@ export function SummaryPage() {
             </div>
             <div className="card p-3 text-center">
               <div className="text-xl font-bold text-brand-600">₹{totalValue.toLocaleString()}</div>
-              <div className="text-xs text-gray-500">Value</div>
-            </div>
-          </div>
-
-          {/* Generate Bill button */}
-          <button
-            onClick={() => setBillModalOpen(true)}
-            className="btn-primary w-full mb-4 py-3"
-          >
-            <FileText className="w-4 h-4" />
-            Generate Bill for {label}
-          </button>
-
-          {/* Category-wise summary */}
-          <div className="space-y-3">
-            {CATEGORY_ORDER.map(cat => {
-              const items = summaryByCategory[cat];
               if (items.length === 0) return null;
               const catTotal = items.reduce((s, i) => s + i.totalValue, 0);
               const catQty = items.reduce((s, i) => s + i.totalQty, 0);
@@ -487,7 +532,7 @@ export function SummaryPage() {
                 <BrandLogo className="w-full h-full rounded-lg" />
               </div>
               <div className="font-bold text-lg text-gray-900">{profile?.businessName}</div>
-              <div className="text-sm text-gray-500">Order Summary Bill</div>
+              <div className="text-sm text-gray-500">{summaryLabel.split(' - ')[0]} Bill</div>
               <div className="text-xs text-gray-400 mt-0.5">{label} - Generated {format(new Date(), 'dd MMM yyyy')}</div>
             </div>
 

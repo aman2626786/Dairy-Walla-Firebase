@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Clock, CheckCircle, XCircle, Package, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -8,6 +9,7 @@ import { useToast } from '../../components/ui/Toast';
 import { format, subDays } from 'date-fns';
 import type { OrderStatus, PaymentStatus } from '../../types';
 import type { ReactElement } from 'react';
+import { inferBusinessLineFromCategory } from '../../utils/businessLine';
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; icon: ReactElement }> = {
   pending: { label: 'Pending Approval', className: 'badge-yellow', icon: <Clock className="w-3 h-3" /> },
@@ -26,8 +28,17 @@ export function OrderHistoryPage() {
   const { orders, setCartQuantity, clearCart, products } = useAppStore();
   const navigate = useNavigate();
   const { show } = useToast();
+  const [businessLineFilter, setBusinessLineFilter] = useState<'all' | 'dairy' | 'icecream'>('all');
 
-  const myOrders = orders.filter(o => o.shopkeeperName === user?.name);
+  const myOrders = orders.filter(o => o.shopkeeperName === user?.name).filter(o => {
+    if (businessLineFilter === 'all') return true;
+    const firstItem = o.items?.[0];
+    if (!firstItem) return true;
+    const product = products.find(p => p.id === firstItem.productId);
+    if (!product) return true;
+    const line = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+    return line === businessLineFilter;
+  });
 
   const yesterday = subDays(new Date(), 1).toISOString().split('T')[0];
   const yesterdayOrder = myOrders.find(o => o.deliveryDate === yesterday && o.status !== 'rejected');
@@ -54,6 +65,22 @@ export function OrderHistoryPage() {
       <div className="hidden md:block mb-6">
         <h1 className="text-xl font-bold text-gray-900">My Orders</h1>
         <p className="text-sm text-gray-500 mt-0.5">{myOrders.length} orders</p>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+        {(['all', 'dairy', 'icecream'] as const).map(option => (
+          <button
+            key={option}
+            onClick={() => setBusinessLineFilter(option)}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+              businessLineFilter === option 
+                ? 'bg-brand-600 text-white shadow-sm' 
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {option === 'all' ? 'All Products' : option === 'dairy' ? 'Dairy 🥛' : 'Ice Cream 🍦'}
+          </button>
+        ))}
       </div>
 
       {yesterdayOrder && (

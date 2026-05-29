@@ -152,7 +152,14 @@ export function DistributorProfilePage() {
               <span className="text-white font-bold text-2xl">{distributor.businessName[0]}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-xl font-bold text-gray-900 mb-1">{distributor.businessName}</h2>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <h2 className="text-xl font-bold text-gray-900">{distributor.businessName}</h2>
+                {distributor.distributorType && (
+                  <span className="px-2 py-0.5 rounded-md border border-brand-500 bg-brand-50 text-brand-700 text-xs font-bold whitespace-nowrap">
+                    {distributor.distributorType === 'dairy' ? 'Dairy 🥛' : distributor.distributorType === 'icecream' ? 'Ice Cream 🍦' : 'Dairy & Ice Cream 🥛🍦'}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-600 mb-2">{distributor.ownerName}</p>
               <div className="flex flex-wrap gap-2">
                 <span className="badge bg-emerald-100 text-emerald-700">

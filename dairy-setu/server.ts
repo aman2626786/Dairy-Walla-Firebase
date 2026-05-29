@@ -9,6 +9,7 @@ import {
   createPushNotificationService,
   registerPushToken,
 } from './services/pushNotifications.ts';
+import cron from 'node-cron';
 
 const prisma = new PrismaClient();
 const pushNotifications = createPushNotificationService(prisma);
@@ -2624,6 +2625,77 @@ app.get('/api/admin/activity', async (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// Hourly Reminder Cron Job
+cron.schedule('0 * * * *', async () => {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const today = new Date(todayStr);
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinutes = now.getMinutes();
+    const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`;
+    
+    // Only send in the afternoon/evening as requested
+    if (currentHour < 12) return;
+    
+    const distributors = await prisma.distributorProfile.findMany();
+    for (const dp of distributors) {
+      if (!dp.orderWindowStart || !dp.orderWindowCutoff) continue;
+      
+      // Check if current time is within window
+      if (currentTimeStr >= dp.orderWindowStart && currentTimeStr <= dp.orderWindowCutoff) {
+        const connections = await prisma.connection.findMany({
+          where: { distributorId: dp.id, status: 'active', autoOrderEnabled: false }
+        });
+        
+        for (const conn of connections) {
+          if (!conn.shopkeeperId) continue;
+          
+          // Check if ordered today
+          const orderCount = await prisma.order.count({
+            where: { shopkeeperId: conn.shopkeeperId, distributorId: dp.id, deliveryDate: today }
+          });
+          
+          if (orderCount > 0) continue;
+          
+          const sp = await prisma.shopkeeperProfile.findUnique({ where: { id: conn.shopkeeperId } });
+          if (!sp?.userId) continue;
+          
+          // Check if we already reminded them in the last 50 minutes (to avoid duplicate hourly reminders)
+          const fiftyMinsAgo = new Date(Date.now() - 50 * 60 * 1000);
+          const recentReminderCount = await prisma.notification.count({
+            where: { 
+              userId: sp.userId,
+              type: 'order_reminder',
+              createdAt: { gte: fiftyMinsAgo }
+            }
+          });
+          
+          if (recentReminderCount > 0) continue;
+          
+          const message = `Reminder: Please place your daily order for ${dp.businessName} before ${dp.orderWindowCutoff}.`;
+          const notification = await prisma.notification.create({
+            data: {
+              userId: sp.userId,
+              type: 'order_reminder',
+              title: 'Order Reminder',
+              message,
+              data: { distributorId: dp.id }
+            }
+          });
+          void pushNotifications.sendToUser(sp.userId, {
+            title: 'Order Reminder 🔔',
+            body: message,
+            data: { type: 'order_reminder', notificationId: notification.id }
+          }, { eventType: 'order_reminder' });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Hourly reminder cron error:', error);
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Backend API Server running on http://localhost:${PORT}`);

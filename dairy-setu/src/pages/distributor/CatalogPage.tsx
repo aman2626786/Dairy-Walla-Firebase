@@ -249,13 +249,6 @@ export function CatalogPage() {
     setForm(current => ({ ...current, category: normalizeCategory(value) }));
   };
 
-  const handleBusinessLineChange = (line: BusinessLine) => {
-    const safeLine = allowedBusinessLines.includes(line) ? line : defaultBusinessLine;
-    const firstCategory = safeLine === 'icecream' ? 'ice cream' : 'milk';
-    setForm(current => ({ ...current, businessLine: safeLine, category: firstCategory }));
-    setSelectedCategoryOption(firstCategory);
-    setManualCategory('');
-  };
 
   const handleBrandOptionChange = (value: string) => {
     setSelectedBrandOption(value);

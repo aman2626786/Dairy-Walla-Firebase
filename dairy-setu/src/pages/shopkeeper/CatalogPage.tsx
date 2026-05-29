@@ -100,6 +100,7 @@ export function ShopCatalogPage() {
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState<ProductCategory | 'all'>('all');
   const [selectedDistributorId, setSelectedDistributorId] = useState<string | null>(null);
+  const [orderBusinessLine, setOrderBusinessLine] = useState<'dairy' | 'icecream'>('dairy');
 
   const shopProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
 
@@ -387,6 +388,26 @@ export function ShopCatalogPage() {
                 </div>
               )}
 
+              {group.distributorType === 'dual' && (
+                <div className="mb-4">
+                  <p className="text-xs text-gray-500 mb-2">Choose Dairy Products or Ice Cream Products for this order.</p>
+                  <div className="flex bg-gray-100 p-1 rounded-lg">
+                    <button
+                      onClick={() => setOrderBusinessLine('dairy')}
+                      className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${orderBusinessLine === 'dairy' ? 'bg-brand-600 text-white' : 'text-gray-600'}`}
+                    >
+                      Dairy Products 🥛
+                    </button>
+                    <button
+                      onClick={() => setOrderBusinessLine('icecream')}
+                      className={`flex-1 py-2 text-sm font-bold rounded-md transition-colors ${orderBusinessLine === 'icecream' ? 'bg-brand-600 text-white' : 'text-gray-600'}`}
+                    >
+                      Ice Cream 🍦
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {group.distributorProfile && (
                 <div className={`mb-4 p-3 rounded-xl flex items-center gap-3 ${
                   group.isLate
@@ -475,56 +496,58 @@ export function ShopCatalogPage() {
                 <div className="text-sm text-gray-500 py-3">No products for this distributor.</div>
               ) : group.distributorType === 'dual' ? (
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Dairy Products</h3>
-                    {group.dairyItems.length === 0 ? (
-                      <div className="text-xs text-gray-500 mb-2">No dairy products available.</div>
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {group.dairyItems.map(product => {
-                          const cartItem = cart.find(c => c.product.id === product.id);
-                          const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
-                          const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
-                          const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
-                          const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
-                          return (
-                            <ProductCard
-                              key={product.id}
-                              product={product}
-                              quantity={cartItem?.quantity || 0}
-                              canAdd={canAdd}
-                              onQtyChange={qty => setCartQuantity(product, qty)}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800 mb-2">Ice Cream</h3>
-                    {group.iceCreamItems.length === 0 ? (
-                      <div className="text-xs text-gray-500">No ice cream products available.</div>
-                    ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {group.iceCreamItems.map(product => {
-                          const cartItem = cart.find(c => c.product.id === product.id);
-                          const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
-                          const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
-                          const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
-                          const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
-                          return (
-                            <ProductCard
-                              key={product.id}
-                              product={product}
-                              quantity={cartItem?.quantity || 0}
-                              canAdd={canAdd}
-                              onQtyChange={qty => setCartQuantity(product, qty)}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+                  {orderBusinessLine === 'dairy' && (
+                    <div>
+                      {group.dairyItems.length === 0 ? (
+                        <div className="text-xs text-gray-500 mb-2">No dairy products available.</div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {group.dairyItems.map(product => {
+                            const cartItem = cart.find(c => c.product.id === product.id);
+                            const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                            const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                            const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                            const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
+                            return (
+                              <ProductCard
+                                key={product.id}
+                                product={product}
+                                quantity={cartItem?.quantity || 0}
+                                canAdd={canAdd}
+                                onQtyChange={qty => setCartQuantity(product, qty)}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {orderBusinessLine === 'icecream' && (
+                    <div>
+                      {group.iceCreamItems.length === 0 ? (
+                        <div className="text-xs text-gray-500">No ice cream products available.</div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {group.iceCreamItems.map(product => {
+                            const cartItem = cart.find(c => c.product.id === product.id);
+                            const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                            const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                            const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                            const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
+                            return (
+                              <ProductCard
+                                key={product.id}
+                                product={product}
+                                quantity={cartItem?.quantity || 0}
+                                canAdd={canAdd}
+                                onQtyChange={qty => setCartQuantity(product, qty)}
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
