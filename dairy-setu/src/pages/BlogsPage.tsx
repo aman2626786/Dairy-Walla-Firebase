@@ -13,7 +13,7 @@ export function BlogsPage() {
     const fetchBlogs = async () => {
       try {
         setLoading(true);
-        const { data } = await apiClient.get('/api/blogs');
+        const { data } = await apiClient.get('/blogs');
         setBlogs(data);
       } catch (err) {
         console.error('Error fetching blogs:', err);

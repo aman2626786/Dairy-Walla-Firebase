@@ -16,7 +16,7 @@ export function AdminBlogsPage() {
     try {
       setLoading(true);
       setError(null);
-      const { data } = await apiClient.get('/api/blogs');
+      const { data } = await apiClient.get('/blogs');
       setBlogs(data);
     } catch (err) {
       console.error('Error fetching blogs:', err);
@@ -40,7 +40,7 @@ export function AdminBlogsPage() {
     try {
       setIsSubmitting(true);
       setError(null);
-      const { data } = await apiClient.post('/api/admin/blogs', {
+      const { data } = await apiClient.post('/admin/blogs', {
         title,
         type,
         description,
@@ -60,7 +60,7 @@ export function AdminBlogsPage() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this blog?')) return;
     try {
-      await apiClient.delete(`/api/admin/blogs/${id}`);
+      await apiClient.delete(`/admin/blogs/${id}`);
       setBlogs(blogs.filter((b) => b.id !== id));
     } catch (err) {
       console.error('Error deleting blog:', err);
