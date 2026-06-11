@@ -32,36 +32,43 @@ export function TermsConditionsPage() {
           <div className="prose prose-slate max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600">
             <p>By accessing or using the DairyWalla platform, you agree to be bound by these Terms & Conditions.</p>
 
-            <h3>1. Platform Role</h3>
-            <p>DairyWalla is an order-management platform designed to connect Dairy and Ice-Cream Distributors with their Shopkeepers. We are a technology provider and do not manufacture, sell, or take responsibility for the physical goods being traded.</p>
+            <h3>1. Platform Role & No Marketplace</h3>
+            <p><strong>DairyWalla is a software platform only. DairyWalla does not manufacture, store, sell, transport, deliver, inspect, or guarantee any dairy, ice cream, or other goods listed by distributors. All product pricing, availability, quality, delivery, taxes, licenses, and business disputes are the responsibility of the respective distributor and shopkeeper.</strong> We are a technology provider and are not a party to the transactions between distributors and shopkeepers.</p>
 
-            <h3>2. User Accounts</h3>
+            <h3>2. Eligibility</h3>
+            <p>DairyWalla is a B2B application designed for business users. It is not intended for consumers or minors. You must be of legal age to form a binding contract to use this platform.</p>
+
+            <h3>3. User Accounts & Acceptable Use</h3>
             <ul>
               <li><strong>Accuracy:</strong> You must provide accurate and complete information when creating an account.</li>
               <li><strong>Security:</strong> You are responsible for maintaining the confidentiality of your account credentials.</li>
-              <li><strong>Role Verification:</strong> Accounts are designated as either "Distributor" or "Shopkeeper". Using the platform under false pretences is prohibited.</li>
+              <li><strong>Acceptable Use:</strong> You agree not to use the platform to send spam, fraudulent orders, abuse the system, or attempt to reverse-engineer the app.</li>
             </ul>
 
-            <h3>3. Orders and Transactions</h3>
+            <h3>4. Orders, Transactions & Product Quality</h3>
             <ul>
               <li><strong>Order Placement:</strong> Shopkeepers are responsible for ensuring the accuracy of orders placed.</li>
-              <li><strong>Fulfillment:</strong> Distributors are responsible for accepting, rejecting, or fulfilling orders according to their own business practices and inventory.</li>
-              <li><strong>Disputes:</strong> Any disputes regarding product quality, missing items, or payments must be resolved directly between the Distributor and the Shopkeeper. DairyWalla is not liable for financial losses incurred.</li>
+              <li><strong>Fulfillment & Quality:</strong> Distributors are responsible for accepting, rejecting, or fulfilling orders, as well as ensuring product quality, FSSAI compliance, GST compliance, and issuing tax invoices.</li>
+              <li><strong>Disputes:</strong> Any disputes regarding product quality, missing items, or payments must be resolved directly between the Distributor and the Shopkeeper.</li>
             </ul>
 
-            <h3>4. Acceptable Use</h3>
-            <p>You agree not to use the platform to:</p>
-            <ul>
-              <li>Send spam, fraudulent orders, or abusive messages.</li>
-              <li>Interfere with the security or performance of the app.</li>
-              <li>Attempt to reverse-engineer or extract data from the platform.</li>
-            </ul>
+            <h3>5. Payments & Taxes</h3>
+            <p>DairyWalla does not process end-customer product payments unless explicitly enabled via integrated payment gateways. All invoicing and tax liabilities are the sole responsibility of the distributor.</p>
 
-            <h3>5. Termination</h3>
-            <p>We reserve the right to suspend or terminate your account at any time if we suspect a violation of these terms.</p>
+            <h3>6. Subscription & Pricing</h3>
+            <p>DairyWalla app and website access may be provided free for up to 5 months for eligible early users. Shopkeepers can currently use the app free of charge for placing orders with connected distributors. Paid pricing for distributors may apply after prior notice. Users will not be automatically charged unless they actively choose a paid plan and complete payment. DairyWalla may update pricing or introduce paid features in the future with prior notice.</p>
 
-            <h3>6. Changes to Terms</h3>
-            <p>We may update these terms occasionally. Continued use of the platform after updates constitutes your consent to the changes.</p>
+            <h3>7. Service Availability & Limitation of Liability</h3>
+            <p>We strive to keep our services operational, but downtime and maintenance may occur. DairyWalla shall not be liable for any business loss, spoiled goods, delivery failure, missed profit, or data loss arising from the use or inability to use the platform, to the maximum extent permitted by law.</p>
+
+            <h3>8. Indemnity</h3>
+            <p>You agree to indemnify and hold harmless DairyWalla and its owner (Aman Sharma) from any claims, damages, or losses arising from your misuse of the platform or violation of these terms.</p>
+
+            <h3>9. Governing Law & Jurisdiction</h3>
+            <p>These terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in Jaipur, Rajasthan, India.</p>
+
+            <h3>10. Contact Information</h3>
+            <p>For any legal or support queries, contact us at <strong>newdairy.walla@gmail.com</strong>.</p>
           </div>
         </div>
       </main>

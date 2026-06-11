@@ -32,40 +32,50 @@ export function PrivacyPolicyPage() {
           <div className="prose prose-slate max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-p:text-slate-600 prose-li:text-slate-600">
             <p>Welcome to DairyWalla! This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our application.</p>
 
-            <h3>1. Information We Collect</h3>
+            <h3>1. Who We Are (Data Controller)</h3>
+            <p>DairyWalla is owned and operated by Aman Sharma, located in Jaipur, Rajasthan, India. This privacy policy applies to our website and mobile application.</p>
+
+            <h3>2. Information We Collect</h3>
             <p>We may collect personal identification information from Users in a variety of ways, including, but not limited to:</p>
             <ul>
               <li><strong>Personal Data:</strong> Name, email address, phone number, and business details (business name, GST number, location).</li>
-              <li><strong>Location Data:</strong> GPS location of the shop or distributorship to facilitate accurate deliveries.</li>
+              <li><strong>Location Data:</strong> We may collect approximate or precise location only when the user provides permission or manually adds location details, for purposes such as distributor discovery, delivery-area setup, shop location, and route planning. We do not use continuous background location tracking unless clearly disclosed and separately enabled.</li>
+              <li><strong>Usage & Device Data:</strong> Firebase installation ID/device tokens, app interactions, and crash diagnostics.</li>
               <li><strong>Transaction Data:</strong> Order history, quantities, and status.</li>
             </ul>
             <p><em>Note:</em> We do not store sensitive payment/credit card information on our servers.</p>
 
-            <h3>2. How We Use Your Information</h3>
-            <p>We use the collected information for the following purposes:</p>
+            <h3>3. How We Use Your Information</h3>
+            <p>We use the collected information based on your consent and our legitimate business interests for the following purposes:</p>
             <ul>
               <li>To create and manage your account.</li>
               <li>To facilitate order placement and fulfillment between distributors and shopkeepers.</li>
-              <li>To send important notifications regarding order status (via Push Notifications).</li>
-              <li>To improve our platform and customer service.</li>
+              <li>To send important notifications regarding order status (via Push Notifications or WhatsApp where applicable).</li>
+              <li>To improve our platform, analytics, and customer service.</li>
             </ul>
 
-            <h3>3. Data Sharing</h3>
+            <h3>4. Data Sharing & Third-Party Services</h3>
             <p>We do not sell, trade, or rent your personal identification information to others. We share your information only:</p>
             <ul>
               <li>Between connected Distributors and Shopkeepers to process orders.</li>
-              <li>With third-party service providers (like Firebase for hosting/auth, Render for server hosting) under strict confidentiality agreements.</li>
+              <li>We may use trusted third-party service providers such as hosting (Render), authentication/database (Firebase), notification, analytics, crash-reporting, and communication service providers. These providers process data only as required to provide their services to us, subject to their own terms and policies.</li>
               <li>When required by law.</li>
             </ul>
 
-            <h3>4. Security</h3>
-            <p>We adopt appropriate data collection, storage, and processing practices, and security measures (like encryption and secured tokens) to protect against unauthorized access or disclosure of your personal information.</p>
+            <h3>5. Security & Data Retention</h3>
+            <p>We use reasonable technical and organizational safeguards such as secure authentication, access controls, and encrypted transmission where applicable. No digital platform can guarantee absolute security. We retain your data only for as long as necessary to provide our services or as required by law.</p>
 
-            <h3>5. Your Rights</h3>
-            <p>You have the right to request access to, correction of, or deletion of your personal data stored with us. You can contact our support team for these requests.</p>
+            <h3>6. Your Rights & Account Deletion</h3>
+            <p>You have the right to request access to, correction of, or deletion of your personal data stored with us. You can request account and data deletion by contacting our support email.</p>
 
-            <h3>6. Contact Us</h3>
-            <p>If you have any questions about this Privacy Policy, please contact us at <strong>support@dairywalla.in</strong>.</p>
+            <h3>7. Children's Privacy</h3>
+            <p>Our platform is intended for B2B business users and is not directed at children or minors under the age of 18. We do not knowingly collect personal data from minors.</p>
+
+            <h3>8. Changes to Policy</h3>
+            <p>We may update this policy periodically. We will notify you of any changes by updating the "Effective Date" of this policy.</p>
+
+            <h3>9. Contact Us</h3>
+            <p>If you have any questions, grievances, or deletion requests regarding this Privacy Policy, please contact us at <strong>newdairy.walla@gmail.com</strong>.</p>
           </div>
         </div>
       </main>
