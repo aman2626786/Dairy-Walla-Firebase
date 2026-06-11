@@ -33,6 +33,8 @@ import { AdminBlogsPage } from './pages/admin/AdminBlogsPage';
 import { BlogsPage } from './pages/BlogsPage';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { ShareLinkHandler } from './pages/ShareLinkHandler';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsConditionsPage } from './pages/TermsConditionsPage';
 import { ToastContainer } from './components/ui/Toast';
 import { useAuthStore } from './store/authStore';
 import { useAppStore } from './store/appStore';
@@ -251,6 +253,8 @@ function AppWithAuth() {
       <Route path="/demo" element={<DemoFormPage />} />
       <Route path="/feedback" element={<FeedbackPage />} />
       <Route path="/blogs" element={<BlogsPage />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms-conditions" element={<TermsConditionsPage />} />
       <Route path="/d/:code" element={<ShareLinkHandler />} />
 
       <Route path="/distributor" element={

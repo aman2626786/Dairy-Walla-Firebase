@@ -472,9 +472,11 @@ export function LandingPage() {
          </div>
          <div className="flex flex-col items-center gap-2">
             <div className="flex gap-4 mb-2">
-              <a href="/feedback" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Leave Feedback</a>
+              <Link to="/feedback" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Leave Feedback</Link>
               <span className="text-slate-300">•</span>
-              <a href="/privacy-policy" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Privacy Policy</a>
+              <Link to="/privacy-policy" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Privacy Policy</Link>
+              <span className="text-slate-300">•</span>
+              <Link to="/terms-conditions" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Terms & Conditions</Link>
               <span className="text-slate-300">•</span>
               <Link to="/blogs" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Blog</Link>
               <span className="text-slate-300">•</span>
