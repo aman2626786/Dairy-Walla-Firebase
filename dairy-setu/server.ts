@@ -150,6 +150,9 @@ app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/manual')) {
     return next();
   }
+  if (req.path === '/blogs' || req.path.startsWith('/blogs/')) {
+    return next();
+  }
   return requireAuth(req as AuthenticatedRequest, res, next);
 });
 
