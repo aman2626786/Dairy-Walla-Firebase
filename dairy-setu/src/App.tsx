@@ -29,6 +29,8 @@ import { AdminDashboardComprehensive } from './pages/admin/AdminDashboardCompreh
 import { AdminUsersPage } from './pages/admin/AdminUsersPage';
 import { AdminConnectionsPage } from './pages/admin/AdminConnectionsPage';
 import { AdminAnalyticsPage } from './pages/admin/AdminAnalyticsPage';
+import { AdminBlogsPage } from './pages/admin/AdminBlogsPage';
+import { BlogsPage } from './pages/BlogsPage';
 import { AdminLayout } from './components/layout/AdminLayout';
 import { ShareLinkHandler } from './pages/ShareLinkHandler';
 import { ToastContainer } from './components/ui/Toast';
@@ -248,6 +250,7 @@ function AppWithAuth() {
       <Route path="/confirm" element={<ConfirmProfilePage />} />
       <Route path="/demo" element={<DemoFormPage />} />
       <Route path="/feedback" element={<FeedbackPage />} />
+      <Route path="/blogs" element={<BlogsPage />} />
       <Route path="/d/:code" element={<ShareLinkHandler />} />
 
       <Route path="/distributor" element={
@@ -291,6 +294,7 @@ function AppWithAuth() {
       <Route path="/admin/users" element={<AdminLayout><AdminUsersPage /></AdminLayout>} />
       <Route path="/admin/connections" element={<AdminLayout><AdminConnectionsPage /></AdminLayout>} />
       <Route path="/admin/analytics" element={<AdminLayout><AdminAnalyticsPage /></AdminLayout>} />
+      <Route path="/admin/blogs" element={<AdminLayout><AdminBlogsPage /></AdminLayout>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

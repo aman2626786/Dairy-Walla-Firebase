@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   X,
+  FileText,
 } from 'lucide-react';
 import { clearAdminSession, isAdminAuthenticated } from '../../pages/admin/AdminLoginPage';
 
@@ -46,6 +47,12 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       href: '/admin/analytics',
       icon: TrendingUp,
       description: 'Business analytics',
+    },
+    {
+      label: 'Blogs',
+      href: '/admin/blogs',
+      icon: FileText,
+      description: 'Manage public blogs',
     },
   ];
 

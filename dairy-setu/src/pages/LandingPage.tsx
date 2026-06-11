@@ -30,10 +30,6 @@ export function LandingPage() {
       
       {/* Fixed Header Wrapper */}
       <div className="fixed top-0 left-0 right-0 z-50 flex flex-col">
-        {/* Announcement Banner */}
-        <div className="bg-brand-600 text-white text-xs sm:text-sm font-bold text-center py-2.5 px-4 shadow-md">
-          🎉 Get DairyWalla App & Website FREE for up to 5 months for each user! Pay only after that.
-        </div>
 
         {/* Navigation */}
         <nav className="bg-white/95 backdrop-blur-md border-b border-slate-100 w-full">
@@ -52,6 +48,8 @@ export function LandingPage() {
                 <a href="#our-story" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">{t('Our Story')}</a>
                 <a href="#dashboard" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">{t('Dashboard')}</a>
                 <a href="#how-it-works" className="text-xs md:text-sm font-semibold text-slate-600 hover:text-brand-600 transition-colors">{t('How it works')}</a>
+                <Link to="/blogs" className="text-xs md:text-sm font-bold text-brand-600 hover:text-brand-700 transition-colors">Blog</Link>
+                <a href="/about-us-faq.html" className="text-xs md:text-sm font-bold text-brand-600 hover:text-brand-700 transition-colors">FAQ</a>
               </div>
 
               {/* Language Selector */}
@@ -477,6 +475,10 @@ export function LandingPage() {
               <a href="/feedback" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Leave Feedback</a>
               <span className="text-slate-300">•</span>
               <a href="/privacy-policy" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Privacy Policy</a>
+              <span className="text-slate-300">•</span>
+              <Link to="/blogs" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">Blog</Link>
+              <span className="text-slate-300">•</span>
+              <a href="/about-us-faq.html" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">FAQ</a>
             </div>
             <p className="text-slate-400 text-sm font-medium tracking-tight">
                Built with ❤️ by <a href="https://portfolio-aman-sharma.web.app/" target="_blank" rel="noreferrer" className="text-brand-600 font-bold hover:underline">Aman Sharma</a>

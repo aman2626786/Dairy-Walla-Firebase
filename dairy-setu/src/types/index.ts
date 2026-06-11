@@ -170,3 +170,11 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
+
+export interface Blog {
+  id: string;
+  title: string;
+  type: string;
+  description: string;
+  createdAt: string;
+}

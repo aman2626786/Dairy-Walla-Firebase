@@ -2697,6 +2697,52 @@ cron.schedule('0 * * * *', async () => {
   }
 });
 
+// ==========================================
+// BLOGS API
+// ==========================================
+
+app.get('/api/blogs', async (req, res) => {
+  try {
+    const blogs = await prisma.blog.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(blogs);
+  } catch (error) {
+    console.error('Error fetching blogs:', error);
+    res.status(500).json({ error: 'Failed to fetch blogs' });
+  }
+});
+
+app.post('/api/admin/blogs', async (req, res) => {
+  try {
+    const { title, type, description } = req.body;
+    if (!title || !description) {
+      return res.status(400).json({ error: 'Title and description are required' });
+    }
+    const blog = await prisma.blog.create({
+      data: {
+        title: String(title).trim(),
+        type: String(type || 'other').trim(),
+        description: String(description).trim()
+      }
+    });
+    res.json(blog);
+  } catch (error) {
+    console.error('Error creating blog:', error);
+    res.status(500).json({ error: 'Failed to create blog' });
+  }
+});
+
+app.delete('/api/admin/blogs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.blog.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting blog:', error);
+    res.status(500).json({ error: 'Failed to delete blog' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend API Server running on http://localhost:${PORT}`);
 });
+
