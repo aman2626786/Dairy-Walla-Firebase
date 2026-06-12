@@ -483,7 +483,7 @@ export function LandingPage() {
               <a href="/about-us-faq.html" className="text-sm font-medium text-brand-600 hover:text-brand-700 transition-colors">FAQ</a>
             </div>
             <p className="text-slate-400 text-sm font-medium tracking-tight">
-               Built with ❤️ by <a href="https://portfolio-aman-sharma.web.app/" target="_blank" rel="noreferrer" className="text-brand-600 font-bold hover:underline">Aman Sharma</a>
+               Built with ❤️ by <a href="https://mohit-portfolio-65976.web.app/" target="_blank" rel="noreferrer" className="text-brand-600 font-bold hover:underline">Mohit Saini</a> &amp; <a href="https://portfolio-aman-sharma.web.app/" target="_blank" rel="noreferrer" className="text-brand-600 font-bold hover:underline">Aman Sharma</a>
             </p>
          </div>
       </footer>

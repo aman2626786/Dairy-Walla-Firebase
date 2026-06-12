@@ -33,7 +33,7 @@ export function PrivacyPolicyPage() {
             <p>Welcome to DairyWalla! This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you visit our website or use our application.</p>
 
             <h3>1. Who We Are (Data Controller)</h3>
-            <p>DairyWalla is owned and operated by Aman Sharma, located in Jaipur, Rajasthan, India. This privacy policy applies to our website and mobile application.</p>
+            <p>DairyWalla is owned and operated by Mohit Saini and Aman Sharma, located in Jaipur, Rajasthan, India. This privacy policy applies to our website and mobile application.</p>
 
             <h3>2. Information We Collect</h3>
             <p>We may collect personal identification information from Users in a variety of ways, including, but not limited to:</p>

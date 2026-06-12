@@ -62,7 +62,7 @@ export function TermsConditionsPage() {
             <p>We strive to keep our services operational, but downtime and maintenance may occur. DairyWalla shall not be liable for any business loss, spoiled goods, delivery failure, missed profit, or data loss arising from the use or inability to use the platform, to the maximum extent permitted by law.</p>
 
             <h3>8. Indemnity</h3>
-            <p>You agree to indemnify and hold harmless DairyWalla and its owner (Aman Sharma) from any claims, damages, or losses arising from your misuse of the platform or violation of these terms.</p>
+            <p>You agree to indemnify and hold harmless DairyWalla and its owners (Mohit Saini and Aman Sharma) from any claims, damages, or losses arising from your misuse of the platform or violation of these terms.</p>
 
             <h3>9. Governing Law & Jurisdiction</h3>
             <p>These terms are governed by the laws of India. Any disputes shall be subject to the exclusive jurisdiction of the courts in Jaipur, Rajasthan, India.</p>
