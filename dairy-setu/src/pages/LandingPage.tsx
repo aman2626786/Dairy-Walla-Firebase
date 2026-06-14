@@ -9,13 +9,11 @@ import {
 import { BrandLogo } from '../components/ui/BrandLogo';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation, type AppLanguage } from '../utils/i18n';
-import { useToast } from '../components/ui/Toast';
 
 export function LandingPage() {
   const navigate = useNavigate();
   const { isAuthenticated, user } = useAuthStore();
   const { t, language, setLanguage } = useTranslation();
-  const { show } = useToast();
 
   const handleCTA = () => {
     if (isAuthenticated && user) {
