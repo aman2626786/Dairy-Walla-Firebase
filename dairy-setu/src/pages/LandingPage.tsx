@@ -112,9 +112,9 @@ export function LandingPage() {
             <button onClick={() => navigate('/demo')} className="w-full sm:w-auto bg-gradient-to-r from-brand-600 to-emerald-600 hover:from-brand-700 hover:to-emerald-700 text-white font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl shadow-2xl shadow-brand-500/20 flex items-center justify-center gap-3 text-base sm:text-lg transition-all duration-300 hover:-translate-y-1">
               {t('Book Demo')} <ArrowRight className="w-5 h-5" />
             </button>
-            <button onClick={() => navigate('/signup')} className="w-full sm:w-auto bg-white/80 backdrop-blur-md border border-slate-200/80 hover:border-brand-300 hover:bg-white text-slate-700 font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 text-base sm:text-lg shadow-sm hover:shadow-md">
-              {t('Join Waitlist')}
-            </button>
+            <a href="https://play.google.com/store/apps/details?id=com.dairywalla.app&pcampaignid=web_share" target="_blank" rel="noreferrer" className="w-full sm:w-auto bg-white/80 backdrop-blur-md border border-slate-200/80 hover:border-brand-300 hover:bg-white text-slate-700 font-bold py-4 sm:py-5 px-8 sm:px-14 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 text-base sm:text-lg shadow-sm hover:shadow-md">
+              <Play className="w-5 h-5 fill-slate-700" /> {t('Get the App')}
+            </a>
           </div>
 
           <div className="max-w-2xl mx-auto mb-20 sm:mb-28">
@@ -125,15 +125,17 @@ export function LandingPage() {
                 </div>
                 <div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('DairyWalla App')}</h2>
-                  <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed mt-0.5">{t('The official DairyWalla app will be available on the Google Play Store soon.')}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 font-semibold leading-relaxed mt-0.5">{t('The official DairyWalla app is now available on the Google Play Store!')}</p>
                 </div>
               </div>
-              <button
-                onClick={() => show('App is coming soon to the Google Play Store!', 'info')}
+              <a
+                href="https://play.google.com/store/apps/details?id=com.dairywalla.app&pcampaignid=web_share"
+                target="_blank"
+                rel="noreferrer"
                 className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-7 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-300 hover:-translate-y-0.5 whitespace-nowrap shadow-md shadow-slate-900/15"
               >
-                <Play className="w-4 h-4 fill-current" /> {t('Coming Soon')}
-              </button>
+                <Play className="w-4 h-4 fill-current" /> {t('Download Now')}
+              </a>
             </div>
           </div>
 
