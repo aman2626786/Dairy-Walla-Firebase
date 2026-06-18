@@ -1783,7 +1783,7 @@ app.post('/api/orders', async (req, res) => {
                    userId: dpObj.userId,
                    type: 'stock_alert',
                    title: 'Stock Unavailable',
-                   body: `${prod.name} is out of stock. Please refill immediately.`
+                   message: `${prod.name} is out of stock. Please refill immediately.`
                  });
                }
             }
@@ -1966,7 +1966,7 @@ app.post('/api/orders/manual-bill', async (req, res) => {
                  userId: dpObj.userId,
                  type: 'stock_alert',
                  title: 'Stock Unavailable',
-                 body: `${prod.name} is out of stock. Please refill immediately.`
+                 message: `${prod.name} is out of stock. Please refill immediately.`
                });
              }
           }
@@ -2471,7 +2471,7 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
               userId: dpObj.userId,
               type: 'stock_alert',
               title: 'Stock Unavailable',
-              body: `${update.prod.name} is out of stock. Please refill immediately.`
+              message: `${update.prod.name} is out of stock. Please refill immediately.`
             });
           }
         }
@@ -2914,7 +2914,7 @@ cron.schedule('* * * * *', async () => {
                 userId: dpObj.userId,
                 type: 'stock_alert',
                 title: 'Stock Unavailable',
-                body: `${update.prod.name} is out of stock. Please refill immediately.`
+                message: `${update.prod.name} is out of stock. Please refill immediately.`
               });
             }
           }
