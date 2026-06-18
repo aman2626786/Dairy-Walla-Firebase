@@ -90,6 +90,7 @@ export function CatalogPage() {
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsSearch, setSuggestionsSearch] = useState('');
+  const [suggestionsLineFilter, setSuggestionsLineFilter] = useState<'all' | BusinessLine>('all');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const distributorType = toDistributorType(profile?.distributorType);
@@ -108,10 +109,12 @@ export function CatalogPage() {
   );
 
   const filterCategories = useMemo(
-    () =>
-      Array.from(new Set(myProducts.map(product => normalizeCategory(String(product.category)))))
-        .sort(compareCategories),
-    [myProducts]
+    () => {
+      const lineFilteredProducts = myProducts.filter(p => filterLine === 'all' || p.businessLine === filterLine);
+      return Array.from(new Set(lineFilteredProducts.map(product => normalizeCategory(String(product.category)))))
+        .sort(compareCategories);
+    },
+    [myProducts, filterLine]
   );
 
   const filterBrands = useMemo(
@@ -660,7 +663,10 @@ export function CatalogPage() {
             <select
               className="input"
               value={filterLine}
-              onChange={event => setFilterLine(event.target.value as 'all' | BusinessLine)}
+              onChange={event => {
+                setFilterLine(event.target.value as 'all' | BusinessLine);
+                setFilterCat('all');
+              }}
             >
               <option value="all">All Sections</option>
               <option value="dairy">Dairy Products</option>
@@ -986,6 +992,38 @@ export function CatalogPage() {
             />
           </div>
 
+          {distributorType === 'dual' && (
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-lg text-sm">
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
+                  suggestionsLineFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                onClick={() => setSuggestionsLineFilter('all')}
+              >
+                All 📦
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
+                  suggestionsLineFilter === 'dairy' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                onClick={() => setSuggestionsLineFilter('dairy')}
+              >
+                Dairy 🥛
+              </button>
+              <button
+                type="button"
+                className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
+                  suggestionsLineFilter === 'icecream' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+                onClick={() => setSuggestionsLineFilter('icecream')}
+              >
+                Ice Cream 🍦
+              </button>
+            </div>
+          )}
+
           <div className="overflow-y-auto flex-1 divide-y divide-gray-100 pr-1 max-h-[50vh]">
             {loadingSuggestions ? (
               <div className="py-8 text-center text-gray-500">Loading suggestions...</div>
@@ -996,6 +1034,9 @@ export function CatalogPage() {
                 .filter(item => {
                   const query = suggestionsSearch.toLowerCase().trim();
                   if (distributorType !== 'dual' && item.businessLine !== defaultBusinessLine) {
+                    return false;
+                  }
+                  if (distributorType === 'dual' && suggestionsLineFilter !== 'all' && item.businessLine !== suggestionsLineFilter) {
                     return false;
                   }
                   return !query || [item.name, item.brand, item.category].some(val => String(val || '').toLowerCase().includes(query));
