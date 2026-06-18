@@ -1457,7 +1457,7 @@ app.get('/api/products/suggestions', async (req, res) => {
       const defaultTemplates = [
         { name: "Fresh Milk", brand: "Amul", category: "milk", businessLine: "dairy", unit: "1 Litre", price: 66, imageUrl: null, showStock: false, stockQuantity: 0 },
         { name: "Paneer", brand: "Amul", category: "paneer", businessLine: "dairy", unit: "200g Pack", price: 90, imageUrl: null, showStock: false, stockQuantity: 0 },
-        { name: "Fresh Dahi", brand: "Mother Dairy", category: "dahi", businessLine: "dairy", unit: "400g Cup", price: 50, imageUrl: null, showStock: false, stockQuantity: 0 },
+        { name: "Fresh Dahi", brand: "Mother Dairy", category: "curd", businessLine: "dairy", unit: "400g Cup", price: 50, imageUrl: null, showStock: false, stockQuantity: 0 },
         { name: "Vanilla Cup", brand: "Amul", category: "cup", businessLine: "icecream", unit: "Pack of 10", price: 200, imageUrl: null, showStock: true, stockQuantity: 20 },
         { name: "Chocolate Cone", brand: "Kwality Walls", category: "cone", businessLine: "icecream", unit: "Pack of 6", price: 240, imageUrl: null, showStock: true, stockQuantity: 15 },
         { name: "Kulfi", brand: "Amul", category: "kulfi", businessLine: "icecream", unit: "Pack of 10", price: 750, imageUrl: null, showStock: true, stockQuantity: 10 },
@@ -2117,7 +2117,10 @@ app.patch('/api/orders/:id', async (req, res) => {
 
     const updated = await prisma.order.update({ where: { id: req.params.id }, data: updateData });
 
-    if (order.status !== 'rejected' && updated.status === 'rejected') {
+    const wasTerminated = order.status === 'rejected' || order.status === 'cancelled';
+    const isTerminated = updated.status === 'rejected' || updated.status === 'cancelled';
+
+    if (!wasTerminated && isTerminated) {
       try {
         for (const item of order.items) {
           if (item.productId) {
@@ -2132,7 +2135,7 @@ app.patch('/api/orders/:id', async (req, res) => {
           }
         }
       } catch (err) {
-        console.error('Failed to restore stock on rejection:', err);
+        console.error('Failed to restore stock on rejection/cancellation:', err);
       }
     }
 
