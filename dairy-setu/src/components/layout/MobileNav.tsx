@@ -54,6 +54,7 @@ export function MobileNav() {
         { to: '/distributor/profile', icon: <User className="w-5 h-5" />, label: t('Profile') },
       ]
     : [
+        { to: '/shop/invoices', icon: <FileText className="w-5 h-5" />, label: t('Invoices') },
         { to: '/shop/connection', icon: <Users className="w-5 h-5" />, label: t('My Distributor'), dot: hasMyDistributorDot },
         { to: '/shop/notifications', icon: <Bell className="w-5 h-5" />, label: t('Notifications'), badge: unread },
         { to: '/shop/profile', icon: <User className="w-5 h-5" />, label: t('Profile') },

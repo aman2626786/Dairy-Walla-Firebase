@@ -450,6 +450,11 @@ export async function downloadInvoicePdf(input: InvoicePdfInput) {
   doc.save(getInvoiceFileName(input));
 }
 
+export async function generateInvoicePdfBlob(input: InvoicePdfInput): Promise<Blob> {
+  const doc = await createInvoicePdf(input);
+  return doc.output('blob');
+}
+
 export async function printInvoicePdf(input: InvoicePdfInput, printWindow?: Window | null) {
   const targetWindow = printWindow || window.open('', '_blank');
   const doc = await createInvoicePdf(input);

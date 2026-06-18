@@ -286,6 +286,7 @@ function AppWithAuth() {
         <Route index element={<ShopCatalogPage />} />
         <Route path="review" element={<OrderReviewPage />} />
         <Route path="history" element={<OrderHistoryPage />} />
+        <Route path="invoices" element={<InvoicesPage />} />
         <Route path="connection" element={<ConnectionPage />} />
         <Route path="discover" element={<DiscoverPage />} />
         <Route path="distributor/:distributorId" element={<DistributorProfilePage />} />

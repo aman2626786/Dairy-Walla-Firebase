@@ -36,6 +36,7 @@ export function Sidebar() {
     { to: '/shop', icon: <Store className="w-4 h-4" />, label: t('Order Now'), badge: undefined, showDot: false },
     { to: '/shop/discover', icon: <Search className="w-4 h-4" />, label: t('Discover'), badge: 'New', showDot: false },
     { to: '/shop/history', icon: <ClipboardList className="w-4 h-4" />, label: t('My Orders'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'history') },
+    { to: '/shop/invoices', icon: <FileText className="w-4 h-4" />, label: t('Invoices'), badge: undefined, showDot: false },
     { to: '/shop/connection', icon: <Users className="w-4 h-4" />, label: t('My Distributor'), badge: undefined, showDot: hasUnreadForPage(notifications, user?.id, user?.role, 'myDistributor') },
   ];
 

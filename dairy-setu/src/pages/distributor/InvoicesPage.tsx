@@ -25,19 +25,32 @@ export function InvoicesPage() {
     () => getInvoiceLanguage()
   );
 
-  const profile = distributorProfiles.find(dp => dp.userId === user?.id);
-  const distributorType = toDistributorType(profile?.distributorType);
+  const isShopkeeper = user?.role === 'shopkeeper';
+  const shopkeeperProfile = shopkeeperProfiles.find(sp => sp.userId === user?.id);
+  const distributorProfile = distributorProfiles.find(dp => dp.userId === user?.id);
+  
+  const profile = isShopkeeper ? shopkeeperProfile : distributorProfile;
+  const distributorType = toDistributorType(distributorProfile?.distributorType);
   const billableOrders = orders.filter(
-    o => o.distributorId === profile?.id && (o.status === 'accepted' || o.status === 'fulfilled')
+    o => (isShopkeeper ? o.shopkeeperId === profile?.id || o.shopkeeperId === user?.id : o.distributorId === profile?.id) && (o.status === 'accepted' || o.status === 'fulfilled')
   );
   const getShopkeeperForOrder = (order: Order) => {
     return (
       shopkeeperProfiles.find(sp => sp.id === order.shopkeeperId || sp.userId === order.shopkeeperId) || null
     );
   };
+  const getDistributorForOrder = (order: Order) => {
+    return (
+      distributorProfiles.find(dp => dp.id === order.distributorId) || null
+    );
+  };
   const selectedShopkeeper = useMemo(
     () => (selectedOrder ? getShopkeeperForOrder(selectedOrder) : null),
     [selectedOrder, shopkeeperProfiles]
+  );
+  const selectedDistributor = useMemo(
+    () => (selectedOrder ? getDistributorForOrder(selectedOrder) : null),
+    [selectedOrder, distributorProfiles]
   );
 
   useEffect(() => {
@@ -63,20 +76,27 @@ export function InvoicesPage() {
 
   const handleDownload = async (order: Order) => {
     if (!profile) {
-      show('Distributor profile missing. Please complete profile first.', 'error');
+      show('Profile missing. Please complete profile first.', 'error');
       return;
     }
 
     try {
-      const loadedShopkeeper = getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null);
+      const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
+      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
+      
+      if (!orderDistributor) {
+        show('Distributor info missing for this order.', 'error');
+        return;
+      }
+
       const shopkeeperPhone = loadedShopkeeper?.phone;
       const shopkeeperEmail = loadedShopkeeper?.email;
       await downloadInvoicePdf({
         order,
-        distributor: profile,
+        distributor: orderDistributor,
         shopkeeper: loadedShopkeeper,
-        distributorPhone: profile.phone || user?.phone,
-        distributorEmail: profile.email || user?.email,
+        distributorPhone: orderDistributor.phone,
+        distributorEmail: orderDistributor.email,
         shopkeeperPhone,
         shopkeeperEmail,
         language: invoiceLanguage,
@@ -89,19 +109,27 @@ export function InvoicesPage() {
 
   const handlePrint = async (order: Order) => {
     if (!profile) {
-      show('Distributor profile missing. Please complete profile first.', 'error');
+      show('Profile missing. Please complete profile first.', 'error');
       return;
     }
 
     const printWindow = window.open('', '_blank');
     try {
-      const loadedShopkeeper = getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null);
+      const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
+      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
+
+      if (!orderDistributor) {
+        printWindow?.close();
+        show('Distributor info missing for this order.', 'error');
+        return;
+      }
+
       await printInvoicePdf({
         order,
-        distributor: profile,
+        distributor: orderDistributor,
         shopkeeper: loadedShopkeeper,
-        distributorPhone: profile.phone || user?.phone,
-        distributorEmail: profile.email || user?.email,
+        distributorPhone: orderDistributor.phone,
+        distributorEmail: orderDistributor.email,
         shopkeeperPhone: loadedShopkeeper?.phone,
         shopkeeperEmail: loadedShopkeeper?.email,
         language: invoiceLanguage,
@@ -113,13 +141,48 @@ export function InvoicesPage() {
     }
   };
 
-  const handleShare = (order: Order) => {
-    const text = `Invoice from ${profile?.businessName}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: ₹${order.total.toLocaleString()}`;
-    if (navigator.share) {
-      navigator.share({ title: 'Invoice', text });
-    } else {
-      navigator.clipboard.writeText(text);
-      show('Invoice copied to clipboard');
+  const handleShare = async (order: Order) => {
+    const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
+    const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order));
+    const text = `Invoice from ${orderDistributor?.businessName || 'Distributor'}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: ₹${order.total.toLocaleString()}`;
+    
+    try {
+      if (navigator.share && orderDistributor) {
+        try {
+          // Generate PDF Blob
+          const { generateInvoicePdfBlob } = await import('../../utils/invoicePdf');
+          const pdfBlob = await generateInvoicePdfBlob({
+            order,
+            distributor: orderDistributor,
+            shopkeeper: loadedShopkeeper,
+            distributorPhone: orderDistributor.phone,
+            distributorEmail: orderDistributor.email,
+            shopkeeperPhone: loadedShopkeeper?.phone,
+            shopkeeperEmail: loadedShopkeeper?.email,
+            language: invoiceLanguage,
+          });
+          const file = new File([pdfBlob], `Invoice_${order.id.slice(-6)}.pdf`, { type: 'application/pdf' });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: `Invoice ${order.id.slice(-6)}`,
+              text: text,
+              files: [file]
+            });
+            return;
+          }
+        } catch (err) {
+          console.warn("Failed to generate/share PDF, falling back to text share.", err);
+        }
+      }
+
+      if (navigator.share) {
+        await navigator.share({ title: 'Invoice', text });
+      } else {
+        await navigator.clipboard.writeText(text);
+        show('Invoice copied to clipboard');
+      }
+    } catch (e) {
+      console.warn("Share failed:", e);
     }
   };
 

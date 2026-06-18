@@ -69,6 +69,7 @@ export function ProfilePage() {
 
   const handleRemoveQr = async () => {
     if (!isDistributor || !distProfile) return;
+    if (!window.confirm(t('Are you sure you want to remove your Payment QR code?'))) return;
     try {
       await updateDistributorSettings(distProfile.id, { paymentQrUrl: '' });
       show(t('Payment QR Code removed.'));

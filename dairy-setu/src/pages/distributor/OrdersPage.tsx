@@ -255,26 +255,7 @@ export function OrdersPage() {
                   {order.status === 'accepted' && (
                     <div className="flex gap-2 mb-2">
                       <button onClick={() => handleFulfill(order)} className="btn-primary py-1.5 px-3 text-xs w-full justify-center">
-                        <CheckCircle className="w-3.5 h-3.5" /> Mark Fulfilled
-                      </button>
-                    </div>
-                  )}
-                  {(order.status === 'accepted' || order.status === 'fulfilled') && (
-                    <div className="flex gap-2 mb-2">
-                      <button 
-                        onClick={() => {
-                          const reason = window.prompt('Provide a reason for revoking this order/bill. It will be marked as cancelled.');
-                          if (reason === null) return;
-                          if (!reason.trim()) {
-                            show('Please provide a reason to revoke.', 'error');
-                            return;
-                          }
-                          updateOrder(order.id, { status: 'cancelled', cancelReason: reason.trim() });
-                          show('Order cancelled successfully.');
-                        }}
-                        className="btn-danger py-1.5 px-3 text-xs w-full justify-center"
-                      >
-                        <XCircle className="w-3.5 h-3.5" /> Revoke / Cancel
+                        <CheckCircle className="w-3.5 h-3.5 mr-1 inline-block" /> Mark as Delivered
                       </button>
                     </div>
                   )}
