@@ -1734,6 +1734,17 @@ app.post('/api/orders', async (req, res) => {
 
     const total = orderItemsPayload.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0);
 
+    if (orderLine === 'icecream' || orderLine === 'dual') {
+      for (const item of orderItemsPayload) {
+        const prod = productById.get(item.productId);
+        if (prod && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock) {
+          if ((prod.stockQuantity || 0) < Number(item.quantity)) {
+            return res.status(400).json({ error: `Insufficient stock for ${prod.name}` });
+          }
+        }
+      }
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const order = await prisma.order.create({
       data: {
@@ -1759,11 +1770,23 @@ app.post('/api/orders', async (req, res) => {
       try {
         for (const item of orderItemsPayload) {
           const prod = productById.get(item.productId);
-          if (prod && prod.businessLine === 'icecream' && prod.stockQuantity !== null) {
+          if (prod && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock && prod.stockQuantity !== null) {
+            const newStock = Math.max(0, prod.stockQuantity - Number(item.quantity));
             await prisma.product.update({
               where: { id: item.productId },
-              data: { stockQuantity: Math.max(0, prod.stockQuantity - Number(item.quantity)) }
+              data: { stockQuantity: newStock }
             });
+            if (newStock === 0) {
+               const dpObj = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+               if (dpObj?.userId) {
+                 await createNotificationAndPush({
+                   userId: dpObj.userId,
+                   type: 'stock_alert',
+                   title: 'Stock Unavailable',
+                   body: `${prod.name} is out of stock. Please refill immediately.`
+                 });
+               }
+            }
           }
         }
       } catch (stockErr) {
@@ -1915,6 +1938,41 @@ app.post('/api/orders/manual-bill', async (req, res) => {
     const subtotal = orderItemsPayload.reduce((sum, item) => sum + Number(item.unitPrice || 0) * Number(item.quantity || 0), 0);
     const total = subtotal + (gstPercent > 0 ? subtotal * (gstPercent / 100) : 0);
     const today = new Date().toISOString().split('T')[0];
+
+    if (orderLine === 'icecream' || orderLine === 'dual') {
+      const productIds = Array.from(new Set(orderItemsPayload.map(item => item.productId)));
+      const products = await prisma.product.findMany({ where: { id: { in: productIds } } });
+      const productById = new Map(products.map(p => [p.id, p]));
+      for (const item of orderItemsPayload) {
+        const prod = productById.get(item.productId);
+        if (prod && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock) {
+          if ((prod.stockQuantity || 0) < Number(item.quantity)) {
+            return res.status(400).json({ error: `Insufficient stock for ${prod.name}` });
+          }
+        }
+      }
+      for (const item of orderItemsPayload) {
+        const prod = productById.get(item.productId);
+        if (prod && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock && prod.stockQuantity !== null) {
+          const newStock = Math.max(0, prod.stockQuantity - Number(item.quantity));
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stockQuantity: newStock }
+          });
+          if (newStock === 0) {
+             const dpObj = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
+             if (dpObj?.userId) {
+               await createNotificationAndPush({
+                 userId: dpObj.userId,
+                 type: 'stock_alert',
+                 title: 'Stock Unavailable',
+                 body: `${prod.name} is out of stock. Please refill immediately.`
+               });
+             }
+          }
+        }
+      }
+    }
 
     const order = await prisma.order.create({
       data: {
@@ -2345,12 +2403,34 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
       });
       if (!lastOrder) continue;
 
-      const validItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
-      if (validItems.length === 0) continue;
+      const rawValidItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
+      if (rawValidItems.length === 0) continue;
 
       const orderBusinessLine = isBusinessLine(lastOrder.businessLine)
         ? lastOrder.businessLine
-        : inferBusinessLine(validItems[0]?.category ?? 'other', validItems[0]?.businessLine ?? undefined);
+        : inferBusinessLine(rawValidItems[0]?.category ?? 'other', rawValidItems[0]?.businessLine ?? undefined);
+
+      const prodIds = rawValidItems.map(i => i.productId).filter(Boolean) as string[];
+      const prods = await prisma.product.findMany({ where: { id: { in: prodIds } } });
+      const prodMap = new Map(prods.map(p => [p.id, p]));
+
+      const validItems = [];
+      const stockUpdates = [];
+      for (const item of rawValidItems) {
+        if (!item.productId) continue;
+        const prod = prodMap.get(item.productId);
+        if (!prod || !prod.available) continue;
+
+        let finalQuantity = item.quantity || 0;
+        if ((orderBusinessLine === 'icecream' || orderBusinessLine === 'dual') && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock) {
+          if ((prod.stockQuantity || 0) <= 0) continue;
+          finalQuantity = Math.min(finalQuantity, prod.stockQuantity || 0);
+          stockUpdates.push({ prod, qty: finalQuantity });
+        }
+        validItems.push({ ...item, quantity: finalQuantity });
+      }
+
+      if (validItems.length === 0) continue;
 
       const total = validItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * (item.quantity || 0), 0);
       await prisma.order.create({
@@ -2380,6 +2460,22 @@ app.post('/api/auto-orders/:distributorUserId', async (req, res) => {
           },
         },
       });
+
+      for (const update of stockUpdates) {
+        const newStock = Math.max(0, (update.prod.stockQuantity || 0) - update.qty);
+        await prisma.product.update({ where: { id: update.prod.id }, data: { stockQuantity: newStock } });
+        if (newStock === 0) {
+          const dpObj = await prisma.distributorProfile.findUnique({ where: { id: conn.distributorId! } });
+          if (dpObj?.userId) {
+            await createNotificationAndPush({
+              userId: dpObj.userId,
+              type: 'stock_alert',
+              title: 'Stock Unavailable',
+              body: `${update.prod.name} is out of stock. Please refill immediately.`
+            });
+          }
+        }
+      }
     }
 
     return res.json({ success: true });
@@ -2751,11 +2847,34 @@ cron.schedule('* * * * *', async () => {
         });
         if (!lastOrder) continue;
 
-        const validItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
+        const rawValidItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
+        if (rawValidItems.length === 0) continue;
+
+        const orderLine = lastOrder.businessLine || 'other';
+
+        const prodIds = rawValidItems.map(i => i.productId).filter(Boolean) as string[];
+        const prods = await prisma.product.findMany({ where: { id: { in: prodIds } } });
+        const prodMap = new Map(prods.map(p => [p.id, p]));
+
+        const validItems = [];
+        const stockUpdates = [];
+        for (const item of rawValidItems) {
+          if (!item.productId) continue;
+          const prod = prodMap.get(item.productId);
+          if (!prod || !prod.available) continue;
+
+          let finalQuantity = item.quantity || 0;
+          if ((orderLine === 'icecream' || orderLine === 'dual') && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock) {
+            if ((prod.stockQuantity || 0) <= 0) continue;
+            finalQuantity = Math.min(finalQuantity, prod.stockQuantity || 0);
+            stockUpdates.push({ prod, qty: finalQuantity });
+          }
+          validItems.push({ ...item, quantity: finalQuantity });
+        }
+
         if (validItems.length === 0) continue;
 
         const total = validItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * (item.quantity || 0), 0);
-        const orderLine = lastOrder.businessLine || 'other';
 
         await prisma.order.create({
           data: {
@@ -2785,13 +2904,17 @@ cron.schedule('* * * * *', async () => {
           }
         });
 
-        if (orderLine === 'icecream' || orderLine === 'dual') {
-          for (const item of validItems) {
-            const prod = await prisma.product.findUnique({ where: { id: item.productId } });
-            if (prod && prod.businessLine === 'icecream' && prod.stockQuantity !== null) {
-              await prisma.product.update({
-                where: { id: item.productId },
-                data: { stockQuantity: Math.max(0, prod.stockQuantity - (item.quantity || 0)) }
+        for (const update of stockUpdates) {
+          const newStock = Math.max(0, (update.prod.stockQuantity || 0) - update.qty);
+          await prisma.product.update({ where: { id: update.prod.id }, data: { stockQuantity: newStock } });
+          if (newStock === 0) {
+            const dpObj = await prisma.distributorProfile.findUnique({ where: { id: dp.id } });
+            if (dpObj?.userId) {
+              await createNotificationAndPush({
+                userId: dpObj.userId,
+                type: 'stock_alert',
+                title: 'Stock Unavailable',
+                body: `${update.prod.name} is out of stock. Please refill immediately.`
               });
             }
           }
