@@ -65,7 +65,13 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
           </div>
         ) : quantity === 0 ? (
           canAdd ? (
-          <button onClick={() => onQtyChange(1)} className="w-full btn-primary py-2 text-xs">
+          <button onClick={() => {
+              let newQty = 1;
+              if (product.businessLine === 'icecream' && product.showStock && product.stockQuantity !== null && product.stockQuantity !== undefined) {
+                newQty = Math.min(newQty, product.stockQuantity);
+              }
+              onQtyChange(newQty);
+            }} className="w-full btn-primary py-2 text-xs">
             <Plus className="w-3.5 h-3.5" /> Add
           </button>
           ) : (
@@ -86,10 +92,22 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
               className="flex-1 text-center font-bold text-gray-900 bg-brand-50 border border-brand-200 rounded-lg py-1.5 text-sm min-w-0"
               value={quantity}
               min={0}
-              onChange={e => onQtyChange(Math.max(0, parseInt(e.target.value) || 0))}
+              onChange={e => {
+                let newQty = Math.max(0, parseInt(e.target.value) || 0);
+                if (product.businessLine === 'icecream' && product.showStock && product.stockQuantity !== null && product.stockQuantity !== undefined) {
+                  newQty = Math.min(newQty, product.stockQuantity);
+                }
+                onQtyChange(newQty);
+              }}
             />
             <button
-              onClick={() => onQtyChange(quantity + 1)}
+              onClick={() => {
+                let newQty = quantity + 1;
+                if (product.businessLine === 'icecream' && product.showStock && product.stockQuantity !== null && product.stockQuantity !== undefined) {
+                  newQty = Math.min(newQty, product.stockQuantity);
+                }
+                onQtyChange(newQty);
+              }}
               className="w-8 h-8 rounded-lg bg-brand-600 hover:bg-brand-700 flex items-center justify-center transition-colors flex-shrink-0"
             >
               <Plus className="w-3.5 h-3.5 text-white" />
@@ -206,15 +224,23 @@ export function ShopCatalogPage() {
       return matchSearch && matchCat && allowedLines.includes(line);
     });
 
+    const dairyItems = items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'dairy');
+    const allIceCreamItems = items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'icecream');
+    const outOfStockItems = allIceCreamItems.filter(item => item.showStock && (item.stockQuantity || 0) <= 0);
+    const iceCreamItems = allIceCreamItems.filter(item => !(item.showStock && (item.stockQuantity || 0) <= 0));
+
+    const generalAvailableItems = items.filter(item => !(item.businessLine === 'icecream' && item.showStock && (item.stockQuantity || 0) <= 0));
+
     return {
       conn,
       distributorProfile,
       distributorType,
       isLate,
       isBeforeWindow,
-      items,
-      dairyItems: items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'dairy'),
-      iceCreamItems: items.filter(item => inferBusinessLineFromCategory(String(item.category || 'other'), item.businessLine) === 'icecream'),
+      items: generalAvailableItems,
+      outOfStockItems,
+      dairyItems,
+      iceCreamItems,
     };
   });
 
@@ -583,6 +609,30 @@ export function ShopCatalogPage() {
                       />
                     );
                   })}
+                </div>
+              )}
+
+              {group.outOfStockItems && group.outOfStockItems.length > 0 && (
+                <div className="mt-6 pt-4 border-t border-gray-100">
+                  <h3 className="text-sm font-bold text-gray-500 mb-3 uppercase tracking-wider flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> Out of Stock</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {group.outOfStockItems.map(product => {
+                      const cartItem = cart.find(c => c.product.id === product.id);
+                      const productLine = inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine);
+                      const canAddDistributor = !lockedDistributorId || lockedDistributorId === group.conn.distributorId;
+                      const canAddBusinessLine = !lockedBusinessLine || lockedBusinessLine === productLine;
+                      const canAdd = !!cartItem || (canAddDistributor && canAddBusinessLine);
+                      return (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          quantity={cartItem?.quantity || 0}
+                          canAdd={canAdd}
+                          onQtyChange={qty => setCartQuantity(product, qty)}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </section>

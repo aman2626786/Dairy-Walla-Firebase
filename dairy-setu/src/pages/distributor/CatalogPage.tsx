@@ -84,7 +84,7 @@ export function CatalogPage() {
   const [manualBrand, setManualBrand] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterBrand, setFilterBrand] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'hidden'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'hidden' | 'outofstock'>('all');
   const [filterLine, setFilterLine] = useState<'all' | BusinessLine>('all');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
@@ -133,7 +133,8 @@ export function CatalogPage() {
       const matchStatus =
         filterStatus === 'all' ||
         (filterStatus === 'available' && product.available) ||
-        (filterStatus === 'hidden' && !product.available);
+        (filterStatus === 'hidden' && !product.available) ||
+        (filterStatus === 'outofstock' && product.showStock && (product.stockQuantity || 0) <= 0);
       const matchSearch =
         normalizedQuery.length === 0 ||
         product.name.toLowerCase().includes(normalizedQuery) ||
@@ -422,6 +423,11 @@ export function CatalogPage() {
                 >
                   {product.available ? '● Available' : '○ Hidden'}
                 </button>
+                {product.showStock && (product.stockQuantity || 0) <= 0 && (
+                  <span className="badge bg-red-50 text-red-700 text-xs font-bold border border-red-200">
+                    Out of Stock
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -462,15 +468,22 @@ export function CatalogPage() {
               </td>
               <td className="px-4 py-3 text-sm text-gray-600">{product.brand}</td>
               <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="badge bg-gray-100 text-gray-600">
-                    {formatCategoryLabel(String(product.category))}
-                  </span>
-                  <span className="badge bg-blue-50 text-blue-700">
-                    {inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine) === 'icecream'
-                      ? 'Ice Cream'
-                      : 'Dairy'}
-                  </span>
+                <div className="flex flex-col gap-1.5 items-start">
+                  <div className="flex items-center gap-2">
+                    <span className="badge bg-gray-100 text-gray-600">
+                      {formatCategoryLabel(String(product.category))}
+                    </span>
+                    <span className="badge bg-blue-50 text-blue-700">
+                      {inferBusinessLineFromCategory(String(product.category || 'other'), product.businessLine) === 'icecream'
+                        ? 'Ice Cream'
+                        : 'Dairy'}
+                    </span>
+                  </div>
+                  {product.showStock && (product.stockQuantity || 0) <= 0 && (
+                    <span className="badge bg-red-50 text-red-700 text-xs font-bold border border-red-200">
+                      Out of Stock
+                    </span>
+                  )}
                 </div>
               </td>
               <td className="px-4 py-3 text-sm text-gray-600">{getProductQuantityText(product.quantity, product.unit)}</td>
@@ -610,11 +623,12 @@ export function CatalogPage() {
           <select
             className="input"
             value={filterStatus}
-            onChange={event => setFilterStatus(event.target.value as 'all' | 'available' | 'hidden')}
+            onChange={event => setFilterStatus(event.target.value as 'all' | 'available' | 'hidden' | 'outofstock')}
           >
             <option value="all">All Status</option>
             <option value="available">Available Only</option>
             <option value="hidden">Hidden Only</option>
+            <option value="outofstock">Out of Stock</option>
           </select>
 
           <button
