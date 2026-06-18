@@ -30,12 +30,10 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
 
   return (
     <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'} ${isOutOfStock ? 'opacity-70' : ''}`}>
-      {product.showStock && product.stockQuantity !== undefined && product.stockQuantity !== null && (
+      {product.showStock && product.stockQuantity !== undefined && product.stockQuantity !== null && !isOutOfStock && (
         <div className="absolute top-2 left-2 z-20">
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${
-            isOutOfStock ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
-          }`}>
-            {isOutOfStock ? 'Out of Stock' : `${product.stockQuantity} In Stock`}
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm bg-green-100 text-green-700">
+            {`${product.stockQuantity} In Stock`}
           </span>
         </div>
       )}
