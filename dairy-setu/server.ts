@@ -1409,6 +1409,86 @@ app.delete('/api/connections/:id', async (req, res) => {
   }
 });
 
+// Products Suggestions
+app.get('/api/products/suggestions', async (req, res) => {
+  try {
+    const requester = await requireRequesterProfile(req, res);
+    if (!requester) return;
+    if (requester.role !== 'distributor') {
+      return res.status(403).json({ error: 'Only distributor accounts can access product suggestions.' });
+    }
+
+    const ownDp = await prisma.distributorProfile.findUnique({ where: { userId: requester.id } });
+    if (!ownDp) return res.status(403).json({ error: 'Distributor profile not found' });
+
+    const products = await prisma.product.findMany({
+      where: {
+        available: true,
+        distributorId: { not: ownDp.id },
+      },
+      take: 200,
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    const seen = new Set<string>();
+    const suggestions: any[] = [];
+    for (const p of products) {
+      const key = `${p.name.trim().toLowerCase()}|${(p.brand || '').trim().toLowerCase()}|${(p.unit || '').trim().toLowerCase()}|${p.category.trim().toLowerCase()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        suggestions.push({
+          id: p.id,
+          name: p.name,
+          brand: p.brand,
+          category: normalizeCategory(p.category),
+          businessLine: inferBusinessLine(p.category, p.businessLine),
+          unit: String(p.unit ?? '').trim(),
+          price: p.price,
+          imageUrl: p.imageUrl,
+          showStock: p.showStock === true,
+          stockQuantity: p.stockQuantity !== null && p.stockQuantity !== undefined ? p.stockQuantity : 0,
+        });
+      }
+    }
+
+    if (suggestions.length < 5) {
+      const defaultTemplates = [
+        { name: "Fresh Milk", brand: "Amul", category: "milk", businessLine: "dairy", unit: "1 Litre", price: 66, imageUrl: null, showStock: false, stockQuantity: 0 },
+        { name: "Paneer", brand: "Amul", category: "paneer", businessLine: "dairy", unit: "200g Pack", price: 90, imageUrl: null, showStock: false, stockQuantity: 0 },
+        { name: "Fresh Dahi", brand: "Mother Dairy", category: "dahi", businessLine: "dairy", unit: "400g Cup", price: 50, imageUrl: null, showStock: false, stockQuantity: 0 },
+        { name: "Vanilla Cup", brand: "Amul", category: "cup", businessLine: "icecream", unit: "Pack of 10", price: 200, imageUrl: null, showStock: true, stockQuantity: 20 },
+        { name: "Chocolate Cone", brand: "Kwality Walls", category: "cone", businessLine: "icecream", unit: "Pack of 6", price: 240, imageUrl: null, showStock: true, stockQuantity: 15 },
+        { name: "Kulfi", brand: "Amul", category: "kulfi", businessLine: "icecream", unit: "Pack of 10", price: 750, imageUrl: null, showStock: true, stockQuantity: 10 },
+      ];
+      for (const t of defaultTemplates) {
+        const key = `${t.name.toLowerCase()}|${t.brand.toLowerCase()}|${t.unit.toLowerCase()}|${t.category.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          suggestions.push({
+            id: `temp_${t.name.replace(/\s+/g, '_')}`,
+            name: t.name,
+            brand: t.brand,
+            category: normalizeCategory(t.category),
+            businessLine: t.businessLine,
+            unit: t.unit,
+            price: t.price,
+            imageUrl: t.imageUrl,
+            showStock: t.showStock,
+            stockQuantity: t.stockQuantity,
+          });
+        }
+      }
+    }
+
+    return res.json(suggestions);
+  } catch (e) {
+    console.error('Suggestions endpoint failed:', e);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Products
 app.get('/api/products/:distributorId', async (req, res) => {
   try {
@@ -2005,7 +2085,10 @@ app.patch('/api/orders/:id', async (req, res) => {
   try {
     const requester = await requireRequesterProfile(req, res);
     if (!requester) return;
-    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      include: { items: true }
+    });
     if (!order) return res.status(404).json({ error: 'Not found' });
 
     if (requester.role === 'distributor') {
@@ -2033,6 +2116,25 @@ app.patch('/api/orders/:id', async (req, res) => {
     if (req.body.cancelReason !== undefined) updateData.cancelReason = req.body.cancelReason ? String(req.body.cancelReason).trim() : null;
 
     const updated = await prisma.order.update({ where: { id: req.params.id }, data: updateData });
+
+    if (order.status !== 'rejected' && updated.status === 'rejected') {
+      try {
+        for (const item of order.items) {
+          if (item.productId) {
+            const prod = await prisma.product.findUnique({ where: { id: item.productId } });
+            if (prod && inferBusinessLine(prod.category, prod.businessLine) === 'icecream' && prod.showStock && prod.stockQuantity !== null) {
+              const restoredStock = prod.stockQuantity + Number(item.quantity);
+              await prisma.product.update({
+                where: { id: item.productId },
+                data: { stockQuantity: restoredStock },
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to restore stock on rejection:', err);
+      }
+    }
 
     if (order.status !== updated.status && updated.shopkeeperId) {
       try {

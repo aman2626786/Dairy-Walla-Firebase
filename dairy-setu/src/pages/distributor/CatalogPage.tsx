@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal, Trophy } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Eye, EyeOff, Search, SlidersHorizontal, Trophy, ChevronRight, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
@@ -86,6 +86,10 @@ export function CatalogPage() {
   const [filterBrand, setFilterBrand] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'available' | 'hidden' | 'outofstock'>('all');
   const [filterLine, setFilterLine] = useState<'all' | BusinessLine>('all');
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsSearch, setSuggestionsSearch] = useState('');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const distributorType = toDistributorType(profile?.distributorType);
@@ -356,6 +360,55 @@ export function CatalogPage() {
     setModalOpen(false);
   };
 
+  const fetchSuggestions = async () => {
+    setLoadingSuggestions(true);
+    try {
+      const { data } = await apiClient.get('/products/suggestions');
+      setSuggestions(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to fetch product suggestions', e);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  };
+
+  const openSuggestions = () => {
+    setSuggestionsOpen(true);
+    setSuggestionsSearch('');
+    void fetchSuggestions();
+  };
+
+  const handleSelectSuggestion = (suggestion: any) => {
+    setEditingProduct(null);
+    setImageFile(null);
+    setSuggestionsOpen(false);
+
+    const presetBrand = popularBrands.find(brand => normalizeBrand(brand) === normalizeBrand(suggestion.brand || ''));
+    const isManualBrand = !presetBrand && Boolean(suggestion.brand);
+
+    const productLine = suggestion.businessLine as BusinessLine;
+    const catOptions = productLine === 'icecream' ? iceCreamCategoryOptions : dairyCategoryOptions;
+    const isPresetCat = catOptions.some(opt => opt.value === suggestion.category);
+
+    setForm({
+      name: suggestion.name || '',
+      brand: suggestion.brand || '',
+      category: suggestion.category || '',
+      businessLine: productLine,
+      quantity: suggestion.unit || '',
+      price: String(suggestion.price || ''),
+      available: true,
+      imageUrl: suggestion.imageUrl || '',
+      stockQuantity: suggestion.stockQuantity ? String(suggestion.stockQuantity) : '',
+      showStock: suggestion.showStock === true,
+    });
+    setSelectedCategoryOption(isPresetCat ? suggestion.category : manualCategoryValue);
+    setManualCategory(isPresetCat ? '' : suggestion.category || '');
+    setSelectedBrandOption(isManualBrand ? manualBrandValue : (suggestion.brand || popularBrands[0]));
+    setManualBrand(isManualBrand ? suggestion.brand : '');
+    setModalOpen(true);
+  };
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete "${name}"?`)) return;
     const success = await deleteProduct(id);
@@ -528,14 +581,22 @@ export function CatalogPage() {
             {myProducts.length} products · {myProducts.filter(product => product.available).length} available
           </p>
         </div>
-        <button className="btn-primary" onClick={resetFormForAdd}>
-          <Plus className="w-4 h-4" /> Add Product
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-secondary flex items-center gap-1.5" onClick={openSuggestions}>
+            <Sparkles className="w-4 h-4" /> Suggestions
+          </button>
+          <button className="btn-primary flex items-center gap-1.5" onClick={resetFormForAdd}>
+            <Plus className="w-4 h-4" /> Add Product
+          </button>
+        </div>
       </div>
 
-      <div className="md:hidden flex justify-end mb-4">
-        <button className="btn-primary" onClick={resetFormForAdd}>
-          <Plus className="w-4 h-4" /> Add Product
+      <div className="md:hidden flex justify-end gap-2 mb-4">
+        <button className="btn-secondary text-sm py-1.5 px-3 flex items-center gap-1.5" onClick={openSuggestions}>
+          <Sparkles className="w-3.5 h-3.5" /> Suggestions
+        </button>
+        <button className="btn-primary text-sm py-1.5 px-3 flex items-center gap-1.5" onClick={resetFormForAdd}>
+          <Plus className="w-3.5 h-3.5" /> Add Product
         </button>
       </div>
 
@@ -658,9 +719,16 @@ export function CatalogPage() {
           title={hasActiveFilters ? 'No products match your filters' : 'No products yet'}
           description={hasActiveFilters ? 'Try changing filters or search query.' : 'Add your first product to get started'}
           action={
-            <button className="btn-primary" onClick={resetFormForAdd}>
-              <Plus className="w-4 h-4" /> Add Product
-            </button>
+            <div className="flex gap-3 justify-center">
+              {!hasActiveFilters && (
+                <button className="btn-secondary flex items-center gap-1.5" onClick={openSuggestions}>
+                  <Sparkles className="w-4 h-4" /> Suggestions
+                </button>
+              )}
+              <button className="btn-primary flex items-center gap-1.5" onClick={resetFormForAdd}>
+                <Plus className="w-4 h-4" /> Add Product
+              </button>
+            </div>
           }
         />
       ) : (
@@ -897,6 +965,71 @@ export function CatalogPage() {
             <button className="btn-primary flex-1" onClick={() => void handleSave()} disabled={uploadingImage}>
               {uploadingImage ? 'Uploading Image...' : editingProduct ? 'Save Changes' : 'Add Product'}
             </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={suggestionsOpen} onClose={() => setSuggestionsOpen(false)} title="Select Suggestion">
+        <div className="space-y-4 max-h-[80vh] flex flex-col">
+          <p className="text-sm text-gray-500">
+            Click any product to add it to your catalog
+          </p>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search suggestions..."
+              className="input pl-9 w-full"
+              value={suggestionsSearch}
+              onChange={e => setSuggestionsSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100 pr-1 max-h-[50vh]">
+            {loadingSuggestions ? (
+              <div className="py-8 text-center text-gray-500">Loading suggestions...</div>
+            ) : suggestions.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">No suggestions available</div>
+            ) : (
+              suggestions
+                .filter(item => {
+                  const query = suggestionsSearch.toLowerCase().trim();
+                  if (distributorType !== 'dual' && item.businessLine !== defaultBusinessLine) {
+                    return false;
+                  }
+                  return !query || [item.name, item.brand, item.category].some(val => String(val || '').toLowerCase().includes(query));
+                })
+                .map((item, idx) => {
+                  const productVisual = getProductVisual(item.category || item.name);
+                  return (
+                    <div
+                      key={item.id || idx}
+                      onClick={() => handleSelectSuggestion(item)}
+                      className="flex items-center gap-3 py-3 cursor-pointer hover:bg-gray-50 transition-colors px-2 rounded-lg"
+                    >
+                      <div
+                        className="w-12 h-12 rounded-lg flex items-center justify-center border flex-shrink-0 overflow-hidden"
+                        style={{ backgroundColor: productVisual.bg, borderColor: productVisual.border }}
+                      >
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-xl">{productVisual.emoji}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-gray-900 text-sm">{item.name}</div>
+                        <div className="text-xs text-gray-500">
+                          {item.brand} · {item.unit || 'Qty'} · {item.businessLine === 'icecream' ? 'Ice Cream 🍦' : 'Dairy 🥛'}
+                        </div>
+                        <div className="text-xs text-green-600 font-medium mt-0.5">₹{item.price}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400" />
+                    </div>
+                  );
+                })
+            )}
           </div>
         </div>
       </Modal>
