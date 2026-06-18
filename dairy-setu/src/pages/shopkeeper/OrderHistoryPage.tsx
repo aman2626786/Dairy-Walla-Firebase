@@ -26,7 +26,7 @@ const paymentConfig: Record<PaymentStatus, { label: string; className: string }>
 
 export function OrderHistoryPage() {
   const { user } = useAuthStore();
-  const { orders, setCartQuantity, clearCart, products, updateOrder } = useAppStore();
+  const { orders, setCartQuantity, clearCart, products } = useAppStore();
   const navigate = useNavigate();
   const { show } = useToast();
   const [businessLineFilter, setBusinessLineFilter] = useState<'all' | 'dairy' | 'icecream'>('all');

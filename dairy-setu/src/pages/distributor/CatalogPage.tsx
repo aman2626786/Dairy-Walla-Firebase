@@ -16,6 +16,22 @@ import {
   toDistributorType,
 } from '../../utils/businessLine';
 import type { BusinessLine, KnownProductCategory, Product, ProductCategory } from '../../types';
+import { apiClient } from '../../lib/apiClient';
+
+function getProductVisual(category?: string) {
+  const text = String(category || '').toLowerCase();
+  if (text.includes('cone')) return { emoji: '🍦', bg: '#fdf2f8', border: '#fbcfe8', text: '#be185d' };
+  if (text.includes('ice cream') || text.includes('icecream') || text.includes('kulfi') || text.includes('cup') || text.includes('family pack')) {
+    return { emoji: '🍨', bg: '#eef2ff', border: '#c7d2fe', text: '#4338ca' };
+  }
+  if (text.includes('bar')) return { emoji: '🍫', bg: '#fef2f2', border: '#fecaca', text: '#b91c1c' };
+  if (text.includes('milk')) return { emoji: '🥛', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' };
+  if (text.includes('paneer') || text.includes('cheese')) return { emoji: '🧀', bg: '#fffbeb', border: '#fde68a', text: '#92400e' };
+  if (text.includes('curd') || text.includes('dahi') || text.includes('yogurt') || text.includes('yoghurt')) return { emoji: '🥣', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' };
+  if (text.includes('butter') || text.includes('ghee')) return { emoji: '🧈', bg: '#fefce8', border: '#fef08a', text: '#854d0e' };
+  if (text.includes('lassi') || text.includes('chaas') || text.includes('cream')) return { emoji: '🥤', bg: '#ecfdf5', border: '#bbf7d0', text: '#047857' };
+  return { emoji: '📦', bg: '#f9fafb', border: '#e5e7eb', text: '#4b5563' };
+}
 
 const categoryOrder: KnownProductCategory[] = ['milk', 'paneer', 'curd', 'butter', 'ghee', 'other'];
 
@@ -407,7 +423,7 @@ export function CatalogPage() {
 
     const productLine = suggestion.businessLine as BusinessLine;
     const catOptions = productLine === 'icecream' ? iceCreamCategoryOptions : dairyCategoryOptions;
-    const isPresetCat = catOptions.some(opt => opt.value === suggestion.category);
+    const isPresetCat = (catOptions as readonly string[]).includes(suggestion.category);
 
     setForm({
       name: suggestion.name || '',

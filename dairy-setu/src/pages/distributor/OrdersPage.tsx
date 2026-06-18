@@ -37,7 +37,7 @@ const paymentColors: Record<PaymentStatus, string> = {
 
 export function OrdersPage() {
   const { user } = useAuthStore();
-  const { orders, distributorProfiles, updateOrderStatus, updateOrderPaymentStatus, updateOrder, addNotification } = useAppStore();
+  const { orders, distributorProfiles, updateOrderStatus, updateOrderPaymentStatus, addNotification } = useAppStore();
   const { show } = useToast();
   const [filter, setFilter] = useState<'all' | 'normal' | 'late'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');

@@ -7,7 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MobileHeader } from '../../components/layout/MobileHeader';
 import { format } from 'date-fns';
-import type { Order } from '../../types';
+import type { Order, DistributorProfile, ShopkeeperProfile } from '../../types';
 import { businessLineLabel, inferBusinessLineFromCategory, toDistributorType } from '../../utils/businessLine';
 import { downloadInvoicePdf, printInvoicePdf } from '../../utils/invoicePdf';
 import { getInvoiceLanguage, type InvoiceLanguage } from '../../utils/invoiceLanguage';
@@ -48,10 +48,6 @@ export function InvoicesPage() {
     () => (selectedOrder ? getShopkeeperForOrder(selectedOrder) : null),
     [selectedOrder, shopkeeperProfiles]
   );
-  const selectedDistributor = useMemo(
-    () => (selectedOrder ? getDistributorForOrder(selectedOrder) : null),
-    [selectedOrder, distributorProfiles]
-  );
 
   useEffect(() => {
     const missingIds = Array.from(
@@ -81,8 +77,8 @@ export function InvoicesPage() {
     }
 
     try {
-      const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
-      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
+      const loadedShopkeeper = isShopkeeper ? (profile as ShopkeeperProfile) : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
+      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : (profile as DistributorProfile);
       
       if (!orderDistributor) {
         show('Distributor info missing for this order.', 'error');
@@ -93,8 +89,8 @@ export function InvoicesPage() {
       const shopkeeperEmail = loadedShopkeeper?.email;
       await downloadInvoicePdf({
         order,
-        distributor: orderDistributor,
-        shopkeeper: loadedShopkeeper,
+        distributor: orderDistributor as DistributorProfile,
+        shopkeeper: loadedShopkeeper as ShopkeeperProfile | null,
         distributorPhone: orderDistributor.phone,
         distributorEmail: orderDistributor.email,
         shopkeeperPhone,
@@ -115,8 +111,8 @@ export function InvoicesPage() {
 
     const printWindow = window.open('', '_blank');
     try {
-      const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
-      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
+      const loadedShopkeeper = isShopkeeper ? (profile as ShopkeeperProfile) : (getShopkeeperForOrder(order) || (order.shopkeeperId ? await fetchShopkeeperProfileById(order.shopkeeperId) : null));
+      const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : (profile as DistributorProfile);
 
       if (!orderDistributor) {
         printWindow?.close();
@@ -126,8 +122,8 @@ export function InvoicesPage() {
 
       await printInvoicePdf({
         order,
-        distributor: orderDistributor,
-        shopkeeper: loadedShopkeeper,
+        distributor: orderDistributor as DistributorProfile,
+        shopkeeper: loadedShopkeeper as ShopkeeperProfile | null,
         distributorPhone: orderDistributor.phone,
         distributorEmail: orderDistributor.email,
         shopkeeperPhone: loadedShopkeeper?.phone,
@@ -142,8 +138,8 @@ export function InvoicesPage() {
   };
 
   const handleShare = async (order: Order) => {
-    const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : profile;
-    const loadedShopkeeper = isShopkeeper ? profile : (getShopkeeperForOrder(order));
+    const orderDistributor = isShopkeeper ? (getDistributorForOrder(order) || distributorProfiles.find(d => d.id === order.distributorId)) : (profile as DistributorProfile);
+    const loadedShopkeeper = isShopkeeper ? (profile as ShopkeeperProfile) : (getShopkeeperForOrder(order));
     const text = `Invoice from ${orderDistributor?.businessName || 'Distributor'}\n\nShop: ${order.shopName}\nDate: ${format(new Date(order.placedAt), 'dd MMM yyyy')}\nTotal Qty: ${formatOrderTotalQuantity(order.items)}\n\nItems:\n${order.items.map(formatInvoiceShareItem).join('\n')}\n\nTotal: ₹${order.total.toLocaleString()}`;
     
     try {
@@ -153,8 +149,8 @@ export function InvoicesPage() {
           const { generateInvoicePdfBlob } = await import('../../utils/invoicePdf');
           const pdfBlob = await generateInvoicePdfBlob({
             order,
-            distributor: orderDistributor,
-            shopkeeper: loadedShopkeeper,
+            distributor: orderDistributor as DistributorProfile,
+            shopkeeper: loadedShopkeeper as ShopkeeperProfile | null,
             distributorPhone: orderDistributor.phone,
             distributorEmail: orderDistributor.email,
             shopkeeperPhone: loadedShopkeeper?.phone,
@@ -233,15 +229,19 @@ export function InvoicesPage() {
           <h1 className="text-xl font-bold text-gray-900">Invoices</h1>
           <p className="text-sm text-gray-500 mt-0.5">{billableOrders.length} invoices</p>
         </div>
-        <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Generate Manual Bill
-        </button>
+        {!isShopkeeper && (
+          <button className="btn-primary" onClick={() => setManualBillOpen(true)}>
+            <PlusCircle className="w-4 h-4" /> Generate Manual Bill
+          </button>
+        )}
       </div>
-      <div className="md:hidden mb-4">
-        <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
-          <PlusCircle className="w-4 h-4" /> Generate Manual Bill
-        </button>
-      </div>
+      {!isShopkeeper && (
+        <div className="md:hidden mb-4">
+          <button className="btn-primary w-full justify-center" onClick={() => setManualBillOpen(true)}>
+            <PlusCircle className="w-4 h-4" /> Generate Manual Bill
+          </button>
+        </div>
+      )}
 
 
       {billableOrders.length === 0 ? (
@@ -287,7 +287,9 @@ export function InvoicesPage() {
                   <BrandLogo className="w-full h-full rounded-lg" />
                 </div>
                 <div>
-                  <div className="font-bold text-lg text-gray-900">{profile?.businessName}</div>
+                  <div className="font-bold text-lg text-gray-900">
+                    {isShopkeeper ? (selectedOrder ? (getDistributorForOrder(selectedOrder)?.businessName || 'Distributor') : 'Distributor') : (profile as DistributorProfile)?.businessName}
+                  </div>
                   <div className="text-sm text-gray-500">Invoice</div>
                   <div className="text-xs text-gray-500">
                     {businessLineLabel(
@@ -369,7 +371,7 @@ export function InvoicesPage() {
       <ManualBillModal
         open={manualBillOpen}
         onClose={() => setManualBillOpen(false)}
-        distributor={profile}
+        distributor={profile as DistributorProfile}
       />
     </div>
   );
