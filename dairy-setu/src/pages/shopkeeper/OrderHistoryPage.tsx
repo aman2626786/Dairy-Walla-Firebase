@@ -16,6 +16,7 @@ const statusConfig: Record<OrderStatus, { label: string; className: string; icon
   accepted: { label: 'Accepted', className: 'badge-green', icon: <CheckCircle className="w-3 h-3" /> },
   rejected: { label: 'Rejected', className: 'badge-red', icon: <XCircle className="w-3 h-3" /> },
   fulfilled: { label: 'Delivered', className: 'badge-blue', icon: <CheckCircle className="w-3 h-3" /> },
+  cancelled: { label: 'Cancelled', className: 'badge-red', icon: <XCircle className="w-3 h-3" /> },
 };
 
 const paymentConfig: Record<PaymentStatus, { label: string; className: string }> = {
