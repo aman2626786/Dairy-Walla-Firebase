@@ -14,6 +14,7 @@ const statusColors: Record<OrderStatus, string> = {
   accepted: 'badge-green',
   rejected: 'badge-red',
   fulfilled: 'badge-blue',
+  cancelled: 'badge-red',
 };
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -21,6 +22,7 @@ const statusLabels: Record<OrderStatus, string> = {
   accepted: 'Accepted',
   rejected: 'Rejected',
   fulfilled: 'Accepted',
+  cancelled: 'Cancelled',
 };
 
 const paymentLabels: Record<PaymentStatus, string> = {
@@ -35,7 +37,7 @@ const paymentColors: Record<PaymentStatus, string> = {
 
 export function OrdersPage() {
   const { user } = useAuthStore();
-  const { orders, distributorProfiles, updateOrderStatus, updateOrderPaymentStatus, addNotification } = useAppStore();
+  const { orders, distributorProfiles, updateOrderStatus, updateOrderPaymentStatus, updateOrder, addNotification } = useAppStore();
   const { show } = useToast();
   const [filter, setFilter] = useState<'all' | 'normal' | 'late'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
@@ -235,7 +237,7 @@ export function OrdersPage() {
                     {order.deliveryGroupName && ` - ${order.deliveryGroupName}`}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-gray-900">₹{order.total.toLocaleString()}</span>
+                    <span className={`text-sm font-bold ${order.status === 'cancelled' ? 'line-through text-gray-400' : 'text-gray-900'}`}>₹{order.total.toLocaleString()}</span>
                     <span className="text-xs text-gray-500">{order.items.length} items</span>
                   </div>
                 </div>
@@ -254,6 +256,25 @@ export function OrdersPage() {
                     <div className="flex gap-2 mb-2">
                       <button onClick={() => handleFulfill(order)} className="btn-primary py-1.5 px-3 text-xs w-full justify-center">
                         <CheckCircle className="w-3.5 h-3.5" /> Mark Fulfilled
+                      </button>
+                    </div>
+                  )}
+                  {(order.status === 'accepted' || order.status === 'fulfilled') && (
+                    <div className="flex gap-2 mb-2">
+                      <button 
+                        onClick={() => {
+                          const reason = window.prompt('Provide a reason for revoking this order/bill. It will be marked as cancelled.');
+                          if (reason === null) return;
+                          if (!reason.trim()) {
+                            show('Please provide a reason to revoke.', 'error');
+                            return;
+                          }
+                          updateOrder(order.id, { status: 'cancelled', cancelReason: reason.trim() });
+                          show('Order cancelled successfully.');
+                        }}
+                        className="btn-danger py-1.5 px-3 text-xs w-full justify-center"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Revoke / Cancel
                       </button>
                     </div>
                   )}
@@ -281,6 +302,11 @@ export function OrdersPage() {
                   </button>
                 </div>
               </div>
+              {order.status === 'cancelled' && (
+                <div className="mt-2 p-2 bg-red-50 rounded text-red-600 text-xs font-medium">
+                  Order Cancelled: {order.cancelReason || 'No reason provided'}
+                </div>
+              )}
               {expandedId === order.id && (
                 <div className="mt-3 pt-3 border-t border-gray-100 animate-fade-in">
                   <table className="w-full text-xs">
@@ -294,11 +320,11 @@ export function OrdersPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {order.items.map(item => (
-                        <tr key={item.id}>
-                          <td className="py-1.5 text-gray-700">{item.productName} <span className="text-gray-400">({item.brand})</span></td>
-                          <td className="py-1.5 text-right text-gray-700">{item.quantity} {item.unit}</td>
-                          <td className="py-1.5 text-right text-green-600">₹{item.unitPrice}</td>
-                          <td className="py-1.5 text-right font-semibold text-green-600">₹{(item.quantity * item.unitPrice).toLocaleString()}</td>
+                        <tr key={item.id} className={order.status === 'cancelled' ? 'opacity-50' : ''}>
+                          <td className={`py-1.5 text-gray-700 ${order.status === 'cancelled' ? 'line-through' : ''}`}>{item.productName} <span className="text-gray-400">({item.brand})</span></td>
+                          <td className={`py-1.5 text-right text-gray-700 ${order.status === 'cancelled' ? 'line-through' : ''}`}>{item.quantity} {item.unit}</td>
+                          <td className={`py-1.5 text-right ${order.status === 'cancelled' ? 'text-gray-400 line-through' : 'text-green-600'}`}>₹{item.unitPrice}</td>
+                          <td className={`py-1.5 text-right font-medium ${order.status === 'cancelled' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>₹{item.unitPrice * item.quantity}</td>
                         </tr>
                       ))}
                     </tbody>

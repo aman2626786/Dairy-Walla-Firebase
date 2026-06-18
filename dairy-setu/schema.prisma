@@ -145,6 +145,7 @@ model Order {
   deliveryGroupName String?   @map("delivery_group_name")
   total             Float?    @default(0)
   placedAt          DateTime  @default(now()) @map("placed_at")
+  cancelReason      String?   @map("cancel_reason")
 
   shopkeeper  ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
   distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)

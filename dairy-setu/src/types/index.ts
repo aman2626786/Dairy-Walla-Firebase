@@ -6,7 +6,7 @@ export type ConnectionStatus = 'pending' | 'active' | 'rejected';
 
 export type OrderType = 'normal' | 'late';
 
-export type OrderStatus = 'pending' | 'accepted' | 'rejected' | 'fulfilled';
+export type OrderStatus = 'pending' | 'accepted' | 'rejected' | 'fulfilled' | 'cancelled';
 export type PaymentStatus = 'paid' | 'unpaid';
 
 export type KnownProductCategory = 'milk' | 'paneer' | 'curd' | 'butter' | 'ghee' | 'other';
@@ -132,6 +132,7 @@ export interface Order {
   items: OrderItem[];
   total: number;
   deliveryGroupName?: string;
+  cancelReason?: string;
 }
 
 export interface Invoice {

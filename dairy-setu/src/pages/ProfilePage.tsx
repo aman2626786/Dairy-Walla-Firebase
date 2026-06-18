@@ -192,8 +192,10 @@ export function ProfilePage() {
   };
 
   const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
+    if (window.confirm(t('Are you sure you want to log out?'))) {
+      await signOut();
+      navigate('/login');
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -209,7 +211,7 @@ export function ProfilePage() {
 
   const handleShareProfile = async () => {
     if (!distProfile) return;
-    const shareText = `Connect with ${distProfile.businessName} on Dairy Walla to place your orders! Use my Connection Code: ${distProfile.connectionCode}\n\nDownload the app: https://play.google.com/store/apps/details?id=com.dairywalla.app\nOrder online: https://dairy-setu.vercel.app/`;
+    const shareText = `Connect with ${distProfile.businessName} on Dairy Walla to place your orders! Use my Connection Code: ${distProfile.connectionCode}\n\nDownload the app: https://play.google.com/store/apps/details?id=com.dairywalla.app`;
     
     if (navigator.share) {
       try {

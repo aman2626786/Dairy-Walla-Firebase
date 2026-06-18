@@ -69,6 +69,7 @@ interface AppState {
   createManualBill: (input: ManualBillInput) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
   updateOrderPaymentStatus: (orderId: string, paymentStatus: PaymentStatus) => Promise<void>;
+  updateOrder: (orderId: string, payload: Partial<Order>) => Promise<void>;
 
   // Delivery group actions
   addDeliveryGroup: (distributorId: string, name: string) => Promise<void>;
@@ -374,6 +375,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await apiClient.patch(`${API_URL}/orders/${orderId}`, { status });
       set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o) }));
+    } catch (e) { console.error(e); }
+  },
+
+  updateOrder: async (orderId, payload) => {
+    try {
+      await apiClient.patch(`${API_URL}/orders/${orderId}`, payload);
+      set(state => ({ orders: state.orders.map(o => o.id === orderId ? { ...o, ...payload } : o) }));
     } catch (e) { console.error(e); }
   },
 

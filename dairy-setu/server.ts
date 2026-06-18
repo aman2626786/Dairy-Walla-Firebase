@@ -833,30 +833,44 @@ app.delete('/api/auth/me', async (req: AuthenticatedRequest, res) => {
     });
 
     if (profile.role === 'distributor') {
-      await prisma.distributorProfile.updateMany({
-        where: { userId: profile.id },
-        data: {
-          businessName: 'Deleted Distributor',
-          ownerName: null,
-          address: null,
-          city: null,
-          gst: null,
-          profileComplete: false
-        }
-      });
+      const dp = await prisma.distributorProfile.findUnique({ where: { userId: profile.id } });
+      if (dp) {
+        await prisma.product.deleteMany({ where: { distributorId: dp.id } });
+        await prisma.connection.updateMany({
+          where: { distributorId: dp.id },
+          data: { status: 'rejected', businessName: 'Deleted Distributor', distributorPhone: '' }
+        });
+        await prisma.distributorProfile.updateMany({
+          where: { userId: profile.id },
+          data: {
+            businessName: 'Deleted Distributor',
+            ownerName: null,
+            address: null,
+            city: null,
+            gst: null,
+            profileComplete: false
+          }
+        });
+      }
     } else if (profile.role === 'shopkeeper') {
-      await prisma.shopkeeperProfile.updateMany({
-        where: { userId: profile.id },
-        data: {
-          shopName: 'Deleted Shopkeeper',
-          ownerName: null,
-          address: null,
-          city: null,
-          profileComplete: false
-        }
-      });
+      const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId: profile.id } });
+      if (sp) {
+        await prisma.connection.updateMany({
+          where: { shopkeeperId: sp.id },
+          data: { status: 'rejected', shopName: 'Deleted Shopkeeper', shopkeeperName: 'Deleted User', shopkeeperPhone: '' }
+        });
+        await prisma.shopkeeperProfile.updateMany({
+          where: { userId: profile.id },
+          data: {
+            shopName: 'Deleted Shopkeeper',
+            ownerName: null,
+            address: null,
+            city: null,
+            profileComplete: false
+          }
+        });
+      }
     }
-
 
 
 
@@ -1921,6 +1935,7 @@ app.patch('/api/orders/:id', async (req, res) => {
     if (req.body.status !== undefined) updateData.status = String(req.body.status).trim();
     if (req.body.paymentStatus !== undefined) updateData.paymentStatus = String(req.body.paymentStatus).trim();
     if (req.body.deliveryGroupName !== undefined) updateData.deliveryGroupName = req.body.deliveryGroupName ? String(req.body.deliveryGroupName).trim() : null;
+    if (req.body.cancelReason !== undefined) updateData.cancelReason = req.body.cancelReason ? String(req.body.cancelReason).trim() : null;
 
     const updated = await prisma.order.update({ where: { id: req.params.id }, data: updateData });
 
