@@ -1310,7 +1310,7 @@ app.patch('/api/connections/:id', async (req, res) => {
 
         const updated = await prisma.connection.update({ where: { id: req.params.id }, data: updateData });
 
-    // Send notifications if connection status changes to active
+    // Send notifications if connection status changes to active or rejected
     if (updated.status === 'active' && conn.status !== 'active') {
       try {
         if (updated.shopkeeperId) {
@@ -1339,6 +1339,35 @@ app.patch('/api/connections/:id', async (req, res) => {
         }
       } catch (err) {
         console.error('Error sending connection active notifications:', err);
+      }
+    } else if (updated.status === 'rejected' && conn.status !== 'rejected') {
+      try {
+        if (updated.shopkeeperId) {
+          const sp = await prisma.shopkeeperProfile.findUnique({ where: { id: updated.shopkeeperId } });
+          if (sp?.userId) {
+            await createNotificationAndPush({
+              userId: sp.userId,
+              type: 'connection_rejected',
+              title: 'Connection Rejected',
+              message: `${updated.businessName || 'Distributor'} rejected your connection request.`,
+              data: { connectionId: updated.id, role: 'shopkeeper' },
+            });
+          }
+        }
+        if (updated.distributorId) {
+          const dp = await prisma.distributorProfile.findUnique({ where: { id: updated.distributorId } });
+          if (dp?.userId) {
+            await createNotificationAndPush({
+              userId: dp.userId,
+              type: 'connection_rejected',
+              title: 'Connection Rejected',
+              message: `You rejected the connection request from ${updated.shopName || updated.shopkeeperName || 'Shopkeeper'}.`,
+              data: { connectionId: updated.id, role: 'distributor' },
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error sending connection rejected notifications:', err);
       }
     }
 
@@ -1600,6 +1629,14 @@ app.post('/api/reminders/send', async (req, res) => {
       title: 'Order Reminder 🔔',
       message: `Dear ${shopkeeper.shopName || 'Shopkeeper'}, you haven't placed your order for today with ${distributor?.businessName || 'your distributor'}. Please place it soon!`,
       data: { role: 'shopkeeper' }
+    });
+
+    await createNotificationAndPush({
+      userId: requester.id,
+      type: 'order_reminder',
+      title: 'Reminder Sent',
+      message: `Order reminder was successfully sent to ${shopkeeper.shopName || shopkeeper.shopkeeperName || 'the shopkeeper'}.`,
+      data: { role: 'distributor' }
     });
 
     return res.json({ success: true });
@@ -1952,8 +1989,21 @@ app.patch('/api/orders/:id', async (req, res) => {
             userId: shopkeeper.userId,
             type: statusNotification.type,
             title: statusNotification.title,
-            message: `${distributor?.businessName || 'Distributor'} marked order #${shortOrderId} as ${updated.status}.`,
+            message: updated.status === 'cancelled' && updated.cancelReason 
+              ? `${distributor?.businessName || 'Distributor'} cancelled order #${shortOrderId}. Reason: ${updated.cancelReason}.`
+              : `${distributor?.businessName || 'Distributor'} marked order #${shortOrderId} as ${updated.status}.`,
             data: { orderId: updated.id, status: updated.status, role: 'shopkeeper' },
+          });
+        }
+        if (distributor?.userId) {
+          await createNotificationAndPush({
+            userId: distributor.userId,
+            type: statusNotification.type,
+            title: statusNotification.title,
+            message: updated.status === 'cancelled' && updated.cancelReason
+              ? `You cancelled order #${shortOrderId} for ${shopkeeper?.businessName || 'A shop'}. Reason: ${updated.cancelReason}.`
+              : `You marked order #${shortOrderId} for ${shopkeeper?.businessName || 'A shop'} as ${updated.status}.`,
+            data: { orderId: updated.id, status: updated.status, role: 'distributor' },
           });
         }
       } catch (notificationError) {
