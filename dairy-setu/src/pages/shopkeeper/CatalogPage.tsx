@@ -26,7 +26,7 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
   onQtyChange: (qty: number) => void;
   canAdd: boolean;
 }) {
-  const isOutOfStock = product.businessLine === 'icecream' && product.stockQuantity !== undefined && product.stockQuantity !== null && product.stockQuantity <= 0;
+  const isOutOfStock = product.businessLine === 'icecream' && product.showStock && product.stockQuantity !== undefined && product.stockQuantity !== null && product.stockQuantity <= 0;
 
   return (
     <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'} ${isOutOfStock ? 'opacity-70' : ''}`}>
