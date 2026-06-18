@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Phone, Building2, Store, Edit2, Check, X,
-  LogOut, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation, Copy, Globe
+  LogOut, ChevronRight, MapPin, Clock, Tag, FileText, Package, Users, Navigation, Copy, Globe, UploadCloud, Trash2, Share2
 } from 'lucide-react';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '../lib/firebase';
 import { useAuthStore } from '../store/authStore';
 import { useAppStore } from '../store/appStore';
 import { useToast } from '../components/ui/Toast';
@@ -41,6 +43,40 @@ export function ProfilePage() {
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [editingLocation, setEditingLocation] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [uploadingQr, setUploadingQr] = useState(false);
+
+  const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0] || !isDistributor || !distProfile) return;
+    const file = e.target.files[0];
+    if (file.size > 5 * 1024 * 1024) {
+      show(t('Image must be less than 5MB'), 'error');
+      return;
+    }
+    try {
+      setUploadingQr(true);
+      const fileRef = ref(storage, `payment_qrs/${user?.id}_${Date.now()}`);
+      const uploadTask = await uploadBytesResumable(fileRef, file);
+      const url = await getDownloadURL(uploadTask.ref);
+      await updateDistributorSettings(distProfile.id, { paymentQrUrl: url });
+      show(t('Payment QR Code uploaded successfully!'));
+    } catch (err) {
+      console.error(err);
+      show(t('Failed to upload QR code'), 'error');
+    } finally {
+      setUploadingQr(false);
+    }
+  };
+
+  const handleRemoveQr = async () => {
+    if (!isDistributor || !distProfile) return;
+    try {
+      await updateDistributorSettings(distProfile.id, { paymentQrUrl: '' });
+      show(t('Payment QR Code removed.'));
+    } catch (err) {
+      console.error(err);
+      show(t('Failed to remove QR code'), 'error');
+    }
+  };
   const [locationData, setLocationData] = useState({
     locationName: (isDistributor ? distProfile?.locationName : shopProfile?.locationName) || '',
     latitude: (isDistributor ? distProfile?.latitude : shopProfile?.latitude),
@@ -168,6 +204,25 @@ export function ProfilePage() {
     } else {
       show(t('Account deleted successfully'));
       navigate('/login');
+    }
+  };
+
+  const handleShareProfile = async () => {
+    if (!distProfile) return;
+    const shareText = `Connect with ${distProfile.businessName} on Dairy Walla to place your orders! Use my Connection Code: ${distProfile.connectionCode}\n\nDownload the app: https://play.google.com/store/apps/details?id=com.dairywalla.app\nOrder online: https://dairy-setu.vercel.app/`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${distProfile.businessName} on Dairy Walla`,
+          text: shareText,
+        });
+      } catch (err) {
+        console.error('Share failed', err);
+      }
+    } else {
+      await navigator.clipboard.writeText(shareText);
+      show(t('Profile info copied to clipboard!'));
     }
   };
 
@@ -405,6 +460,66 @@ export function ProfilePage() {
           )}
         </div>
 
+        {/* Payment QR Code - distributor only */}
+        {isDistributor && distProfile && (
+          <div className="p-4 border-t border-gray-100">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              <UploadCloud className="w-3.5 h-3.5" />
+              {t('Payment QR Code')}
+            </div>
+            
+            {distProfile.paymentQrUrl ? (
+              <div className="space-y-3">
+                <img 
+                  src={distProfile.paymentQrUrl} 
+                  alt="Payment QR" 
+                  className="w-32 h-32 object-contain rounded-lg border border-gray-200"
+                />
+                <div className="flex gap-2">
+                  <label className="btn-secondary flex-1 cursor-pointer text-center flex items-center justify-center gap-1">
+                    <UploadCloud className="w-4 h-4" />
+                    {uploadingQr ? 'Uploading...' : t('Replace QR')}
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={handleQrUpload} 
+                      disabled={uploadingQr}
+                    />
+                  </label>
+                  <button 
+                    onClick={handleRemoveQr} 
+                    className="btn-secondary flex-1 text-red-600 hover:bg-red-50 hover:border-red-200"
+                    disabled={uploadingQr}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {t('Remove')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
+                  <UploadCloud className="w-8 h-8 text-gray-400 mb-2" />
+                  <span className="text-sm font-medium text-gray-700">
+                    {uploadingQr ? 'Uploading...' : t('Upload Payment QR Code')}
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1">
+                    {t('Shopkeepers can scan this to pay you')}
+                  </span>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={handleQrUpload} 
+                    disabled={uploadingQr}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Connection code — distributor only */}
         {isDistributor && distProfile && (
           <>
@@ -473,6 +588,12 @@ export function ProfilePage() {
           <ChevronRight className="w-4 h-4 text-gray-400" />
         </button>
       </div>
+      {isDistributor && distProfile && (
+        <button onClick={handleShareProfile}
+          className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors font-medium mb-4">
+          <Share2 className="w-5 h-5" /> {t('Share Profile')}
+        </button>
+      )}
 
       {/* Logout */}
       <button onClick={handleLogout}

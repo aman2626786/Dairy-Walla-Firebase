@@ -42,6 +42,7 @@ export interface DistributorProfile {
   latitude?: number;
   longitude?: number;
   locationName?: string; // e.g. "Vaishali Nagar, Ajmer"
+  paymentQrUrl?: string;
   distance?: number; // Distance from shopkeeper in km
 }
 
@@ -74,6 +75,7 @@ export interface Connection {
   businessName: string;
   status: ConnectionStatus;
   autoOrderEnabled?: boolean;
+  autoOrderTime?: string;
   deliveryGroupId?: string;
   deliveryGroupName?: string;
   createdAt: string;
@@ -97,6 +99,8 @@ export interface Product {
   price: number;
   available: boolean;
   imageUrl?: string; // Product image URL
+  stockQuantity?: number;
+  showStock?: boolean;
 }
 
 export interface OrderItem {

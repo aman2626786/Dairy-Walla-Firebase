@@ -56,7 +56,7 @@ interface AppState {
   cancelConnection: (connectionId: string) => Promise<boolean>;
   updateConnectionStatus: (connectionId: string, status: ConnectionStatus, deliveryGroupId?: string) => Promise<void>;
   assignDeliveryGroup: (connectionId: string, groupId: string, groupName: string) => Promise<void>;
-  toggleConnectionAutoOrder: (connectionId: string, enabled: boolean) => Promise<void>;
+  toggleConnectionAutoOrder: (connectionId: string, enabled: boolean, autoOrderTime?: string) => Promise<void>;
   runAutoOrdersForDistributor: (distributorUserId: string) => Promise<void>;
 
   // Product actions
@@ -271,10 +271,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (e) { console.error(e); }
   },
 
-  toggleConnectionAutoOrder: async (connectionId, enabled) => {
+  toggleConnectionAutoOrder: async (connectionId, enabled, autoOrderTime) => {
     try {
-      await apiClient.patch(`${API_URL}/connections/${connectionId}`, { autoOrderEnabled: enabled });
-      set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, autoOrderEnabled: enabled } : c) }));
+      await apiClient.patch(`${API_URL}/connections/${connectionId}`, { autoOrderEnabled: enabled, autoOrderTime });
+      set(state => ({ connections: state.connections.map(c => c.id === connectionId ? { ...c, autoOrderEnabled: enabled, autoOrderTime: autoOrderTime !== undefined ? autoOrderTime : c.autoOrderTime } : c) }));
     } catch (e) { console.error(e); }
   },
 

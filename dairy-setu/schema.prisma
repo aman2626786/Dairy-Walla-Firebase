@@ -42,6 +42,7 @@ model DistributorProfile {
   locationName      String?  @map("location_name")
   latitude          Float?
   longitude         Float?
+  paymentQrUrl      String?  @map("payment_qr_url")
   profileComplete   Boolean? @default(false) @map("profile_complete")
   createdAt         DateTime @default(now()) @map("created_at")
 
@@ -88,6 +89,7 @@ model Connection {
   deliveryGroupName String?  @map("delivery_group_name")
   shopkeeperPhone   String?  @map("shopkeeper_phone")
   autoOrderEnabled  Boolean  @default(false) @map("auto_order_enabled")
+  autoOrderTime     String?  @map("auto_order_time")
   createdAt         DateTime @default(now()) @map("created_at")
 
   shopkeeper  ShopkeeperProfile?  @relation(fields: [shopkeeperId], references: [id], onDelete: Cascade)
@@ -118,6 +120,8 @@ model Product {
   price         Float
   available     Boolean? @default(true)
   imageUrl      String?  @map("image_url")
+  stockQuantity Float?   @default(0) @map("stock_quantity")
+  showStock     Boolean? @default(false) @map("show_stock")
   createdAt     DateTime @default(now()) @map("created_at")
 
   distributor DistributorProfile? @relation(fields: [distributorId], references: [id], onDelete: Cascade)

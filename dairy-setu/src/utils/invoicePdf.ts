@@ -424,6 +424,24 @@ export async function createInvoicePdf({
   doc.setFontSize(12);
   doc.text(`Rs. ${formatMoney(tax.displayTotal)}`, pageW - margin - 8, footerTop + (tax.enabled ? 25.2 : 11.2), { align: 'right' });
 
+  if (distributor.paymentQrUrl) {
+    try {
+      const response = await fetch(distributor.paymentQrUrl);
+      const blob = await response.blob();
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      doc.addImage(base64, 'PNG', margin + 2, footerTop + footerH + 4, 20, 20);
+      doc.setFontSize(7);
+      doc.setTextColor(80, 80, 80);
+      doc.text('Scan to Pay', margin + 5, footerTop + footerH + 27);
+    } catch (err) {
+      console.error('Failed to load QR code for invoice', err);
+    }
+  }
+
   return doc;
 }
 

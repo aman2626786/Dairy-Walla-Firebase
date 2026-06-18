@@ -26,8 +26,20 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
   onQtyChange: (qty: number) => void;
   canAdd: boolean;
 }) {
+  const isOutOfStock = product.businessLine === 'icecream' && product.stockQuantity !== undefined && product.stockQuantity !== null && product.stockQuantity <= 0;
+
   return (
-    <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'}`}>
+    <div className={`card p-4 transition-all relative ${quantity > 0 ? 'ring-2 ring-brand-500 ring-offset-1 z-10' : 'z-0'} ${isOutOfStock ? 'opacity-70' : ''}`}>
+      {product.showStock && product.stockQuantity !== undefined && product.stockQuantity !== null && (
+        <div className="absolute top-2 left-2 z-20">
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm ${
+            isOutOfStock ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+          }`}>
+            {isOutOfStock ? 'Out of Stock' : `${product.stockQuantity} In Stock`}
+          </span>
+        </div>
+      )}
+
       <div className="w-full h-32 bg-gray-100 rounded-xl flex items-center justify-center mb-3 overflow-hidden">
         {product.imageUrl ? (
           <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
@@ -47,7 +59,11 @@ function ProductCard({ product, quantity, onQtyChange, canAdd }: {
       </div>
 
       <div className="flex items-center gap-2 relative z-20">
-        {quantity === 0 ? (
+        {isOutOfStock ? (
+          <div className="w-full py-2 text-xs text-center text-red-500 font-medium border border-red-200 rounded-xl bg-red-50">
+            Out of Stock
+          </div>
+        ) : quantity === 0 ? (
           canAdd ? (
           <button onClick={() => onQtyChange(1)} className="w-full btn-primary py-2 text-xs">
             <Plus className="w-3.5 h-3.5" /> Add

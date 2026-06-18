@@ -32,6 +32,8 @@ interface ProductFormData {
   price: string;
   available: boolean;
   imageUrl?: string;
+  stockQuantity?: string;
+  showStock?: boolean;
 }
 
 const defaultForm: ProductFormData = {
@@ -43,6 +45,8 @@ const defaultForm: ProductFormData = {
   price: '',
   available: true,
   imageUrl: '',
+  stockQuantity: '',
+  showStock: false,
 };
 
 const normalizeCategory = (value: string): ProductCategory =>
@@ -230,6 +234,8 @@ export function CatalogPage() {
       price: String(product.price),
       available: product.available,
       imageUrl: product.imageUrl || '',
+      stockQuantity: product.stockQuantity !== undefined && product.stockQuantity !== null ? String(product.stockQuantity) : '',
+      showStock: product.showStock || false,
     });
     setImageFile(null);
 
@@ -307,6 +313,10 @@ export function CatalogPage() {
       price,
       available: form.available,
     };
+    if (resolvedBusinessLine === 'icecream') {
+      if (form.stockQuantity) payload.stockQuantity = Number(form.stockQuantity);
+      if (form.showStock !== undefined) payload.showStock = form.showStock;
+    }
     if (form.imageUrl) payload.imageUrl = form.imageUrl;
 
     if (imageFile) {
@@ -833,6 +843,38 @@ export function CatalogPage() {
             </button>
             <span className="text-sm text-gray-700">Available for ordering</span>
           </div>
+
+          {inferBusinessLineFromCategory(normalizeCategory(form.category === manualCategoryValue ? manualCategory : form.category), form.businessLine) === 'icecream' && (
+            <div className="grid grid-cols-2 gap-3 mt-2">
+              <div>
+                <label className="label">Stock Quantity</label>
+                <input
+                  className="input"
+                  type="number"
+                  placeholder="0"
+                  value={form.stockQuantity || ''}
+                  onChange={e => setForm(current => ({ ...current, stockQuantity: e.target.value }))}
+                />
+              </div>
+              <div className="flex items-end pb-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setForm(current => ({ ...current, showStock: !current.showStock }))}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${
+                      form.showStock ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                        form.showStock ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span className="text-sm text-gray-700">Show to Shopkeeper</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button className="btn-secondary flex-1" onClick={() => setModalOpen(false)}>

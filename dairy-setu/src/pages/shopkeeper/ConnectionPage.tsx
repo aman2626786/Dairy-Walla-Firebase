@@ -5,6 +5,8 @@ import { useAuthStore } from '../../store/authStore';
 import { useAppStore } from '../../store/appStore';
 import { useToast } from '../../components/ui/Toast';
 import { MobileHeader } from '../../components/layout/MobileHeader';
+import { Modal } from '../../components/ui/Modal';
+import type { Connection } from '../../types';
 
 // Reminder sound file path. Make sure to place this file in your `public/sounds/` directory.
 const reminderSound = '/sounds/reminder-tone.mp3';
@@ -21,6 +23,8 @@ export function ConnectionPage() {
   const [searchCity, setSearchCity] = useState('');
   const [searchCompany, setSearchCompany] = useState('');
   const [togglingConnectionId, setTogglingConnectionId] = useState<string | null>(null);
+  const [editingAutoOrderConn, setEditingAutoOrderConn] = useState<Connection | null>(null);
+  const [autoOrderTime, setAutoOrderTime] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastNotifCount = useRef(0);
 
@@ -150,11 +154,30 @@ export function ConnectionPage() {
     show('Connection code filled! Now click send request.', 'info');
   };
 
-  const handleToggleAutoOrder = async (connectionId: string, enabled: boolean) => {
-    setTogglingConnectionId(connectionId);
+  const handleToggleAutoOrder = async (conn: Connection, enabled: boolean) => {
+    if (enabled) {
+      setEditingAutoOrderConn(conn);
+      setAutoOrderTime(conn.autoOrderTime || '14:00');
+    } else {
+      setTogglingConnectionId(conn.id);
+      try {
+        await toggleConnectionAutoOrder(conn.id, false);
+        show('Auto order disabled successfully.');
+      } catch {
+        show('Failed to update auto order settings.', 'error');
+      } finally {
+        setTogglingConnectionId(null);
+      }
+    }
+  };
+
+  const handleSaveAutoOrder = async () => {
+    if (!editingAutoOrderConn) return;
+    setTogglingConnectionId(editingAutoOrderConn.id);
     try {
-      await toggleConnectionAutoOrder(connectionId, enabled);
-      show(enabled ? 'Auto order enabled successfully.' : 'Auto order disabled successfully.');
+      await toggleConnectionAutoOrder(editingAutoOrderConn.id, true, autoOrderTime);
+      show('Auto order enabled successfully.');
+      setEditingAutoOrderConn(null);
     } catch {
       show('Failed to update auto order settings.', 'error');
     } finally {
@@ -223,10 +246,10 @@ export function ConnectionPage() {
                     )}
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-gray-500 inline-flex items-center gap-1">
-                        <Repeat className="w-3.5 h-3.5" /> Auto Order
+                        <Repeat className="w-3.5 h-3.5" /> Auto Order {conn.autoOrderEnabled && conn.autoOrderTime ? `(${conn.autoOrderTime})` : ''}
                       </span>
                       <button
-                        onClick={() => void handleToggleAutoOrder(conn.id, !conn.autoOrderEnabled)}
+                        onClick={() => void handleToggleAutoOrder(conn, !conn.autoOrderEnabled)}
                         disabled={togglingConnectionId === conn.id}
                         className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
                           conn.autoOrderEnabled
@@ -392,6 +415,35 @@ export function ConnectionPage() {
           )}
         </div>
       </div>
+      {/* Auto Order Time Modal */}
+      <Modal isOpen={!!editingAutoOrderConn} onClose={() => setEditingAutoOrderConn(null)} title="Auto Order Time">
+        <div className="p-4">
+          <p className="text-sm text-gray-600 mb-4">
+            Select a specific time to automatically place your order every day. Make sure it is within the distributor's order window.
+          </p>
+          <div className="mb-4">
+            <label className="label">Time (HH:MM)</label>
+            <input
+              type="time"
+              className="input w-full"
+              value={autoOrderTime}
+              onChange={e => setAutoOrderTime(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-3 mt-4">
+            <button className="btn-secondary flex-1" onClick={() => setEditingAutoOrderConn(null)}>
+              Cancel
+            </button>
+            <button 
+              className="btn-primary flex-1" 
+              onClick={() => void handleSaveAutoOrder()}
+              disabled={togglingConnectionId === editingAutoOrderConn?.id || !autoOrderTime}
+            >
+              {togglingConnectionId === editingAutoOrderConn?.id ? 'Saving...' : 'Enable Auto Order'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1041,6 +1041,7 @@ app.patch('/api/profiles/distributor/:id', async (req, res) => {
     if (req.body.locationName !== undefined) updateData.locationName = req.body.locationName ? String(req.body.locationName).trim() : null;
     if (req.body.latitude !== undefined) updateData.latitude = parseOptionalNumber(req.body.latitude);
     if (req.body.longitude !== undefined) updateData.longitude = parseOptionalNumber(req.body.longitude);
+    if (req.body.paymentQrUrl !== undefined) updateData.paymentQrUrl = req.body.paymentQrUrl ? String(req.body.paymentQrUrl).trim() : null;
     if (req.body.profileComplete !== undefined) updateData.profileComplete = Boolean(req.body.profileComplete);
 
     const updated = await prisma.distributorProfile.update({ where: { id: req.params.id }, data: updateData });
@@ -1288,6 +1289,7 @@ app.patch('/api/connections/:id', async (req, res) => {
     const updateData: Prisma.ConnectionUpdateInput = {};
     if (req.body.status !== undefined) updateData.status = String(req.body.status).trim();
     if (req.body.autoOrderEnabled !== undefined) updateData.autoOrderEnabled = Boolean(req.body.autoOrderEnabled);
+    if (req.body.autoOrderTime !== undefined) updateData.autoOrderTime = req.body.autoOrderTime ? String(req.body.autoOrderTime).trim() : null;
     if (req.body.deliveryGroupId !== undefined) updateData.deliveryGroupId = req.body.deliveryGroupId ? String(req.body.deliveryGroupId).trim() : null;
     if (req.body.deliveryGroupName !== undefined) updateData.deliveryGroupName = req.body.deliveryGroupName ? String(req.body.deliveryGroupName).trim() : null;
     if (req.body.shopkeeperPhone !== undefined) updateData.shopkeeperPhone = req.body.shopkeeperPhone ? String(req.body.shopkeeperPhone).trim() : null;
@@ -1450,6 +1452,10 @@ app.post('/api/products', async (req, res) => {
         price,
         available,
         imageUrl,
+        ...(businessLine === 'icecream' ? {
+          stockQuantity: req.body?.stockQuantity !== undefined ? Number(req.body.stockQuantity) : 0,
+          showStock: req.body?.showStock === true
+        } : {})
       },
     });
 
@@ -1499,6 +1505,8 @@ app.patch('/api/products/:id', async (req, res) => {
       ...(req.body?.category !== undefined ? { category } : {}),
        businessLine,
       ...(req.body?.imageUrl !== undefined ? { imageUrl: req.body.imageUrl ? String(req.body.imageUrl).trim() : null } : {}),
+      ...(businessLine === 'icecream' && req.body?.stockQuantity !== undefined ? { stockQuantity: Number(req.body.stockQuantity) } : {}),
+      ...(businessLine === 'icecream' && req.body?.showStock !== undefined ? { showStock: req.body.showStock === true } : {})
     };
 
     const updated = await prisma.product.update({ where: { id: req.params.id }, data: updatePayload });
@@ -1696,6 +1704,21 @@ app.post('/api/orders', async (req, res) => {
       include: { items: true },
     });
 
+    if (orderLine === 'icecream' || orderLine === 'dual') {
+      try {
+        for (const item of orderItemsPayload) {
+          const prod = productById.get(item.productId);
+          if (prod && prod.businessLine === 'icecream' && prod.stockQuantity !== null) {
+            await prisma.product.update({
+              where: { id: item.productId },
+              data: { stockQuantity: Math.max(0, prod.stockQuantity - Number(item.quantity)) }
+            });
+          }
+        }
+      } catch (stockErr) {
+        console.error('Failed to update stock quantity:', stockErr);
+      }
+    }
     const dp = await prisma.distributorProfile.findUnique({ where: { id: distributorId } });
     const shortOrderId = order.id.slice(-6).toUpperCase();
     const orderMessage = `${shopName} placed ${isLate ? 'a late order' : 'an order'} #${shortOrderId} worth Rs. ${Number(total || 0).toLocaleString('en-IN')}.`;
@@ -2070,6 +2093,7 @@ app.post('/api/profiles/distributor', async (req, res) => {
       locationName: req.body.locationName ? String(req.body.locationName).trim() : null,
       latitude: parseOptionalNumber(req.body.latitude),
       longitude: parseOptionalNumber(req.body.longitude),
+      paymentQrUrl: req.body.paymentQrUrl ? String(req.body.paymentQrUrl).trim() : null,
       profileComplete: req.body.profileComplete === false ? false : true,
     };
 
@@ -2629,8 +2653,8 @@ app.get('/api/admin/activity', async (_req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-// Hourly Reminder Cron Job
-cron.schedule('0 * * * *', async () => {
+// Minute Cron Job: Auto Orders & Smart Reminders
+cron.schedule('* * * * *', async () => {
   try {
     const todayStr = new Date().toISOString().split('T')[0];
     const today = new Date(todayStr);
@@ -2638,16 +2662,82 @@ cron.schedule('0 * * * *', async () => {
     const currentHour = now.getHours();
     const currentMinutes = now.getMinutes();
     const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinutes.toString().padStart(2, '0')}`;
-    
-    // Only send in the afternoon/evening as requested
-    if (currentHour < 12) return;
-    
+    const currentMins = currentHour * 60 + currentMinutes;
+
     const distributors = await prisma.distributorProfile.findMany();
     for (const dp of distributors) {
       if (!dp.orderWindowStart || !dp.orderWindowCutoff) continue;
       
-      // Check if current time is within window
-      if (currentTimeStr >= dp.orderWindowStart && currentTimeStr <= dp.orderWindowCutoff) {
+      const startMins = parseInt(dp.orderWindowStart.split(':')[0]) * 60 + parseInt(dp.orderWindowStart.split(':')[1]);
+      const cutoffMins = parseInt(dp.orderWindowCutoff.split(':')[0]) * 60 + parseInt(dp.orderWindowCutoff.split(':')[1]);
+
+      // 1. AUTO ORDERS
+      const autoOrderConns = await prisma.connection.findMany({
+        where: { distributorId: dp.id, status: 'active', autoOrderEnabled: true, autoOrderTime: currentTimeStr }
+      });
+      for (const conn of autoOrderConns) {
+        const todayOrderCount = await prisma.order.count({ where: { shopkeeperId: conn.shopkeeperId!, distributorId: dp.id, deliveryDate: today } });
+        if (todayOrderCount > 0) continue;
+
+        const lastOrder = await prisma.order.findFirst({
+          where: { shopkeeperId: conn.shopkeeperId!, distributorId: dp.id },
+          orderBy: { placedAt: 'desc' },
+          include: { items: true },
+        });
+        if (!lastOrder) continue;
+
+        const validItems = lastOrder.items.filter((i) => (i.quantity || 0) > 0);
+        if (validItems.length === 0) continue;
+
+        const total = validItems.reduce((sum, item) => sum + Number(item.unitPrice || 0) * (item.quantity || 0), 0);
+        const orderLine = lastOrder.businessLine || 'other';
+
+        await prisma.order.create({
+          data: {
+            shopkeeperId: conn.shopkeeperId,
+            shopkeeperName: conn.shopkeeperName,
+            shopName: conn.shopName,
+            distributorId: dp.id,
+            businessLine: orderLine,
+            type: 'normal',
+            status: 'pending',
+            paymentStatus: 'unpaid',
+            source: 'auto',
+            deliveryDate: today,
+            total,
+            items: {
+              create: validItems.map(item => ({
+                productId: item.productId,
+                productName: item.productName,
+                brand: item.brand,
+                category: item.category,
+                businessLine: item.businessLine,
+                unit: item.unit,
+                unitPrice: item.unitPrice,
+                quantity: item.quantity,
+              }))
+            }
+          }
+        });
+
+        if (orderLine === 'icecream' || orderLine === 'dual') {
+          for (const item of validItems) {
+            const prod = await prisma.product.findUnique({ where: { id: item.productId } });
+            if (prod && prod.businessLine === 'icecream' && prod.stockQuantity !== null) {
+              await prisma.product.update({
+                where: { id: item.productId },
+                data: { stockQuantity: Math.max(0, prod.stockQuantity - (item.quantity || 0)) }
+              });
+            }
+          }
+        }
+      }
+
+      // 2. SMART REMINDERS
+      const isStartReminder = currentMins === startMins - 5;
+      const isCutoffReminder = currentMins >= cutoffMins - 60 && currentMins <= cutoffMins && (cutoffMins - currentMins) % 30 === 0 && currentMins < cutoffMins;
+
+      if (isStartReminder || isCutoffReminder) {
         const connections = await prisma.connection.findMany({
           where: { distributorId: dp.id, status: 'active', autoOrderEnabled: false }
         });
@@ -2655,29 +2745,28 @@ cron.schedule('0 * * * *', async () => {
         for (const conn of connections) {
           if (!conn.shopkeeperId) continue;
           
-          // Check if ordered today
           const orderCount = await prisma.order.count({
             where: { shopkeeperId: conn.shopkeeperId, distributorId: dp.id, deliveryDate: today }
           });
-          
           if (orderCount > 0) continue;
           
           const sp = await prisma.shopkeeperProfile.findUnique({ where: { id: conn.shopkeeperId } });
           if (!sp?.userId) continue;
           
-          // Check if we already reminded them in the last 50 minutes (to avoid duplicate hourly reminders)
-          const fiftyMinsAgo = new Date(Date.now() - 50 * 60 * 1000);
+          const recentMinsAgo = new Date(Date.now() - 25 * 60 * 1000);
           const recentReminderCount = await prisma.notification.count({
             where: { 
               userId: sp.userId,
               type: 'order_reminder',
-              createdAt: { gte: fiftyMinsAgo }
+              createdAt: { gte: recentMinsAgo }
             }
           });
-          
           if (recentReminderCount > 0) continue;
           
-          const message = `Reminder: Please place your daily order for ${dp.businessName} before ${dp.orderWindowCutoff}.`;
+          let message = `Reminder: Please place your daily order for ${dp.businessName} before ${dp.orderWindowCutoff}.`;
+          if (isStartReminder) message = `Order window for ${dp.businessName} starts in 5 minutes! Don't forget to order.`;
+          else if (isCutoffReminder && (cutoffMins - currentMins) > 0) message = `Only ${(cutoffMins - currentMins)} minutes left to place your order for ${dp.businessName}!`;
+
           const notification = await prisma.notification.create({
             data: {
               userId: sp.userId,
@@ -2696,7 +2785,7 @@ cron.schedule('0 * * * *', async () => {
       }
     }
   } catch (error) {
-    console.error('Hourly reminder cron error:', error);
+    console.error('Minute cron error:', error);
   }
 });
 
