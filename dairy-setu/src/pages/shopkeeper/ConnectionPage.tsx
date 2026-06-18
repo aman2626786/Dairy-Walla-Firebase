@@ -416,7 +416,7 @@ export function ConnectionPage() {
         </div>
       </div>
       {/* Auto Order Time Modal */}
-      <Modal isOpen={!!editingAutoOrderConn} onClose={() => setEditingAutoOrderConn(null)} title="Auto Order Time">
+      <Modal open={!!editingAutoOrderConn} onClose={() => setEditingAutoOrderConn(null)} title="Auto Order Time">
         <div className="p-4">
           <p className="text-sm text-gray-600 mb-4">
             Select a specific time to automatically place your order every day. Make sure it is within the distributor's order window.
