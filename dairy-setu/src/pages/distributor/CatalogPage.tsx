@@ -91,6 +91,7 @@ export function CatalogPage() {
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [suggestionsSearch, setSuggestionsSearch] = useState('');
   const [suggestionsLineFilter, setSuggestionsLineFilter] = useState<'all' | BusinessLine>('all');
+  const [suggestionsCategoryFilter, setSuggestionsCategoryFilter] = useState<string>('all');
 
   const profile = distributorProfiles.find(dp => dp.userId === user?.id);
   const distributorType = toDistributorType(profile?.distributorType);
@@ -173,6 +174,20 @@ export function CatalogPage() {
   }, [filteredProducts, preferredBrand]);
 
   const hasBrandSplit = groupedProducts.more.length > 0;
+
+  const visibleSuggestionsForCategories = useMemo(() => {
+    return suggestions.filter(item => {
+      if (distributorType !== 'dual') {
+        return item.businessLine === defaultBusinessLine;
+      }
+      return suggestionsLineFilter === 'all' || item.businessLine === suggestionsLineFilter;
+    });
+  }, [suggestions, distributorType, defaultBusinessLine, suggestionsLineFilter]);
+
+  const suggestionsCategories = useMemo(() => {
+    const cats = Array.from(new Set(visibleSuggestionsForCategories.map(item => normalizeCategory(String(item.category || 'other')))));
+    return ['all', ...cats].sort(compareCategories);
+  }, [visibleSuggestionsForCategories]);
 
   const hasActiveFilters =
     searchQuery.trim().length > 0 ||
@@ -378,6 +393,7 @@ export function CatalogPage() {
   const openSuggestions = () => {
     setSuggestionsOpen(true);
     setSuggestionsSearch('');
+    setSuggestionsCategoryFilter('all');
     void fetchSuggestions();
   };
 
@@ -999,7 +1015,10 @@ export function CatalogPage() {
                 className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
                   suggestionsLineFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
-                onClick={() => setSuggestionsLineFilter('all')}
+                onClick={() => {
+                  setSuggestionsLineFilter('all');
+                  setSuggestionsCategoryFilter('all');
+                }}
               >
                 All 📦
               </button>
@@ -1008,7 +1027,10 @@ export function CatalogPage() {
                 className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
                   suggestionsLineFilter === 'dairy' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
-                onClick={() => setSuggestionsLineFilter('dairy')}
+                onClick={() => {
+                  setSuggestionsLineFilter('dairy');
+                  setSuggestionsCategoryFilter('all');
+                }}
               >
                 Dairy 🥛
               </button>
@@ -1017,10 +1039,43 @@ export function CatalogPage() {
                 className={`flex-1 py-1.5 text-center font-medium rounded-md transition-colors ${
                   suggestionsLineFilter === 'icecream' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
                 }`}
-                onClick={() => setSuggestionsLineFilter('icecream')}
+                onClick={() => {
+                  setSuggestionsLineFilter('icecream');
+                  setSuggestionsCategoryFilter('all');
+                }}
               >
                 Ice Cream 🍦
               </button>
+            </div>
+          )}
+
+          {suggestionsCategories.length > 1 && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1 border-b border-gray-100 scrollbar-thin">
+              <button
+                type="button"
+                onClick={() => setSuggestionsCategoryFilter('all')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                  suggestionsCategoryFilter === 'all'
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                All
+              </button>
+              {suggestionsCategories.filter(cat => cat !== 'all').map(category => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setSuggestionsCategoryFilter(category)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                    suggestionsCategoryFilter === category
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {getCategoryEmoji(category)} {formatCategoryLabel(category)}
+                </button>
+              ))}
             </div>
           )}
 
@@ -1037,6 +1092,10 @@ export function CatalogPage() {
                     return false;
                   }
                   if (distributorType === 'dual' && suggestionsLineFilter !== 'all' && item.businessLine !== suggestionsLineFilter) {
+                    return false;
+                  }
+                  const itemCat = normalizeCategory(String(item.category || 'other'));
+                  if (suggestionsCategoryFilter !== 'all' && itemCat !== suggestionsCategoryFilter) {
                     return false;
                   }
                   return !query || [item.name, item.brand, item.category].some(val => String(val || '').toLowerCase().includes(query));
