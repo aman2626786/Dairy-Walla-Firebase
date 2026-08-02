@@ -131,7 +131,28 @@ export function AdminUsersPage() {
             <option value="shopkeeper">Shopkeepers</option>
           </select>
 
-          <button className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+          <button onClick={() => {
+            const headers = ['Name', 'Email', 'Type', 'Business', 'Phone', 'Connections', 'Joined Date'];
+            const csvData = filteredUsers.map(u => [
+              `"${u.name || ''}"`,
+              `"${u.email || ''}"`,
+              `"${u.role === 'distributor' ? 'Distributor' : 'Shopkeeper'}"`,
+              `"${u.businessName || ''}"`,
+              `"${u.phone || ''}"`,
+              u.connections,
+              `"${format(new Date(u.createdAt), 'yyyy-MM-dd')}"`
+            ].join(','));
+            const csv = [headers.join(','), ...csvData].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `users_export_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
             <Download className="w-4 h-4" />
             Export
           </button>

@@ -2813,27 +2813,11 @@ app.post('/api/admin/ban-user/:userId', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Mark user as banned by setting a flag in the database
-    // For now, we'll deactivate them by removing their profile
-    // In production, you might want to add a 'banned' or 'active' field to the Profile model
-
-    await prisma.profile.update({
-      where: { id: userId },
-      data: { pin: null }, // Clear PIN to disable login
+    // Delete the user from the database completely. 
+    // This will cascade and delete DistributorProfile/ShopkeeperProfile and all their relations.
+    await prisma.profile.delete({
+      where: { id: userId }
     });
-
-    // Delete connections
-    if (user.role === 'distributor') {
-      const dp = await prisma.distributorProfile.findUnique({ where: { userId } });
-      if (dp) {
-        await prisma.connection.deleteMany({ where: { distributorId: dp.id } });
-      }
-    } else {
-      const sp = await prisma.shopkeeperProfile.findUnique({ where: { userId } });
-      if (sp) {
-        await prisma.connection.deleteMany({ where: { shopkeeperId: sp.id } });
-      }
-    }
 
     return res.json({ success: true, message: `User ${user.email} has been deactivated` });
   } catch (error) {

@@ -206,7 +206,7 @@ export function AdminDashboardComprehensive() {
           subValue={`${stats.activeShopkeepers} active`}
         />
         <StatCard
-          label="Platform Revenue"
+          label="Distributor Sales"
           value={`₹${((stats.totalRevenue || 0) / 100000).toFixed(1)}L`}
           icon={IndianRupee}
           color="bg-emerald-50 text-emerald-600"
